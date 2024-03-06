@@ -1,0 +1,25 @@
+cabal-version: 3.0
+name: pnet
+version: 0.1.0.0
+author: indiscrete_void
+maintainer: indiscrete.void@gmail.com
+license-file: LICENSE
+
+flag pedantic
+
+common default
+    build-depends: base ^>=4.17.2.1
+    default-language: Haskell2010
+    ghc-options:
+        -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
+        -Wno-safe -Wno-unsafe -Wno-missing-import-lists
+        -Wno-all-missed-specialisations -Wno-missed-specialisations
+        -Wno-missing-local-signatures -Wno-monomorphism-restriction
+        -Wno-implicit-prelude -threaded
+    if flag(pedantic)
+        ghc-options: -Werror
+
+executable pnet
+    import: default
+    hs-source-dirs: src
+    main-is: Main.hs
