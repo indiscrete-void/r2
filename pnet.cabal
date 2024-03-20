@@ -3,7 +3,7 @@ name: pnet
 version: 0.1.0.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
-license: AGPL-3
+license: AGPL-3.0-only
 
 flag pedantic
 
