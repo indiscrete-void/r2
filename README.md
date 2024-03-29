@@ -35,7 +35,7 @@ pnetd and pnet communicate via UNIX socket at /var/run/pnet (or custom path defi
 
 ## Examples
 ```sh
-# provide ioshd as tunnel process
+# run daemon with ioshd posing as tunnel process
 pnetd ioshd
 
 # connect to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 via "socat tcp:example.com:47210 -"
