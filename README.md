@@ -53,3 +53,5 @@ iosh -t "pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1
 # create pnet0 network interface connected to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3
 pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat tun,iff-up,device-name=pnet0 -"
 ```
+
+Note that in actual implementation public keys will get shorter for better experience
