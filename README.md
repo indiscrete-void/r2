@@ -51,7 +51,7 @@ pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "s
 pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3"
 
 # connect iosh to ioshd provided as the tunnel process of ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3
-iosh -t "pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -" sh
+iosh -t "pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -" zsh -l
 
 # create pnet0 network interface connected to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3
 pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat tun,iff-up,device-name=pnet0 -"
