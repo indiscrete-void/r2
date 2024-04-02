@@ -19,7 +19,6 @@ common default
     if flag(pedantic)
         ghc-options: -Werror
 
-executable pnet
+library
     import: default
     hs-source-dirs: src
-    main-is: Main.hs
