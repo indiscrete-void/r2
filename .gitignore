@@ -6,6 +6,6 @@
 !pnet.cabal
 !cabal.project.local
 
-!src
+!common
 !cli
 !daemon

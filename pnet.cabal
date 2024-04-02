@@ -21,7 +21,7 @@ common default
 
 library
     import: default
-    hs-source-dirs: src
+    hs-source-dirs: common
 
 executable pnetd
     import: default
