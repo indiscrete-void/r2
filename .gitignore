@@ -1,7 +1,11 @@
 /*
 
 !.gitignore
+!LICENSE
+
 !pnet.cabal
 !cabal.project.local
-!LICENSE
+
 !src
+!cli
+!daemon
