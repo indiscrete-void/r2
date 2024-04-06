@@ -34,4 +34,5 @@ executable pnet
     import: default
     hs-source-dirs: cli
     main-is: Pnet/Main.hs
-    build-depends: pnet
+    build-depends: pnet, optparse-applicative
+    other-modules: Pnet.Options
