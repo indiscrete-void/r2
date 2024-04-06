@@ -16,7 +16,7 @@ common default
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
         -Wno-all-missed-specialisations -Wno-missed-specialisations
         -Wno-missing-local-signatures -Wno-monomorphism-restriction
-        -Wno-implicit-prelude -threaded
+        -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
     if flag(pedantic)
         ghc-options: -Werror
 
