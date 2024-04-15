@@ -8,9 +8,12 @@ license: AGPL-3.0-only
 flag pedantic
 
 common default
-    build-depends: base ^>=4.17.2.1
+    build-depends: base ^>=4.17.2.1, polysemy
     default-language: Haskell2010
-    default-extensions: BlockArguments
+    default-extensions:
+        DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
+        ScopedTypeVariables TypeApplications TypeOperators TypeFamilies
+        ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
