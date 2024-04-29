@@ -5,6 +5,7 @@
 
 !pnet.cabal
 !cabal.project.local
+!default.nix
 
 !common
 !cli
