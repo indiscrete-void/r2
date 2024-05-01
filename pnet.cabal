@@ -26,7 +26,7 @@ common default
 library
     import: default
     hs-source-dirs: common
-    build-depends: network
+    build-depends: network, cereal
     exposed-modules: Pnet, Pnet.Polysemy.Trace
 
 executable pnetd
@@ -38,6 +38,8 @@ executable pnetd
         bytestring,
         network,
         polysemy-transport,
+        pipes,
+        cereal,
     other-modules: Polysemy.Socket
 
 executable pnet

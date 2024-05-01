@@ -1,4 +1,4 @@
-module Pnet.Options (parse) where
+module Pnet.Options (Options (..), Transport (..), Command (..), parse) where
 
 import Options.Applicative
 
