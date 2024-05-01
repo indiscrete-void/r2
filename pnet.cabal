@@ -26,16 +26,27 @@ common default
 library
     import: default
     hs-source-dirs: common
+    build-depends: network
+    exposed-modules: Pnet, Pnet.Polysemy.Trace
 
 executable pnetd
     import: default
     hs-source-dirs: daemon
     main-is: Pnet/Main.hs
-    build-depends: pnet
+    build-depends:
+        pnet,
+        bytestring,
+        network,
+    other-modules: Polysemy.Socket
 
 executable pnet
     import: default
     hs-source-dirs: cli
     main-is: Pnet/Main.hs
-    build-depends: pnet, optparse-applicative
+    build-depends:
+        pnet,
+        optparse-applicative,
+        bytestring,
+        network,
+        polysemy-transport,
     other-modules: Pnet.Options
