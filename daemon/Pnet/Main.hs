@@ -5,17 +5,18 @@ import Network.Socket qualified as Network
 import Pnet
 import Pnet.Polysemy.Trace
 import Polysemy hiding (run, send)
+import Polysemy.Fail
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Socket
 import Polysemy.Trace
 
-pnetd :: forall s r. (Member Trace r, Member (Socket s) r) => Sem r ()
+pnetd :: forall s r. (Member Trace r, Member (Socket s) r, Member Fail r) => Sem r ()
 pnetd = forever $ accept @s >>= process
   where
     process sock = transportToSocket sock (processT sock)
     processT sock = do
-      msg <- input
+      (Just msg) <- input
       traceTagged "client -> server" (BC.unpack msg)
       output msg
       traceTagged "server -> client" (BC.unpack msg)
@@ -23,7 +24,7 @@ pnetd = forever $ accept @s >>= process
 
 main :: IO ()
 main =
-  let run sock = runM . socketToIO bufferSize sock . traceToStdout
+  let run sock = runM . socketToIO bufferSize sock . traceToStdout . failToEmbed @IO
    in withPnetSocket \sock -> do
         addr <- pnetSocketAddr
         bind sock addr

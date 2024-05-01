@@ -37,6 +37,7 @@ executable pnetd
         pnet,
         bytestring,
         network,
+        polysemy-transport,
     other-modules: Polysemy.Socket
 
 executable pnet
