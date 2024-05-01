@@ -1,35 +1,37 @@
-module Polysemy.Socket (Socket (..), accept, send, receive, close, socketToIO, transportToSocket) where
+module Polysemy.Socket (Socket, accept, scopedSockToIO) where
 
-import Control.Monad
-import Data.ByteString
 import Network.Socket qualified as Network
-import Network.Socket.ByteString qualified as Network
 import Polysemy hiding (send)
-import Polysemy.Transport hiding (Close, close)
-import Transport.Maybe
+import Polysemy.Bundle
+import Polysemy.Scoped
+import Polysemy.ScopedBundle (runScopedBundle_)
+import Polysemy.Transport
+import System.IO
 
-data Socket s m a where
-  Send :: s -> ByteString -> Socket s m ()
-  Receive :: s -> Socket s m (Maybe ByteString)
-  Accept :: Socket s m s
-  Close :: s -> Socket s m ()
+type SocketEffects = ByteInputWithEOF ': ByteOutput ': Close ': '[]
 
-makeSem ''Socket
+type Socket = Bundle SocketEffects
 
-transportToSocket :: forall s r1. (Member (Socket s) r1) => s -> InterpretersFor (InputWithEOF ByteString ': Output ByteString ': '[]) r1
-transportToSocket s = outputToSocket . inputToSocket
+bundleSockEffects :: (Member Socket r) => InterpretersFor SocketEffects r
+bundleSockEffects =
+  sendBundle @Close @SocketEffects
+    . sendBundle @ByteOutput @SocketEffects
+    . sendBundle @ByteInputWithEOF @SocketEffects
+
+accept :: (Member (Scoped_ Socket) r) => InterpretersFor SocketEffects r
+accept = scoped_ . bundleSockEffects . insertAt @3 @'[Socket]
+
+-- intentionally doesn't close Socket after leaving scope to allow for concurrency
+-- bonus: it's only (Embed IO) and not full (Final IO)
+scopedSockToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpreterFor (Scoped_ Socket) r
+scopedSockToIO bufferSize server = runScopedBundle_ go
   where
-    inputToSocket :: (Member (Socket s) r2) => InterpreterFor (InputWithEOF ByteString) r2
-    inputToSocket = interpret \case
-      Input -> receive s
-    outputToSocket :: (Member (Socket s) r2) => InterpreterFor (Output ByteString) r2
-    outputToSocket = interpret \case
-      Output str -> send s str
+    go :: (Member (Embed IO) r) => InterpretersFor SocketEffects r
+    go m = do
+      (sock, _) <- embed $ Network.accept server
+      sockToIO bufferSize sock m
 
-socketToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpreterFor (Socket Network.Socket) r
-socketToIO bufferSize srv = do
-  interpret \case
-    Accept -> embed $ fst <$> Network.accept srv
-    Send s b -> embed . void $ Network.send s b
-    Receive s -> embed $ eofToNothing <$> Network.recv s bufferSize
-    Close s -> embed $ Network.close s
+sockToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpretersFor SocketEffects r
+sockToIO bufferSize sock m = do
+  h <- embed $ Network.socketToHandle sock ReadWriteMode
+  closeToIO h . outputToIO h . inputToIO bufferSize h $ m
