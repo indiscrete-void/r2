@@ -5,16 +5,19 @@ import Network.Socket qualified as Network
 import Pnet
 import Pnet.Polysemy.Trace
 import Polysemy hiding (run, send)
+import Polysemy.Input
+import Polysemy.Output
 import Polysemy.Socket
 import Polysemy.Trace
 
 pnetd :: forall s r. (Member Trace r, Member (Socket s) r) => Sem r ()
-pnetd = forever $ accept @s >>= echo
+pnetd = forever $ accept @s >>= process
   where
-    echo sock = do
-      msg <- receive sock
+    process sock = transportToSocket sock (processT sock)
+    processT sock = do
+      msg <- input
       traceTagged "client -> server" (BC.unpack msg)
-      send sock msg
+      output msg
       traceTagged "server -> client" (BC.unpack msg)
       close sock
 
