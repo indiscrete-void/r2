@@ -1,6 +1,7 @@
 import Network.Socket hiding (close)
 import Pnet
 import Pnet.Options
+import Pnet.Polysemy.Trace
 import Polysemy hiding (run)
 import Polysemy.Fail
 import Polysemy.Serialize
@@ -11,7 +12,7 @@ import System.IO
 pnet :: (Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member Close r, Member Fail r, Member Trace r) => Command -> Sem r ()
 pnet command = go command >> close
   where
-    go Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= trace . show)
+    go Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
     go _ = _
 
 main :: IO ()

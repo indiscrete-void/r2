@@ -1,5 +1,6 @@
 import Network.Socket (bind, listen)
 import Pnet
+import Pnet.Polysemy.Trace
 import Polysemy hiding (run, send)
 import Polysemy.Async
 import Polysemy.Fail
@@ -12,7 +13,7 @@ import Polysemy.Transport
 pnetd :: (Member Trace r, Member (Scoped_ (Socket ManagerToNodeMessage NodeToManagerMessage)) r, Member Async r) => Sem r ()
 pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> close
   where
-    go ListNodes = trace "ListNodes: responding with `[]`" >> output (NodeList [])
+    go ListNodes = traceTagged "ListNodes" "responding with `[]`" >> output (NodeList [])
     go (Other _) = _
 
 main :: IO ()
