@@ -55,10 +55,10 @@ scopedSockToIO bufferSize server = runScopedBundle_ go
       sockToIO bufferSize sock m
 
 unserializeScopedSock :: forall i o r. (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member (Scoped_ ByteSocket) r) => InterpreterFor (Scoped_ (Socket i o)) r
-unserializeScopedSock = accept @ByteString @ByteString . runScopedBundle_ @(SocketEffects i o) unserializeSock . insertAt @1 @ByteSocketEffects
+unserializeScopedSock = accept @ByteString @ByteString . runScopedBundle_ @(SocketEffects i o) (subsume @Close . unserializeSock) . insertAt @1 @ByteSocketEffects
   where
-    unserializeSock :: (Member Decoder r', Member Fail r', Members ByteSocketEffects r') => InterpretersFor (SocketEffects i o) r'
-    unserializeSock = subsume @Close . serializeOutput . deserializeInput
+    unserializeSock :: (Member Decoder r', Member Fail r', Member ByteInputWithEOF r', Member ByteOutput r') => InterpretersFor (InputWithEOF i ': Output o ': '[]) r'
+    unserializeSock = serializeOutput . deserializeInput
 
 sockToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpretersFor ByteSocketEffects r
 sockToIO bufferSize sock m = do
