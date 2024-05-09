@@ -1,12 +1,9 @@
 module Pnet.Options (Options (..), Transport (..), Command (..), parse) where
 
 import Options.Applicative
+import Pnet
 
 newtype Options = Options Command
-
-data Transport
-  = Stdio
-  | Process !String
 
 data Command
   = Ls

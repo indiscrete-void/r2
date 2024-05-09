@@ -11,6 +11,7 @@ module Pnet
     pnetSocket,
     withPnetSocket,
     bufferSize,
+    Transport (..),
   )
 where
 
@@ -20,6 +21,11 @@ import Data.Serialize
 import GHC.Generics
 import Network.Socket
 import System.Environment
+
+data Transport
+  = Stdio
+  | Process !String
+  deriving stock (Show, Generic)
 
 type NodeID = String
 
@@ -31,6 +37,7 @@ data NodeToManagerMessage where
 
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
+  NodeAvailability :: NodeID -> Transport -> ManagerToNodeMessage
   Other :: NodeToNodeMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 
@@ -48,6 +55,8 @@ pnetSocketAddr = SockAddrUnix . fromMaybe defaultPnetSocketPath <$> lookupEnv "P
 
 withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
+
+instance Serialize Transport
 
 instance Serialize NodeToNodeMessage
 
