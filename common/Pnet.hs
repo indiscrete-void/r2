@@ -16,11 +16,14 @@ module Pnet
 where
 
 import Control.Exception
+import Data.Functor
 import Data.Maybe
 import Data.Serialize
+import Debug.Trace
 import GHC.Generics
 import Network.Socket
 import System.Environment
+import System.Posix
 
 data Transport
   = Stdio
@@ -47,11 +50,22 @@ bufferSize = 8192
 defaultPnetSocketPath :: FilePath
 defaultPnetSocketPath = "/run/pnet.sock"
 
+defaultUserPnetSocketPath :: IO FilePath
+defaultUserPnetSocketPath =
+  getEffectiveUserID <&> \case
+    0 -> defaultPnetSocketPath
+    n -> concat ["/run/user/", show n, "/pnet.sock"]
+
 pnetSocket :: IO Socket
 pnetSocket = socket AF_UNIX Stream defaultProtocol
 
 pnetSocketAddr :: IO SockAddr
-pnetSocketAddr = SockAddrUnix . fromMaybe defaultPnetSocketPath <$> lookupEnv "PNET_SOCKET_PATH"
+pnetSocketAddr = do
+  defaultPath <- defaultUserPnetSocketPath
+  customPath <- lookupEnv "PNET_SOCKET_PATH"
+  let path = fromMaybe defaultPath customPath
+  traceM ("comunicating over \"" <> path <> "\"")
+  pure $ SockAddrUnix path
 
 withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
