@@ -4,6 +4,7 @@
 
 module Pnet
   ( NodeID,
+    IpchainsMessage (..),
     NodeToNodeMessage (..),
     NodeToManagerMessage (..),
     ManagerToNodeMessage (..),
@@ -16,6 +17,7 @@ module Pnet
 where
 
 import Control.Exception
+import Data.ByteString (ByteString)
 import Data.Functor
 import Data.Maybe
 import Data.Serialize
@@ -25,14 +27,22 @@ import Network.Socket
 import System.Environment
 import System.Posix
 
+type NodeID = String
+
 data Transport
   = Stdio
   | Process !String
   deriving stock (Show, Generic)
 
-type NodeID = String
+data IpchainsMessage = IpchainsMessage
+  { ipchainsMessageNodeID :: NodeID,
+    ipchainsMessageData :: ByteString
+  }
+  deriving stock (Show, Generic)
 
-data NodeToNodeMessage deriving stock (Show, Generic)
+data NodeToNodeMessage where
+  Ipchains :: IpchainsMessage -> NodeToNodeMessage
+  deriving stock (Show, Generic)
 
 data NodeToManagerMessage where
   NodeList :: [NodeID] -> NodeToManagerMessage
@@ -71,6 +81,8 @@ withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
 
 instance Serialize Transport
+
+instance Serialize IpchainsMessage
 
 instance Serialize NodeToNodeMessage
 

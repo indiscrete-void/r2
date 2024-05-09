@@ -8,7 +8,7 @@ license: AGPL-3.0-only
 flag pedantic
 
 common default
-    build-depends: base ^>=4.17.2.1, polysemy
+    build-depends: base ^>=4.17.2.1, polysemy, bytestring, network
     default-language: Haskell2010
     default-extensions:
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
@@ -26,8 +26,11 @@ common default
 library
     import: default
     hs-source-dirs: common
-    build-depends: network, cereal, unix
-    exposed-modules: Pnet, Pnet.Polysemy.Trace
+    build-depends: cereal, unix
+    exposed-modules:
+        Pnet,
+        Pnet.Networking,
+        Pnet.Polysemy.Trace,
 
 executable pnetd
     import: default
@@ -35,8 +38,6 @@ executable pnetd
     main-is: Pnet/Main.hs
     build-depends:
         pnet,
-        bytestring,
-        network,
         polysemy-transport,
         pipes,
         cereal,
@@ -49,7 +50,5 @@ executable pnet
     build-depends:
         pnet,
         optparse-applicative,
-        bytestring,
-        network,
         polysemy-transport,
     other-modules: Pnet.Options
