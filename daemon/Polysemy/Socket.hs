@@ -9,6 +9,7 @@ module Polysemy.Socket
     ioToSock,
     sockToIO,
     unserializeSock,
+    sockToNode,
   )
 where
 
@@ -16,6 +17,7 @@ import Control.Monad
 import Data.ByteString
 import Data.Serialize hiding (Fail)
 import Network.Socket qualified as IO
+import Pnet.Networking
 import Polysemy hiding (send)
 import Polysemy.Async
 import Polysemy.Fail
@@ -43,6 +45,13 @@ unserializeSock = interpret \case
   SendToSock s o -> ioToSock s . serializeOutput @o $ output o
   RecvFromSock s -> ioToSock s . deserializeInput @i $ input
   CloseSock s -> closeSock s
+
+sockToNode :: (Member (Socket i o s) r) => s -> Node (Sem r) (Maybe i) o
+sockToNode s =
+  Node
+    { nodeSend = sendToSock s,
+      nodeRecv = recvFromSock s
+    }
 
 ioToSock :: (Member (Socket i o s) r) => s -> InterpretersFor (SocketEffects i o) r
 ioToSock s = closeToSock . oToSock . iToSock
