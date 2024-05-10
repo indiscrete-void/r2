@@ -1,72 +1,59 @@
 module Polysemy.Socket
   ( SocketEffects,
     Socket,
-    ByteSocketEffects,
-    ByteSocket,
-    accept,
-    scopedSockToIO,
-    unserializeScopedSock,
+    acceptSock,
+    sendToSock,
+    recvFromSock,
+    closeSock,
     handleClient,
+    ioToSock,
+    sockToIO,
+    unserializeSock,
   )
 where
 
 import Control.Monad
 import Data.ByteString
-import Data.Serialize
-import Network.Socket qualified as Network
+import Data.Serialize hiding (Fail)
+import Network.Socket qualified as IO
 import Polysemy hiding (send)
 import Polysemy.Async
-import Polysemy.Bundle
 import Polysemy.Fail
-import Polysemy.Scoped
-import Polysemy.ScopedBundle (runScopedBundle_)
 import Polysemy.Serialize
 import Polysemy.Transport
 import System.IO
+import Transport.Maybe
 
 type SocketEffects i o = InputWithEOF i ': Output o ': Close ': '[]
 
-type Socket i o = Bundle (SocketEffects i o)
+data Socket i o s m a where
+  AcceptSock :: Socket i o s m s
+  SendToSock :: s -> o -> Socket i o s m ()
+  RecvFromSock :: s -> Socket i o s m (Maybe i)
+  CloseSock :: s -> Socket i o s m ()
 
-type ByteSocketEffects = SocketEffects ByteString ByteString
+makeSem ''Socket
 
-type ByteSocket = Socket ByteString ByteString
+handleClient :: (Member (Socket i o s) r, Member Async r) => InterpretersFor (SocketEffects i o) r
+handleClient m = forever $ acceptSock >>= async . flip ioToSock m
 
-bundleSockEffects :: forall i o r. (Member (Socket i o) r) => InterpretersFor (SocketEffects i o) r
-bundleSockEffects =
-  sendBundle @Close @(SocketEffects i o)
-    . sendBundle @(Output o) @(SocketEffects i o)
-    . sendBundle @(InputWithEOF i) @(SocketEffects i o)
+unserializeSock :: forall i o s r. (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member (Socket ByteString ByteString s) r) => InterpreterFor (Socket i o s) r
+unserializeSock = interpret \case
+  AcceptSock -> acceptSock
+  SendToSock s o -> ioToSock s . serializeOutput @o $ output o
+  RecvFromSock s -> ioToSock s . deserializeInput @i $ input
+  CloseSock s -> closeSock s
 
-accept :: forall i o r. (Member (Scoped_ (Socket i o)) r) => InterpretersFor (SocketEffects i o) r
-accept = scoped_ . bundleSockEffects . insertAt @3 @'[Socket i o]
-
-handleClient :: forall i o r. (Member (Scoped_ (Socket i o)) r, Member Async r) => InterpretersFor (SocketEffects i o) r
-handleClient m = forever $ accept @i @o (async m)
-
--- intentionally doesn't close Socket after leaving scope to allow for concurrency
--- bonus: it's only (Embed IO) and not full (Final IO)
-scopedSockToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpreterFor (Scoped_ (Socket ByteString ByteString)) r
-scopedSockToIO bufferSize server = runScopedBundle_ go
+ioToSock :: (Member (Socket i o s) r) => s -> InterpretersFor (SocketEffects i o) r
+ioToSock s = closeToSock . oToSock . iToSock
   where
-    go :: (Member (Embed IO) r) => InterpretersFor (SocketEffects ByteString ByteString) r
-    go m = do
-      (sock, _) <- embed $ Network.accept server
-      sockToIO bufferSize sock m
+    iToSock = interpret \case Input -> recvFromSock s
+    oToSock = interpret \case Output str -> sendToSock s str
+    closeToSock = interpret \case Close -> closeSock s
 
-unserializeScopedSock :: (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member (Scoped_ (Socket ByteString ByteString)) r) => InterpreterFor (Scoped_ (Socket i o)) r
-unserializeScopedSock = runScopedBundle_ go
-  where
-    go :: (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member (Scoped_ (Socket ByteString ByteString)) r) => InterpretersFor (SocketEffects i o) r
-    go = accept . unserializeSock . insertAt @3 @ByteSocketEffects
-
-unserializeSock :: (Serialize i, Serialize o, Member Decoder r, Member Fail r, Members ByteSocketEffects r) => InterpretersFor (SocketEffects i o) r
-unserializeSock = subsume @Close . unserializeSockTransport
-
-unserializeSockTransport :: (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF i ': Output o ': '[]) r
-unserializeSockTransport = serializeOutput . deserializeInput
-
-sockToIO :: (Member (Embed IO) r) => Int -> Network.Socket -> InterpretersFor ByteSocketEffects r
-sockToIO bufferSize sock m = do
-  h <- embed $ Network.socketToHandle sock ReadWriteMode
-  closeToIO h . outputToIO h . inputToIO bufferSize h $ m
+sockToIO :: (Member (Embed IO) r) => Int -> IO.Socket -> InterpreterFor (Socket ByteString ByteString Handle) r
+sockToIO bufferSize server = interpret \case
+  AcceptSock -> embed $ IO.accept server >>= flip IO.socketToHandle ReadWriteMode . fst
+  SendToSock s o -> embed $ hPut s o
+  RecvFromSock s -> embed $ eofToNothing <$> hGetSome s bufferSize
+  CloseSock s -> embed $ hClose s

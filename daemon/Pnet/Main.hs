@@ -6,7 +6,6 @@ import Polysemy hiding (run, send)
 import Polysemy.Async
 import Polysemy.AtomicState
 import Polysemy.Fail
-import Polysemy.Scoped
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Trace
@@ -18,7 +17,7 @@ type State = [(NodeID, Transport)]
 initialState :: State
 initialState = []
 
-pnetd :: (Member Trace r, Member (Scoped_ (Socket ManagerToNodeMessage NodeToManagerMessage)) r, Member Async r, Member (AtomicState State) r) => Sem r ()
+pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessage s) r, Member Async r, Member (AtomicState State) r) => Sem r ()
 pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> close
   where
     go ListNodes = do
@@ -33,9 +32,9 @@ pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> 
 main :: IO ()
 main =
   let runSocket server =
-        scopedSockToIO bufferSize server
+        sockToIO bufferSize server
           . runDecoder
-          . unserializeScopedSock @ManagerToNodeMessage @NodeToManagerMessage
+          . unserializeSock @ManagerToNodeMessage @NodeToManagerMessage
       runAtomicState = void . atomicStateToIO initialState
       run server = runFinal @IO . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStdout . runSocket server . runAtomicState
    in withPnetSocket \sock -> do
