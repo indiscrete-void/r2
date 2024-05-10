@@ -8,7 +8,7 @@ license: AGPL-3.0-only
 flag pedantic
 
 common default
-    build-depends: base ^>=4.17.2.1, polysemy, bytestring, network
+    build-depends: base ^>=4.17.2.1, polysemy, polysemy-plugin, bytestring, network
     default-language: Haskell2010
     default-extensions:
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
@@ -20,6 +20,7 @@ common default
         -Wno-all-missed-specialisations -Wno-missed-specialisations
         -Wno-missing-local-signatures -Wno-monomorphism-restriction
         -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
+        -fplugin=Polysemy.Plugin
     if flag(pedantic)
         ghc-options: -Werror
 
