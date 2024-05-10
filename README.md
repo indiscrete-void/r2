@@ -21,35 +21,20 @@ The daemon (`pnetd`) implements:
 - In-memory node database
 - Daemon-Manager communication protocol
 
-The manager (`pnet`) provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing the same interface.
+The manager (`pnet`) provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
 
 `pnetd` and `pnet` communicate via UNIX socket at /var/run/pnet (or custom path defined by $PNET_SOCKET_PATH)
 
 ## Examples
 ```sh
-# run daemon with ioshd posing as tunnel process
-pnetd ioshd
+pnetd ioshd # run daemon with ioshd posing as tunnel process
 
-# connect to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 via "socat tcp:example.com:47210 -"
-pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat tcp:example.com:47210 -"
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat udp:example.com:47210 -" # connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via "socat udp:example.com:47210 -"
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat interface:eth0 -" # replace TCP/IP on eth0 with pnet protocol and communicate with eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= on other end
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3" # connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via bluetooth socket on channel 3
+socat udp-l:47210 exec:"pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" # introduce eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= to the network when it's connection is accepted by `socat udp-l:47210`
+socat udp-l:47210,fork exec:"pnet connect -" # intrdouce all nodes that are accepted by `socat udp-l:47210` to the network
 
-# introduce ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 to the network when it's connection is accepted by `socat tcp-l:47210`
-socat tcp-l:47210 exec:"pnet connect -n ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -"
-
-# intrdouce some node to the network when it's connection is accepted by `socat udp-l:47210`
-socat udp-l:47210 exec:"pnet connect -"
-
-# replace TCP/IP on eth0 with pnet protocol and communicate with ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 on other end
-pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat interface:eth0 -"
-
-# connect to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 via bluetooth socket on channel 3
-pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3"
-
-# connect iosh to ioshd provided as the tunnel process of ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3
-iosh -t "pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -" zsh -l
-
-# create pnet0 network interface connected to ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3
-pnet tunnel ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat tun,iff-up,device-name=pnet0 -"
+pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat tun,iff-up,device-name=pnet0 -" # create pnet0 network interface connected to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
+iosh -t "pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" zsh -l # connect iosh to ioshd provided as the tunnel process of eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
 ```
-
-Note that in actual implementation public keys will get shorter for better experience
