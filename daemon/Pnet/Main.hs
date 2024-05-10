@@ -22,11 +22,11 @@ pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> 
   where
     go ListNodes = do
       nodeList <- map snd <$> atomicGet @State
-      traceTagged "ListNodes" (Text.printf "responding with %s" (show nodeList))
+      traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
     go (NodeAvailability transport maybeNode) = case maybeNode of
-      Just node -> atomicModify' ((transport, node) :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over %s" (show node) (show transport))
-      Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over %s" (show transport))
+      Just node -> atomicModify' ((transport, node) :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show node) (show transport))
+      Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
     go (Other _) = _
 
 main :: IO ()
