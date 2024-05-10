@@ -1,19 +1,19 @@
 # pnet (Pandora Network)
 ## Overview of pnet architecture
 ```
-                               x----------------------------------------x  
-                               |                                        |  
-               ┌───────────┐ ┌────┐   ┌────┐  ┌────────────┐            |  
-          ┌────┤pnet tunnel├─┤proc│ ┌─┤proc├──┤pnet connect├────┐       |  
-          │    └───────────┘ └────┘ │ └────┘  └────────────┘    │       |  
+                               x----------------------------------------x
+                               |                                        |
+               ┌───────────┐ ┌────┐   ┌────┐  ┌────────────┐            |
+          ┌────┤pnet tunnel├─┤proc│ ┌─┤proc├──┤pnet connect├────┐       |
+          │    └───────────┘ └────┘ │ └────┘  └────────────┘    │       |
 ┌────┐ ┌──┴──┐                      │                        ┌──┴──┐ ┌────┐
 │proc├─┤pnetd│                      └─┐                      │pnetd├─┤proc│
 └────┘ └──┬──┘                        │                      └──┬──┘ └────┘
-  |       │    ┌────────────┐  ┌────┐ │ ┌────┐ ┌───────────┐    │          
-  |       └────┤pnet connect├──┤proc├─┘ │proc├─┤pnet tunnel├────┘          
-  |            └────────────┘  └────┘   └────┘ └───────────┘               
-  |                                        !                               
-  x----------------------------------------x                               
+  |       │    ┌────────────┐  ┌────┐ │ ┌────┐ ┌───────────┐    │
+  |       └────┤pnet connect├──┤proc├─┘ │proc├─┤pnet tunnel├────┘
+  |            └────────────┘  └────┘   └────┘ └───────────┘
+  |                                        !
+  x----------------------------------------x
 ```
 
 The daemon (`pnetd`) implements:
@@ -34,7 +34,10 @@ pnetd ioshd
 pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat tcp:example.com:47210 -"
 
 # introduce ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 to the network when it's connection is accepted by `socat tcp-l:47210`
-socat tcp-l:47210 exec:"pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -"
+socat tcp-l:47210 exec:"pnet connect -n ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 -"
+
+# intrdouce some node to the network when it's connection is accepted by `socat udp-l:47210`
+socat udp-l:47210 exec:"pnet connect -"
 
 # replace TCP/IP on eth0 with pnet protocol and communicate with ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 on other end
 pnet connect ffd8e654b8271c489b2d4cd236c327d4f4091f0958b31af8d6d893905a1ef6c3 "socat interface:eth0 -"

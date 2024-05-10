@@ -50,7 +50,7 @@ data NodeToManagerMessage where
 
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
-  NodeAvailability :: NodeID -> Transport -> ManagerToNodeMessage
+  NodeAvailability :: Transport -> Maybe NodeID -> ManagerToNodeMessage
   Other :: NodeToNodeMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 

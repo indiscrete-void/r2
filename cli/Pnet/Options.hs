@@ -7,7 +7,7 @@ newtype Options = Options Command
 
 data Command
   = Ls
-  | Connect !String !Transport
+  | Connect !Transport !(Maybe String)
   | Tunnel !String !Transport
 
 parse :: IO Options
@@ -35,7 +35,7 @@ lsOpts :: Parser Command
 lsOpts = pure Ls
 
 connectOpts :: Parser Command
-connectOpts = Connect <$> argument str (metavar "ID") <*> argument transport (metavar "TRANSPORT")
+connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (strOption $ long "node" <> short 'n')
 
 tunnelOpts :: Parser Command
 tunnelOpts = Tunnel <$> argument str (metavar "ID") <*> argument transport (metavar "TRANSPORT")

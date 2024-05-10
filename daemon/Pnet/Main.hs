@@ -12,7 +12,7 @@ import Polysemy.Trace
 import Polysemy.Transport
 import Text.Printf qualified as Text
 
-type State = [(NodeID, Transport)]
+type State = [(Transport, NodeID)]
 
 initialState :: State
 initialState = []
@@ -21,12 +21,12 @@ pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessa
 pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> close
   where
     go ListNodes = do
-      nodeList <- map fst <$> atomicGet @State
+      nodeList <- map snd <$> atomicGet @State
       traceTagged "ListNodes" (Text.printf "responding with %s" (show nodeList))
       output (NodeList nodeList)
-    go (NodeAvailability node transport) =
-      atomicModify' ((node, transport) :)
-        >> traceTagged "NodeAvailability" (Text.printf "%s connected over %s" node (show transport))
+    go (NodeAvailability transport maybeNode) = case maybeNode of
+      Just node -> atomicModify' ((transport, node) :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over %s" (show node) (show transport))
+      Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over %s" (show transport))
     go (Other _) = _
 
 main :: IO ()

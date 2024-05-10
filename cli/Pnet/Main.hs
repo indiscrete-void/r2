@@ -13,7 +13,7 @@ pnet :: (Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToN
 pnet command = go command >> close
   where
     go Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
-    go (Connect node transport) = output $ NodeAvailability node transport
+    go (Connect transport node) = output $ NodeAvailability transport node
     go _ = _
 
 main :: IO ()
