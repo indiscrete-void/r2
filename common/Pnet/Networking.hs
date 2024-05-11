@@ -6,6 +6,7 @@ module Pnet.Networking
   )
 where
 
+import Control.Arrow
 import Data.ByteString
 import Pnet
 import Polysemy
@@ -24,11 +25,19 @@ recvIf recv f = do
     then pure i
     else recvIf recv f
 
-ipchainsNode :: (Monad m) => NodeID -> Node m IpchainsMessage IpchainsMessage -> Node m ByteString ByteString
-ipchainsNode nodeID (Node {nodeSend = routerSend, nodeRecv = routerRecv}) =
+ipchainsNode :: (Monad m) => NodeID -> Node m IpchainsMessage IpchainsMessage -> NodeID -> Node m ByteString ByteString
+ipchainsNode selfID (Node {nodeSend = routerSend, nodeRecv = routerRecv}) nodeID =
   Node
-    { nodeSend = routerSend . IpchainsMessage nodeID,
-      nodeRecv = ipchainsMessageData <$> recvIf routerRecv ((nodeID ==) . ipchainsMessageNodeID)
+    { nodeSend = routerSend . IpchainsMessage selfID nodeID,
+      nodeRecv =
+        ipchainsMessageData
+          <$> recvIf
+            routerRecv
+            ( uncurry (&&)
+                . ( (selfID ==) . ipchainsMessageDst
+                      &&& (nodeID ==) . ipchainsMessageSrc
+                  )
+            )
     }
 
 ioNode :: (Member (Input i) r, Member (Output o) r) => Node (Sem r) i o

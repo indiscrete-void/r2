@@ -35,7 +35,8 @@ data Transport
   deriving stock (Show, Generic)
 
 data IpchainsMessage = IpchainsMessage
-  { ipchainsMessageNodeID :: NodeID,
+  { ipchainsMessageSrc :: NodeID,
+    ipchainsMessageDst :: NodeID,
     ipchainsMessageData :: ByteString
   }
   deriving stock (Show, Generic)
