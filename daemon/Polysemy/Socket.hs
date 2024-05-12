@@ -7,9 +7,11 @@ module Polysemy.Socket
     closeSock,
     handleClient,
     ioToSock,
+    iToSock,
+    oToSock,
+    closeToSock,
     sockToIO,
     unserializeSock,
-    sockNode,
   )
 where
 
@@ -17,7 +19,6 @@ import Control.Monad
 import Data.ByteString
 import Data.Serialize hiding (Fail)
 import Network.Socket qualified as IO
-import Pnet.Networking
 import Polysemy hiding (send)
 import Polysemy.Async
 import Polysemy.Fail
@@ -64,10 +65,3 @@ sockToIO bufferSize server = interpret \case
   SendToSock s o -> embed $ hPut s o
   RecvFromSock s -> embed $ eofToNothing <$> hGetSome s bufferSize
   CloseSock s -> embed $ hClose s
-
-sockNode :: (Member (Socket i o s) r) => s -> Node (Sem r) (Maybe i) o
-sockNode s =
-  Node
-    { nodeSend = oToSock s . output,
-      nodeRecv = ioToSock s input
-    }

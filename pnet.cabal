@@ -14,6 +14,7 @@ common default
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
         ScopedTypeVariables TypeApplications TypeOperators TypeFamilies
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
+        DeriveGeneric DerivingStrategies EmptyDataDeriving
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
@@ -28,10 +29,7 @@ library
     import: default
     hs-source-dirs: common
     build-depends: cereal, unix
-    exposed-modules:
-        Pnet,
-        Pnet.Networking,
-        Pnet.Polysemy.Trace,
+    exposed-modules: Pnet, Pnet.Polysemy.Trace
 
 executable pnetd
     import: default
@@ -42,7 +40,7 @@ executable pnetd
         polysemy-transport,
         pipes,
         cereal,
-    other-modules: Polysemy.Socket
+    other-modules: Polysemy.Socket, Pnet.Networking, Pnet.Daemon
 
 executable pnet
     import: default

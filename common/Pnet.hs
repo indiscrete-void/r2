@@ -1,11 +1,5 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE EmptyDataDeriving #-}
-
 module Pnet
   ( NodeID,
-    IpchainsMessage (..),
-    NodeToNodeMessage (..),
     NodeToManagerMessage (..),
     ManagerToNodeMessage (..),
     pnetSocketAddr,
@@ -17,7 +11,6 @@ module Pnet
 where
 
 import Control.Exception
-import Data.ByteString (ByteString)
 import Data.Functor
 import Data.Maybe
 import Data.Serialize
@@ -34,17 +27,6 @@ data Transport
   | Process !String
   deriving stock (Show, Generic)
 
-data IpchainsMessage = IpchainsMessage
-  { ipchainsMessageSrc :: NodeID,
-    ipchainsMessageDst :: NodeID,
-    ipchainsMessageData :: ByteString
-  }
-  deriving stock (Show, Generic)
-
-data NodeToNodeMessage where
-  Ipchains :: IpchainsMessage -> NodeToNodeMessage
-  deriving stock (Show, Generic)
-
 data NodeToManagerMessage where
   NodeList :: [NodeID] -> NodeToManagerMessage
   deriving stock (Show, Generic)
@@ -52,7 +34,6 @@ data NodeToManagerMessage where
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
   NodeAvailability :: Transport -> Maybe NodeID -> ManagerToNodeMessage
-  Other :: NodeToNodeMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 
 bufferSize :: Int
@@ -82,10 +63,6 @@ withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
 
 instance Serialize Transport
-
-instance Serialize IpchainsMessage
-
-instance Serialize NodeToNodeMessage
 
 instance Serialize NodeToManagerMessage
 

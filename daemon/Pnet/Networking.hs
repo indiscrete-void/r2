@@ -3,15 +3,18 @@ module Pnet.Networking
     ipchainsNode,
     recvIf,
     ioNode,
+    sockNode,
   )
 where
 
 import Control.Arrow
 import Data.ByteString
 import Pnet
+import Pnet.Daemon
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Socket
 
 data Node m i o = Node
   { nodeSend :: o -> m (),
@@ -45,4 +48,11 @@ ioNode =
   Node
     { nodeSend = output,
       nodeRecv = input
+    }
+
+sockNode :: (Member (Socket i o s) r) => s -> Node (Sem r) (Maybe i) o
+sockNode s =
+  Node
+    { nodeSend = oToSock s . output,
+      nodeRecv = ioToSock s input
     }
