@@ -1,5 +1,6 @@
 module Pnet
   ( NodeID,
+    TunnelMessage (..),
     NodeToManagerMessage (..),
     ManagerToNodeMessage (..),
     pnetSocketAddr,
@@ -11,6 +12,7 @@ module Pnet
 where
 
 import Control.Exception
+import Data.ByteString (ByteString)
 import Data.Functor
 import Data.Maybe
 import Data.Serialize
@@ -24,16 +26,23 @@ type NodeID = String
 
 data Transport
   = Stdio
-  | Process !String
+  | Process String
+  deriving stock (Show, Generic)
+
+newtype TunnelMessage = TunnelMessage
+  { tunnelMessageData :: Maybe ByteString
+  }
   deriving stock (Show, Generic)
 
 data NodeToManagerMessage where
+  DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
   NodeList :: [NodeID] -> NodeToManagerMessage
   deriving stock (Show, Generic)
 
 data ManagerToNodeMessage where
-  ListNodes :: ManagerToNodeMessage
   NodeAvailability :: Transport -> Maybe NodeID -> ManagerToNodeMessage
+  ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
+  ListNodes :: ManagerToNodeMessage
   deriving stock (Show, Generic)
 
 bufferSize :: Int
@@ -63,6 +72,8 @@ withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
 
 instance Serialize Transport
+
+instance Serialize TunnelMessage
 
 instance Serialize NodeToManagerMessage
 
