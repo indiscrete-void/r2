@@ -15,7 +15,7 @@ import System.Exit
 import System.Posix
 import Text.Printf qualified as Text
 
-type State = [(Transport, NodeID)]
+type State = [NodeID]
 
 initialState :: State
 initialState = []
@@ -24,11 +24,11 @@ pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessa
 pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> close
   where
     go ListNodes = do
-      nodeList <- map snd <$> atomicGet @State
+      nodeList <- atomicGet @State
       traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
     go (NodeAvailability transport maybeNode) = case maybeNode of
-      Just node -> atomicModify' ((transport, node) :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show node) (show transport))
+      Just nodeID -> atomicModify' (nodeID :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show nodeID) (show transport))
       Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
 
 forkIf :: Bool -> IO () -> IO ()
