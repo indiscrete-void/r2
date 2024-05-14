@@ -2,7 +2,7 @@ module Pnet.Options (Options (..), parse) where
 
 import Options.Applicative
 
-newtype Options = Options (Maybe FilePath)
+data Options = Options (Maybe FilePath) Bool
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -17,4 +17,7 @@ parserInfo =
     )
 
 opts :: Parser Options
-opts = Options <$> optional (strOption $ long "socket" <> short 's')
+opts =
+  Options
+    <$> optional (strOption $ long "socket" <> short 's')
+    <*> flag False True (long "daemon" <> short 'd')

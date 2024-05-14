@@ -11,6 +11,8 @@ import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Trace
 import Polysemy.Transport
+import System.Exit
+import System.Posix
 import Text.Printf qualified as Text
 
 type State = [(Transport, NodeID)]
@@ -29,6 +31,10 @@ pnetd = handleClient @ManagerToNodeMessage @NodeToManagerMessage $ handle go >> 
       Just node -> atomicModify' ((transport, node) :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show node) (show transport))
       Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
 
+forkIf :: Bool -> IO () -> IO ()
+forkIf True m = forkProcess m >> exitSuccess
+forkIf False m = m
+
 main :: IO ()
 main =
   let runSocket server =
@@ -38,8 +44,8 @@ main =
       runAtomicState = void . atomicStateToIO initialState
       run server = runFinal @IO . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStdout . runSocket server . runAtomicState
    in withPnetSocket \sock -> do
-        (Options maybeSocketPath) <- parse
+        (Options maybeSocketPath daemon) <- parse
         addr <- pnetSocketAddr maybeSocketPath
         bind sock addr
         listen sock 5
-        run sock pnetd
+        forkIf daemon $ run sock pnetd
