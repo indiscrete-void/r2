@@ -42,7 +42,7 @@ main =
           . runDecoder
           . unserializeSock @ManagerToNodeMessage @NodeToManagerMessage
       runAtomicState = void . atomicStateToIO initialState
-      run server = runFinal @IO . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStdout . runSocket server . runAtomicState
+      run server = runFinal @IO . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStdoutBuffered . runSocket server . runAtomicState
    in withPnetSocket \sock -> do
         (Options maybeSocketPath daemon) <- parse
         addr <- pnetSocketAddr maybeSocketPath

@@ -18,7 +18,7 @@ pnet command = go command >> close
 
 main :: IO ()
 main =
-  let run h = runM . failToEmbed @IO . traceToStderr . runTransport h
+  let run h = runM . failToEmbed @IO . traceToStderrBuffered . runTransport h
       runTransport h = inputToIO bufferSize h . outputToIO h . closeToIO h . runUnserialized
       runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
    in withPnetSocket \sock -> do
