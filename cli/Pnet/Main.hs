@@ -12,8 +12,8 @@ import Polysemy.Trace
 import Polysemy.Transport
 import System.IO
 
-connectNodeAndDaemon :: (Member ByteInputWithEOF r, Member ByteOutput r, Member Fail r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member (Tagged 'Stdio Close) r, Member Async r, Member Trace r) => Transport -> Sem r ()
-connectNodeAndDaemon Stdio = async_ nodeToDaemon >> daemonToNode
+connectNodeStreams :: (Member ByteInputWithEOF r, Member ByteOutput r, Member Fail r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member (Tagged 'Stdio Close) r, Member Async r, Member Trace r) => Transport -> Sem r ()
+connectNodeStreams Stdio = async_ nodeToDaemon >> daemonToNode
   where
     nodeToDaemon = transferStream (msg . Just) (msg Nothing)
       where
@@ -22,13 +22,13 @@ connectNodeAndDaemon Stdio = async_ nodeToDaemon >> daemonToNode
       where
         go (DaemonNodeData (TunnelMessage maybeStr)) = tag @'Stdio @Close (maybe close output maybeStr)
         go _ = _
-connectNodeAndDaemon _ = _
+connectNodeStreams _ = _
 
 pnet :: (Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member Close r, Member Fail r, Member Trace r, Member (Tagged 'Stdio Close) r, Member Async r) => Command -> Sem r ()
 pnet command = go command >> close
   where
     go Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
-    go (Connect transport node) = output (ConnectNode transport node) >> connectNodeAndDaemon transport
+    go (Connect transport nodeID) = output (ConnectNode transport nodeID) >> connectNodeStreams transport
     go _ = _
 
 main :: IO ()
