@@ -1,6 +1,7 @@
 import Data.Functor
 import Network.Socket (bind, listen)
 import Pnet
+import Pnet.Options
 import Pnet.Polysemy.Trace
 import Polysemy hiding (run, send)
 import Polysemy.Async
@@ -37,7 +38,8 @@ main =
       runAtomicState = void . atomicStateToIO initialState
       run server = runFinal @IO . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStdout . runSocket server . runAtomicState
    in withPnetSocket \sock -> do
-        addr <- pnetSocketAddr
+        (Options maybeSocketPath) <- parse
+        addr <- pnetSocketAddr maybeSocketPath
         bind sock addr
         listen sock 5
         run sock pnetd

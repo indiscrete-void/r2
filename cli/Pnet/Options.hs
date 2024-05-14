@@ -3,7 +3,7 @@ module Pnet.Options (Options (..), Transport (..), Command (..), parse) where
 import Options.Applicative
 import Pnet
 
-newtype Options = Options Command
+data Options = Options Command (Maybe FilePath)
 
 data Command
   = Ls
@@ -30,6 +30,7 @@ opts =
           <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
           <> command "tunnel" (info tunnelOpts $ progDesc "Provide transport for application layer")
       )
+    <*> optional (strOption $ long "socket" <> short 's')
 
 lsOpts :: Parser Command
 lsOpts = pure Ls

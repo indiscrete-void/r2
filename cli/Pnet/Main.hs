@@ -22,7 +22,7 @@ main =
       runTransport h = inputToIO bufferSize h . outputToIO h . closeToIO h . runUnserialized
       runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
    in withPnetSocket \sock -> do
-        connect sock =<< pnetSocketAddr
+        (Options command maybeSocketPath) <- parse
+        connect sock =<< pnetSocketAddr maybeSocketPath
         h <- socketToHandle sock ReadWriteMode
-        (Options command) <- parse
         run h $ pnet command

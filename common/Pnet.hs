@@ -11,6 +11,7 @@ module Pnet
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Exception
 import Data.ByteString (ByteString)
 import Data.Functor
@@ -60,11 +61,11 @@ defaultUserPnetSocketPath =
 pnetSocket :: IO Socket
 pnetSocket = socket AF_UNIX Stream defaultProtocol
 
-pnetSocketAddr :: IO SockAddr
-pnetSocketAddr = do
+pnetSocketAddr :: Maybe FilePath -> IO SockAddr
+pnetSocketAddr customPath = do
   defaultPath <- defaultUserPnetSocketPath
-  customPath <- lookupEnv "PNET_SOCKET_PATH"
-  let path = fromMaybe defaultPath customPath
+  extraCustomPath <- lookupEnv "PNET_SOCKET_PATH"
+  let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
   traceM ("comunicating over \"" <> path <> "\"")
   pure $ SockAddrUnix path
 
