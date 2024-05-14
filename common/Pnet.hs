@@ -7,6 +7,7 @@ module Pnet
     pnetSocket,
     withPnetSocket,
     bufferSize,
+    queueSize,
     Transport (..),
   )
 where
@@ -36,18 +37,21 @@ newtype TunnelMessage = TunnelMessage
   deriving stock (Show, Generic)
 
 data NodeToManagerMessage where
-  DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
   NodeList :: [NodeID] -> NodeToManagerMessage
+  DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
   deriving stock (Show, Generic)
 
 data ManagerToNodeMessage where
+  ListNodes :: ManagerToNodeMessage
   NodeAvailability :: Transport -> Maybe NodeID -> ManagerToNodeMessage
   ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
-  ListNodes :: ManagerToNodeMessage
   deriving stock (Show, Generic)
 
 bufferSize :: Int
 bufferSize = 8192
+
+queueSize :: Int
+queueSize = 16
 
 defaultPnetSocketPath :: FilePath
 defaultPnetSocketPath = "/run/pnet.sock"

@@ -36,7 +36,7 @@ executable pnetd
     hs-source-dirs: daemon
     main-is: Pnet/Main.hs
     build-depends: pnet, polysemy-transport, pipes, cereal, optparse-applicative, unix
-    other-modules: Polysemy.Socket, Pnet.Networking, Pnet.Daemon, Pnet.Options
+    other-modules: Polysemy.Socket, Pnet.Networking, Pnet.Options
 
 executable pnet
     import: default

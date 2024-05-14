@@ -37,8 +37,8 @@ data Socket i o s m a where
 
 makeSem ''Socket
 
-handleClient :: (Member (Socket i o s) r, Member Async r) => InterpretersFor (SocketEffects i o) r
-handleClient m = forever $ acceptSock >>= async . flip ioToSock m
+handleClient :: (Member (Socket i o s) r, Member Async r) => (s -> Sem r a) -> Sem r a
+handleClient f = forever $ acceptSock >>= async . f
 
 unserializeSock :: forall i o s r. (Serialize i, Serialize o, Member Decoder r, Member Fail r, Member (Socket ByteString ByteString s) r) => InterpreterFor (Socket i o s) r
 unserializeSock = interpret \case
