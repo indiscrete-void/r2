@@ -29,7 +29,7 @@ library
     import: default
     hs-source-dirs: common
     build-depends: cereal, unix
-    exposed-modules: Pnet, Pnet.Polysemy.Trace
+    exposed-modules: Pnet
 
 executable pnetd
     import: default

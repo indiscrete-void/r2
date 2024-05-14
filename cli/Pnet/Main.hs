@@ -1,8 +1,8 @@
 import Network.Socket hiding (close)
 import Pnet
 import Pnet.Options
-import Pnet.Polysemy.Trace
 import Polysemy hiding (run)
+import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Serialize
 import Polysemy.Trace

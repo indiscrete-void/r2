@@ -2,10 +2,10 @@ import Data.Functor
 import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Options
-import Pnet.Polysemy.Trace
 import Polysemy hiding (run, send)
 import Polysemy.Async
 import Polysemy.AtomicState
+import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Serialize
 import Polysemy.Socket
