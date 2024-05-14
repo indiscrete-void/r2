@@ -56,7 +56,7 @@ unserializeNode (Node routerSend routerRecv) =
     }
 
 ipchainsNode :: (Monad m) => NodeID -> Node m IpchainsMessage IpchainsMessage -> NodeID -> Node m ByteString ByteString
-ipchainsNode selfID (Node {nodeSend = routerSend, nodeRecv = routerRecv}) nodeID =
+ipchainsNode selfID (Node routerSend routerRecv) nodeID =
   Node
     { nodeSend = routerSend . IpchainsMessage selfID nodeID,
       nodeRecv =
