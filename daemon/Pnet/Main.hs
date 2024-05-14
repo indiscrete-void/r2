@@ -52,7 +52,7 @@ handleManagerMsgs s = handle go >> close
       nodeList <- atomicGet
       traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
-    go (NodeAvailability transport maybeNodeID) = do
+    go (ConnectNode transport maybeNodeID) = do
       let connectedDaemonNode = daemonNode s
       case maybeNodeID of
         Just nodeID -> atomicModify' (nodeID :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show nodeID) (show transport))

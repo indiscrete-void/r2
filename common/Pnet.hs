@@ -43,7 +43,7 @@ data NodeToManagerMessage where
 
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
-  NodeAvailability :: Transport -> Maybe NodeID -> ManagerToNodeMessage
+  ConnectNode :: Transport -> Maybe NodeID -> ManagerToNodeMessage
   ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 

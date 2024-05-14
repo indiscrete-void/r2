@@ -28,7 +28,7 @@ pnet :: (Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF No
 pnet command = go command >> close
   where
     go Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
-    go (Connect transport node) = output (NodeAvailability transport node) >> connectNodeAndDaemon transport
+    go (Connect transport node) = output (ConnectNode transport node) >> connectNodeAndDaemon transport
     go _ = _
 
 main :: IO ()
