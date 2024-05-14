@@ -27,14 +27,22 @@ The manager (`pnet`) provides transport for daemons via `pnet-connect` and trans
 
 ## Examples
 ```sh
-pnetd ioshd # run daemon with ioshd posing as tunnel process
+# run daemon with ioshd posing as tunnel process
+pnetd ioshd
 
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat udp:example.com:47210 -" # connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via "socat udp:example.com:47210 -"
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat interface:eth0 -" # replace TCP/IP on eth0 with pnet protocol and communicate with eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= on other end
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3" # connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via bluetooth socket on channel 3
-socat udp-l:47210 exec:"pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" # introduce eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= to the network when it's connection is accepted by `socat udp-l:47210`
-socat udp-l:47210,fork exec:"pnet connect -" # intrdouce all nodes that are accepted by `socat udp-l:47210` to the network
+# connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via "socat udp:example.com:47210 -"
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat udp:example.com:47210 -"
+# replace TCP/IP on eth0 with pnet protocol and communicate with eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= on other end
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat interface:eth0 -"
+# connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via bluetooth socket on channel 3
+pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3"
+# introduce eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= to the network when it's connection is accepted by `socat udp-l:47210`
+socat udp-l:47210 exec:"pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -"
+# intrdouce all nodes that are accepted by `socat udp-l:47210` to the network
+socat udp-l:47210,fork exec:"pnet connect -"
 
-pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat tun,iff-up,device-name=pnet0 -" # create pnet0 network interface connected to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
-iosh -t "pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" zsh -l # connect iosh to ioshd provided as the tunnel process of eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
+# create pnet0 network interface connected to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
+pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat tun,iff-up,device-name=pnet0 -"
+# connect iosh to ioshd provided as the tunnel process of eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
+iosh -t "pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" zsh -l
 ```
