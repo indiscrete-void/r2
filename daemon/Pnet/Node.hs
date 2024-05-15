@@ -44,14 +44,12 @@ mn2nn = o2o . i2i
     o2o :: (Member (Output NodeToManagerMessage) r) => InterpreterFor (Output NodeToNodeMessage) r
     o2o = interpret \(Output msg) -> output . DaemonNodeData . TunnelMessage . Just $ serialize msg
 
-handleNodeMsgs :: (Members (SocketEffects NodeToNodeMessage NodeToNodeMessage) r, Member Trace r) => Sem r ()
-handleNodeMsgs = handle \case
-  Ping -> traceTagged "Ping" "Pong" >> output Pong
-  Pong -> traceTagged "Pong" "doing nothing"
-  _ -> _
-
 pnetnd :: (Members (SocketEffects NodeToNodeMessage NodeToNodeMessage) r, Member Trace r) => Sem r ()
-pnetnd = trace "sending Ping" >> output Ping >> handleNodeMsgs
+pnetnd = trace "sending Ping" >> output Ping >> handle go >> close
+  where
+    go Ping = traceTagged "Ping" "Pong" >> output Pong
+    go Pong = traceTagged "Pong" "doing nothing"
+    go _ = _
 
 instance Serialize IpchainsMessage
 
