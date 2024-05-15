@@ -35,10 +35,6 @@ pnetd = handleClient $ flip ioToSock (handle go >> close)
           Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
     go _ = _
 
-forkIf :: Bool -> IO () -> IO ()
-forkIf True m = forkProcess m >> exitSuccess
-forkIf False m = m
-
 main :: IO ()
 main =
   let runSocket server =
@@ -54,6 +50,8 @@ main =
           . traceToStdoutBuffered
           . runSocket server
           . runAtomicState
+      forkIf True m = forkProcess m >> exitSuccess
+      forkIf False m = m
    in withPnetSocket \sock -> do
         (Options maybeSocketPath daemon) <- parse
         addr <- pnetSocketAddr maybeSocketPath
