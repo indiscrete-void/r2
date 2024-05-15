@@ -28,11 +28,11 @@ pnetd = handleClient $ flip ioToSock (handle go >> close)
       nodeList <- atomicGet
       traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
-    go (ConnectNode transport maybeNodeID) = do
-      case maybeNodeID of
-        Just nodeID -> atomicModify' (nodeID :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show nodeID) (show transport))
-        Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
-      mn2nn pnetnd
+    go (ConnectNode transport maybeNodeID) = addJustNodeID >> mn2nn pnetnd
+      where
+        addJustNodeID = case maybeNodeID of
+          Just nodeID -> atomicModify' (nodeID :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show nodeID) (show transport))
+          Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
     go _ = _
 
 forkIf :: Bool -> IO () -> IO ()
