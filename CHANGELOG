@@ -1,0 +1,3 @@
+# changelog
+## as of 810be0535579a7fc55cd7298eef6241f54d3b70
+normalised form of stdio daemon to daemon connection implemented with them exchanging simplest ping-pong message via transport provided by their respective managers  
