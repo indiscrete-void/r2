@@ -17,9 +17,9 @@
 ```
 
 The daemon (`pnetd`) implements:
-- Custom recursive routing protocol called ipchains which is used for both node-to-node and manager-to-node communication (which could actually be simplified to just node-to-node since manager is a node too)
+- Recursive routing protocol
+- Manager communication protocol
 - In-memory node database
-- Daemon-Manager communication protocol
 
 The manager (`pnet`) provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
 
