@@ -18,7 +18,7 @@
 
 Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called ipchains
 The manager provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
-The daemon communicates to other nodes via connections brought by its managers and connects a newly run tunnel process to any manager (including a guest one, connection to which is routed by another daemon, but which can only do tunneling) that wishes it
+The daemon communicates to other nodes via connections brought by its managers and makes it's tunnel process an ipchains reachable node with a reserved address which for any daemon session always refers to a tunnel process spawned for that session
 
 `pnetd` and `pnet` communicate over a UNIX socket
 
