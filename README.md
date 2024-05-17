@@ -30,19 +30,19 @@ The manager (`pnet`) provides transport for daemons via `pnet-connect` and trans
 # run daemon with ioshd posing as tunnel process
 pnetd ioshd
 
-# connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via "socat udp:example.com:47210 -"
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat udp:example.com:47210 -"
-# replace TCP/IP on eth0 with pnet protocol and communicate with eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= on other end
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat interface:eth0 -"
-# connect to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= via bluetooth socket on channel 3
-pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3"
-# introduce eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= to the network when it's connection is accepted by `socat udp-l:47210`
-socat udp-l:47210 exec:"pnet connect -n eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -"
+# connect to 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC via "socat udp:example.com:47210 -"
+pnet connect -n 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC "socat udp:example.com:47210 -"
+# replace TCP/IP on eth0 with pnet protocol and communicate with 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC on other end
+pnet connect -n 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC "socat interface:eth0 -"
+# connect to 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC via bluetooth socket on channel 3
+pnet connect -n 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC "rfcomm connect /dev/rfcomm0 00:B0:D0:63:C2:26 3"
+# introduce 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC to the network when it's connection is accepted by `socat udp-l:47210`
+socat udp-l:47210 exec:"pnet connect -n 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC -"
 # intrdouce all nodes that are accepted by `socat udp-l:47210` to the network
 socat udp-l:47210,fork exec:"pnet connect -"
 
-# create pnet0 network interface connected to eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
-pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= "socat tun,iff-up,device-name=pnet0 -"
-# connect iosh to ioshd provided as the tunnel process of eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg=
-iosh -t "pnet tunnel eU1WsfX5Hsig3DMi2ClOfkICz7uhzLnPiYY1RqSYwTg= -" zsh -l
+# create pnet0 network interface connected to 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC
+pnet tunnel 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC "socat tun,iff-up,device-name=pnet0 -"
+# connect iosh to ioshd provided as the tunnel process of 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC
+iosh -t "pnet tunnel 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC -" zsh -l
 ```
