@@ -13,8 +13,8 @@ import System.IO
 
 pnet :: (Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
 pnet Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
-pnet (Connect transport nodeID) =
-  output (ConnectNode transport nodeID) >> case transport of
+pnet (Connect transport maybeNodeID) =
+  output (ConnectNode transport maybeNodeID) >> case transport of
     Stdio -> async_ nodeToDaemon >> daemonToNode
     _ -> _
   where
