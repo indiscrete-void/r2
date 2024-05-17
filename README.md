@@ -16,14 +16,11 @@
   x----------------------------------------x
 ```
 
-The daemon (`pnetd`) implements:
-- Recursive routing protocol
-- Manager communication protocol
-- In-memory node database
+Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called ipchains
+The manager provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
+The daemon communicates to other nodes via connections brought by its managers and connects a newly run tunnel process to any manager (including a guest one, connection to which is routed by another daemon, but which can only do tunneling) that wishes it
 
-The manager (`pnet`) provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
-
-`pnetd` and `pnet` communicate via UNIX socket at /var/run/pnet (or custom path defined by $PNET_SOCKET_PATH)
+`pnetd` and `pnet` communicate over a UNIX socket
 
 ## Examples
 ```sh
