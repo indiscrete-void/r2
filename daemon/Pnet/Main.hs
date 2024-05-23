@@ -1,4 +1,5 @@
 import Control.Monad
+import Data.List qualified as List
 import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Node
@@ -16,24 +17,30 @@ import System.Exit
 import System.Posix
 import Text.Printf qualified as Text
 
-type State = [NodeID]
+type State s = [(s, NodeID)]
 
-initialState :: State
+initialState :: State s
 initialState = []
 
-pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState State) r, Member Fail r, Member Decoder r, Member Async r) => Sem r ()
-pnetd = handleClient $ flip ioToSock (handle go >> close)
+whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
+whenJust = maybe (pure ())
+
+pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState (State s)) r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
+pnetd = handleClient \s -> ioToSock s (handle (go s) >> close)
   where
-    go ListNodes = do
-      nodeList <- atomicGet
+    go _ ListNodes = do
+      nodeList <- map snd <$> atomicGet
       traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
-    go (ConnectNode transport maybeNodeID) = addJustNodeID >> mn2nn pnetnd
+    go s (ConnectNode transport maybeNodeID) = do
+      traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
+      whenJust (atomicModify' . (:) . entry) maybeNodeID
+      void . runFail $ mn2nn pnetnd
+      traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
+      whenJust (atomicModify' . List.delete . entry) maybeNodeID
       where
-        addJustNodeID = case maybeNodeID of
-          Just nodeID -> atomicModify' (nodeID :) >> traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (show nodeID) (show transport))
-          Nothing -> traceTagged "NodeAvailability" (Text.printf "unknown node connected over `%s`" (show transport))
-    go _ = _
+        entry nodeID = (s, nodeID)
+    go _ _ = _
 
 main :: IO ()
 main =
