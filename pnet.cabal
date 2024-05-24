@@ -23,7 +23,7 @@ common default
         -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
         -fplugin=Polysemy.Plugin
     if flag(pedantic)
-        ghc-options: -Werror
+        ghc-options: -Werror -threaded
 
 library
     import: default
