@@ -7,6 +7,7 @@ import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Serialize
+import Polysemy.Socket
 import Polysemy.Trace
 import Polysemy.Transport
 import System.IO
@@ -29,12 +30,11 @@ pnet _ = _
 
 main :: IO ()
 main =
-  let run h = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport h . runStdio
+  let run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
-      runTransport h = inputToIO bufferSize h . outputToIO h . runUnserialized
+      runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
-   in withPnetSocket \sock -> do
+   in withPnetSocket \s -> do
         (Options command maybeSocketPath) <- parse
-        connect sock =<< pnetSocketAddr maybeSocketPath
-        h <- socketToHandle sock ReadWriteMode
-        run h $ pnet command
+        connect s =<< pnetSocketAddr maybeSocketPath
+        run s $ pnet command

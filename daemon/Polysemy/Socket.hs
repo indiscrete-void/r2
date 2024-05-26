@@ -19,12 +19,12 @@ import Control.Monad
 import Data.ByteString
 import Data.Serialize hiding (Fail)
 import Network.Socket qualified as IO
+import Network.Socket.ByteString qualified as IO
 import Polysemy hiding (send)
 import Polysemy.Async
 import Polysemy.Fail
 import Polysemy.Serialize
 import Polysemy.Transport
-import System.IO
 import Transport.Maybe
 
 type SocketEffects i o = InputWithEOF i ': Output o ': Close ': '[]
@@ -59,9 +59,9 @@ oToSock s = interpret \case Output str -> sendToSock s str
 closeToSock :: (Member (Socket i o s) r) => s -> InterpreterFor Close r
 closeToSock s = interpret \case Close -> closeSock s
 
-sockToIO :: (Member (Embed IO) r) => Int -> IO.Socket -> InterpreterFor (Socket ByteString ByteString Handle) r
-sockToIO bufferSize server = interpret \case
-  AcceptSock -> embed $ IO.accept server >>= flip IO.socketToHandle ReadWriteMode . fst
-  SendToSock s o -> embed $ hPut s o
-  RecvFromSock s -> embed $ eofToNothing <$> hGetSome s bufferSize
-  CloseSock s -> embed $ hClose s
+sockToIO :: (Member (Embed IO) r) => Int -> Int -> IO.Socket -> InterpreterFor (Socket ByteString ByteString IO.Socket) r
+sockToIO bufferSize timeout server = interpret \case
+  AcceptSock -> embed $ fst <$> IO.accept server
+  SendToSock s o -> embed $ IO.sendAll s o
+  RecvFromSock s -> embed $ eofToNothing <$> IO.recv s bufferSize
+  CloseSock s -> embed $ IO.gracefulClose s timeout

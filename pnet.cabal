@@ -42,4 +42,4 @@ executable pnet
     hs-source-dirs: cli
     main-is: Pnet/Main.hs
     build-depends: pnet
-    other-modules: Pnet.Options
+    other-modules: Polysemy.Socket, Pnet.Options

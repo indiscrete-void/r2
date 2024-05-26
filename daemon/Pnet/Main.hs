@@ -35,7 +35,7 @@ pnetd = handleClient \s -> ioToSock s (handle (go s) >> close)
     go s (ConnectNode transport maybeNodeID) = do
       traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
       whenJust (atomicModify' . (:) . entry) maybeNodeID
-      void . runFail $ mn2nn pnetnd
+      traceTagged "pnetnd" . show =<< runFail (mn2nn pnetnd)
       traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
       whenJust (atomicModify' . List.delete . entry) maybeNodeID
       where
@@ -44,24 +44,24 @@ pnetd = handleClient \s -> ioToSock s (handle (go s) >> close)
 
 main :: IO ()
 main =
-  let runSocket server =
-        sockToIO bufferSize server
+  let runSocket s =
+        sockToIO timeout bufferSize s
           . runDecoder
           . unserializeSock @ManagerToNodeMessage @NodeToManagerMessage
       runAtomicState = void . atomicStateToIO initialState
-      run server =
+      run s =
         runFinal @IO
           . asyncToIOFinal
           . embedToFinal @IO
           . failToEmbed @IO
           . traceToStdoutBuffered
-          . runSocket server
+          . runSocket s
           . runAtomicState
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
-   in withPnetSocket \sock -> do
+   in withPnetSocket \s -> do
         (Options maybeSocketPath daemon) <- parse
         addr <- pnetSocketAddr maybeSocketPath
-        bind sock addr
-        listen sock 5
-        forkIf daemon $ run sock pnetd
+        bind s addr
+        listen s 5
+        forkIf daemon $ run s pnetd

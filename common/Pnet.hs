@@ -6,6 +6,7 @@ module Pnet
     pnetSocketAddr,
     pnetSocket,
     withPnetSocket,
+    timeout,
     bufferSize,
     queueSize,
     Transport (..),
@@ -47,6 +48,9 @@ data ManagerToNodeMessage where
   ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 
+timeout :: Int
+timeout = 16384
+
 bufferSize :: Int
 bufferSize = 8192
 
@@ -74,7 +78,7 @@ pnetSocketAddr customPath = do
   pure $ SockAddrUnix path
 
 withPnetSocket :: (Socket -> IO a) -> IO a
-withPnetSocket = bracket pnetSocket close
+withPnetSocket = bracket pnetSocket (`gracefulClose` timeout)
 
 instance Serialize Transport
 
