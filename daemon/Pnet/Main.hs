@@ -1,7 +1,6 @@
 import Control.Monad
 import Data.List qualified as List
 import Network.Socket (bind, listen)
-import Network.Socket qualified as IO
 import Pnet
 import Pnet.Node
 import Pnet.Options
@@ -30,7 +29,7 @@ whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
 whenJust = maybe (pure ())
 
 pnetd :: (Member (Accept s) r, Member (Sockets ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState (State s)) r, Member Trace r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
-pnetd = handleClient \s -> socket s (handle (go s) >> close)
+pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
   where
     go _ ListNodes = do
       nodeList <- map snd <$> atomicGet

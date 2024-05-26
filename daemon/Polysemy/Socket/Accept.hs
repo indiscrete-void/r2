@@ -1,7 +1,7 @@
 module Polysemy.Socket.Accept
   ( Accept,
     accept,
-    handleClient,
+    foreverAcceptAsync,
     acceptToIO,
   )
 where
@@ -16,8 +16,8 @@ data Accept s m a where
 
 makeSem ''Accept
 
-handleClient :: (Member (Accept s) r, Member Async r) => (s -> Sem r a) -> Sem r a
-handleClient f = forever $ accept >>= async . f
+foreverAcceptAsync :: (Member (Accept s) r, Member Async r) => (s -> Sem r a) -> Sem r a
+foreverAcceptAsync f = forever $ accept >>= async . f
 
 acceptToIO :: (Member (Embed IO) r) => IO.Socket -> InterpreterFor (Accept IO.Socket) r
 acceptToIO server = interpret \case
