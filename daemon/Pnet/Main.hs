@@ -1,6 +1,7 @@
 import Control.Monad
 import Data.List qualified as List
 import Network.Socket (bind, listen)
+import Network.Socket qualified as IO
 import Pnet
 import Pnet.Node
 import Pnet.Options
@@ -9,8 +10,11 @@ import Polysemy.Async
 import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
+import Polysemy.Socket.Accept
+import Polysemy.Sockets
 import Polysemy.Trace
 import Polysemy.Transport
 import System.Exit
@@ -25,8 +29,8 @@ initialState = []
 whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
 whenJust = maybe (pure ())
 
-pnetd :: (Member Trace r, Member (Socket ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState (State s)) r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
-pnetd = handleClient \s -> ioToSock s (handle (go s) >> close)
+pnetd :: (Member (Accept s) r, Member (Sockets ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState (State s)) r, Member Trace r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
+pnetd = handleClient \s -> socket s (handle (go s) >> close)
   where
     go _ ListNodes = do
       nodeList <- map snd <$> atomicGet
@@ -44,14 +48,15 @@ pnetd = handleClient \s -> ioToSock s (handle (go s) >> close)
 
 main :: IO ()
 main =
-  let runSocket s =
-        sockToIO timeout bufferSize s
-          . runDecoder
-          . unserializeSock @ManagerToNodeMessage @NodeToManagerMessage
+  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF ManagerToNodeMessage ': Output NodeToManagerMessage ': '[]) r
+      runUnserialized = serializeOutput @NodeToManagerMessage . deserializeInput @ManagerToNodeMessage
+      runTransport s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . runUnserialized . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
+      runSocket s = acceptToIO s . runScopedBundle @(SocketEffects ManagerToNodeMessage NodeToManagerMessage) runTransport
       runAtomicState = void . atomicStateToIO initialState
       run s =
         runFinal @IO
           . asyncToIOFinal
+          . runDecoder
           . embedToFinal @IO
           . failToEmbed @IO
           . traceToStdoutBuffered

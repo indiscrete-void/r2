@@ -28,18 +28,18 @@ common default
 library
     import: default
     hs-source-dirs: common
-    exposed-modules: Pnet
+    exposed-modules: Polysemy.Socket, Pnet
 
 executable pnetd
     import: default
     hs-source-dirs: daemon
     main-is: Pnet/Main.hs
     build-depends: pnet
-    other-modules: Polysemy.Socket, Pnet.Node, Pnet.Options
+    other-modules: Polysemy.Sockets, Polysemy.Socket.Accept, Pnet.Node, Pnet.Options
 
 executable pnet
     import: default
     hs-source-dirs: cli
     main-is: Pnet/Main.hs
     build-depends: pnet
-    other-modules: Polysemy.Socket, Pnet.Options
+    other-modules: Pnet.Options
