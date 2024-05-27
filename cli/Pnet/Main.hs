@@ -30,10 +30,10 @@ pnet _ = _
 
 main :: IO ()
 main =
-  let run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
-      runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
+  let runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
-      runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
+      runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
+      run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
    in withPnetSocket \s -> do
         (Options command maybeSocketPath) <- parse
         connect s =<< pnetSocketAddr maybeSocketPath
