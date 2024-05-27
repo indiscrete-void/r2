@@ -49,7 +49,7 @@ main :: IO ()
 main =
   let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF ManagerToNodeMessage ': Output NodeToManagerMessage ': '[]) r
       runUnserialized = serializeOutput @NodeToManagerMessage . deserializeInput @ManagerToNodeMessage
-      runTransport s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . runUnserialized . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
+      runTransport s = closeToSock timeout s . outputToSock s . inputToSock bufferSize s . runUnserialized . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s = acceptToIO s . runScopedBundle @(SocketEffects ManagerToNodeMessage NodeToManagerMessage) runTransport
       runAtomicState = void . atomicStateToIO initialState
       run s =

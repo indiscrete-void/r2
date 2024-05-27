@@ -31,7 +31,7 @@ pnet _ = _
 main :: IO ()
 main =
   let runUnserialized = runDecoder . deserializeInput @NodeToManagerMessage . serializeOutput @ManagerToNodeMessage
-      runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
+      runTransport s = inputToSock bufferSize s . outputToSock s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
    in withPnetSocket \s -> do
