@@ -36,12 +36,13 @@ pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
       traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
     go s (ConnectNode transport maybeNodeID) = do
-      traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
+      traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . (:) . entry) maybeNodeID
       traceTagged "pnetnd" . show =<< runFail (mn2nn pnetnd)
-      traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" (maybe "unknown node" show maybeNodeID) (show transport))
+      traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . List.delete . entry) maybeNodeID
       where
+        nodeIDStr = maybe "unknown node" show maybeNodeID
         entry nodeID = (s, nodeID)
     go _ _ = _
 
