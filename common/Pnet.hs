@@ -61,10 +61,10 @@ defaultPnetSocketPath :: FilePath
 defaultPnetSocketPath = "/run/pnet.sock"
 
 defaultUserPnetSocketPath :: IO FilePath
-defaultUserPnetSocketPath =
-  getEffectiveUserID <&> \case
-    0 -> defaultPnetSocketPath
-    n -> concat ["/run/user/", show n, "/pnet.sock"]
+defaultUserPnetSocketPath = go <$> getEffectiveUserID
+  where
+    go 0 = defaultPnetSocketPath
+    go n = concat ["/run/user/", show n, "/pnet.sock"]
 
 pnetSocket :: IO Socket
 pnetSocket = do
