@@ -1,3 +1,6 @@
+import Data.ByteString.Base58
+import Data.ByteString.Base58.Internal
+import Data.ByteString.Char8 qualified as BC
 import Network.Socket hiding (close)
 import Pnet
 import Pnet.Options
@@ -11,11 +14,16 @@ import Polysemy.Socket
 import Polysemy.Trace
 import Polysemy.Transport
 import System.IO
+import Transport.Maybe
+
+parseNodeID :: String -> Maybe Node
+parseNodeID = fmap (fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
 
 pnet :: (Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
 pnet Ls = output ListNodes >> (inputOrFail @NodeToManagerMessage >>= traceTagged "Ls" . show)
-pnet (Connect transport maybeNodeID) =
-  output (ConnectNode transport maybeNodeID) >> case transport of
+pnet (Connect transport maybeNodeID) = do
+  maybeNodeID' <- maybe (pure Nothing) (fmap Just . maybeFail "invalid node ID" . parseNodeID) maybeNodeID
+  output (ConnectNode transport maybeNodeID') >> case transport of
     Stdio -> async_ nodeToDaemon >> daemonToNode
     _ -> _
   where

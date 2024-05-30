@@ -28,6 +28,7 @@ common default
 library
     import: default
     hs-source-dirs: common
+    build-depends: data-dword
     exposed-modules: Polysemy.Socket, Pnet
 
 executable pnetd
@@ -41,5 +42,5 @@ executable pnet
     import: default
     hs-source-dirs: cli
     main-is: Pnet/Main.hs
-    build-depends: pnet
+    build-depends: pnet, base58-bytestring
     other-modules: Pnet.Options
