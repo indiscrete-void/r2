@@ -1,5 +1,5 @@
 # pnet (Pandora Network)
-## Overview of pnet architecture
+## Overview
 ```
                                x----------------------------------------x
                                |                                        |
@@ -16,11 +16,7 @@
   x----------------------------------------x
 ```
 
-Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2 (route to)
-The manager provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
-The daemon communicates to other nodes via connections brought by its managers and makes it's tunnel process an r2 reachable node with a reserved address which for any daemon session always refers to a tunnel process spawned for that session
-
-`pnetd` and `pnet` communicate over a UNIX socket
+Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2 (route to), which they both use to provide resources as r2 reachable nodes. `pnet-connect` expects a daemon on stdio and connects it to the daemon, while `pnet-tunnel` expects an application layer program on stdio and connects it to other daemons' application layer programs. `pnetd` and `pnet` communicate over a UNIX socket
 
 ## Examples
 ```sh
