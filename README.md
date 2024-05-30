@@ -1,5 +1,5 @@
 # pnet (Pandora Network)
-## Overview of pnet architecture
+## Overview
 ```
                                x----------------------------------------x
                                |                                        |
