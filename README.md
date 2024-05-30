@@ -16,9 +16,9 @@
   x----------------------------------------x
 ```
 
-Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2
-The manager provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface.
-The daemon communicates to other nodes via connections brought by its managers and makes it's tunnel process an r2 reachable node with a reserved address which for any daemon session always refers to a tunnel process spawned for that session
+Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2 
+The manager provides transport for daemons via `pnet-connect` and transport for application layer programs via `pnet-tunnel`, with both subcommands sharing a similar interface 
+The daemon communicates to other nodes via connections brought by its managers and makes it's tunnel process an r2 reachable node with a reserved address which for any daemon session always refers to a tunnel process spawned for that session 
 
 `pnetd` and `pnet` communicate over a UNIX socket
 
