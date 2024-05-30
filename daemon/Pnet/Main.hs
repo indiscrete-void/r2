@@ -20,7 +20,7 @@ import System.Exit
 import System.Posix
 import Text.Printf qualified as Text
 
-type State s = [(s, NodeID)]
+type State s = [(s, Node)]
 
 initialState :: State s
 initialState = []

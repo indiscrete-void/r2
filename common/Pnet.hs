@@ -1,5 +1,5 @@
 module Pnet
-  ( NodeID,
+  ( Node,
     TunnelMessage (..),
     NodeToManagerMessage (..),
     ManagerToNodeMessage (..),
@@ -25,7 +25,7 @@ import Network.Socket
 import System.Environment
 import System.Posix
 
-type NodeID = String
+type Node = String
 
 data Transport
   = Stdio
@@ -38,13 +38,13 @@ newtype TunnelMessage = TunnelMessage
   deriving stock (Show, Generic)
 
 data NodeToManagerMessage where
-  NodeList :: [NodeID] -> NodeToManagerMessage
+  NodeList :: [Node] -> NodeToManagerMessage
   DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
   deriving stock (Show, Generic)
 
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
-  ConnectNode :: Transport -> Maybe NodeID -> ManagerToNodeMessage
+  ConnectNode :: Transport -> Maybe Node -> ManagerToNodeMessage
   ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 

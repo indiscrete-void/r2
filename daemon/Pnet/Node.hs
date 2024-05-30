@@ -21,8 +21,8 @@ import Polysemy.Transport
 import Transport.Maybe
 
 data IpchainsMessage = IpchainsMessage
-  { ipchainsMessageSrc :: NodeID,
-    ipchainsMessageDst :: NodeID,
+  { ipchainsMessageSrc :: Node,
+    ipchainsMessageDst :: Node,
     ipchainsMessageData :: ByteString
   }
   deriving stock (Show, Generic)
