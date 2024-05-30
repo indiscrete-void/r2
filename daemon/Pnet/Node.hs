@@ -10,6 +10,7 @@ import Data.ByteString
 import Data.Serialize
 import GHC.Generics
 import Pnet
+import Pnet.Routing
 import Polysemy hiding (send)
 import Polysemy.Extra.Trace
 import Polysemy.Fail

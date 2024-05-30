@@ -21,7 +21,7 @@ common default
         -Wno-all-missed-specialisations -Wno-missed-specialisations
         -Wno-missing-local-signatures -Wno-monomorphism-restriction
         -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
-        -fplugin=Polysemy.Plugin
+        -fplugin=Polysemy.Plugin -Wno-orphans
     if flag(pedantic)
         ghc-options: -Werror -threaded
 
@@ -29,7 +29,7 @@ library
     import: default
     hs-source-dirs: common
     build-depends: data-dword
-    exposed-modules: Polysemy.Socket, Pnet
+    exposed-modules: Polysemy.Socket, Pnet, Pnet.Routing
 
 executable pnetd
     import: default

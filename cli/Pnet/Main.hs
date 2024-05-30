@@ -3,6 +3,7 @@ import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
 import Network.Socket hiding (close)
 import Pnet
+import Pnet.Routing
 import Pnet.Options
 import Polysemy hiding (run)
 import Polysemy.Async

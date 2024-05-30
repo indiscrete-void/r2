@@ -4,6 +4,7 @@ import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Node
 import Pnet.Options
+import Pnet.Routing
 import Polysemy hiding (run, send)
 import Polysemy.Async
 import Polysemy.AtomicState

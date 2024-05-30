@@ -1,8 +1,5 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 module Pnet
-  ( Node,
-    TunnelMessage (..),
+  ( TunnelMessage (..),
     NodeToManagerMessage (..),
     ManagerToNodeMessage (..),
     pnetSocketAddr,
@@ -18,17 +15,14 @@ where
 import Control.Applicative ((<|>))
 import Control.Exception
 import Data.ByteString (ByteString)
-import Data.DoubleWord
-import Data.Functor
 import Data.Maybe
 import Data.Serialize
 import Debug.Trace
 import GHC.Generics
 import Network.Socket
+import Pnet.Routing
 import System.Environment
 import System.Posix
-
-type Node = Int256
 
 data Transport
   = Stdio
@@ -86,12 +80,6 @@ pnetSocketAddr customPath = do
 
 withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket (`gracefulClose` timeout)
-
-instance Serialize Int128
-
-instance Serialize Word128
-
-instance Serialize Int256
 
 instance Serialize Transport
 
