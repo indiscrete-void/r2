@@ -16,9 +16,7 @@
   x----------------------------------------x
 ```
 
-Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2, which they both use to provide resources as r2 reachable nodes  
-`pnet-connect` expects a daemon on stdio and connects it to the daemon, while `pnet-tunnel` expects an application layer program on stdio and connects it to other daemons' application layer programs 
-`pnetd` and `pnet` communicate over a UNIX socket
+Both daemon (`pnetd`) and manager (`pnet`) implement recursive routing protocol called r2, which they both use to provide resources as r2 reachable nodes. `pnet-connect` expects a daemon on stdio and connects it to the daemon, while `pnet-tunnel` expects an application layer program on stdio and connects it to other daemons' application layer programs. `pnetd` and `pnet` communicate over a UNIX socket
 
 ## Examples
 ```sh
