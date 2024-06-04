@@ -1,4 +1,4 @@
-module Pnet.Routing (Node, RouteTo, RoutedFrom, r2) where
+module Pnet.Routing (Node, RouteTo, RoutedFrom, handleR2, r2) where
 
 import Data.ByteString (ByteString)
 import Data.DoubleWord
@@ -14,6 +14,9 @@ data RouteTo = RouteTo Node (Maybe ByteString)
 
 data RoutedFrom = RoutedFrom Node (Maybe ByteString)
   deriving stock (Show, Generic)
+
+handleR2 :: Node -> (Node -> RoutedFrom -> Sem r ()) -> (RouteTo -> Sem r ())
+handleR2 node f (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
 r2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
 r2 node =
