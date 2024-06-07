@@ -18,6 +18,15 @@
 
 Daemon (`pnetd`) and manager (`pnet`) implement r2 (route to) protocol, which they both use to reach far nodes, provide resources to the network and implement multiplexing. `pnet-connect` expects a daemon on stdio and connects it to it's daemon, while `pnet-tunnel` expects an application layer program on stdio and connects it to application layer programs of other daemons. `pnetd` and `pnet` communicate over a UNIX socket
 
+## r2
+At the core of pnet is r2 protocol which is used for multiplexing, tunneling and routing at the same time while being as simple as
+```haskell
+data RouteTo = RouteTo { routeToNode :: Int256, routeToData :: Maybe ByteString }
+data RoutedFrom = RoutedFrom { routedFromNode :: Int256, routedFromData :: Maybe ByteString }
+```
+
+r2 only supports single-hop routing, which is sufficient to implement any routing through recursion. Both multiplexing and tunneling are handled by each node exposing a virtual node with an agreed-upon Int256 identifier. For multiplexing, the virtual node communicates using the same protocol on its channel, while in case of tunneling, the virtual node occupies the entire channel with raw tunnel (stdio/process) data
+
 ## Examples
 ```sh
 # run daemon with ioshd posing as tunnel process
