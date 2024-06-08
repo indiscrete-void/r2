@@ -5,14 +5,21 @@ import Data.DoubleWord
 import Data.Serialize
 import GHC.Generics
 import Polysemy
+import Polysemy.Conc.Input
 import Polysemy.Transport
 
 type Node = Int256
 
-data RouteTo = RouteTo Node (Maybe ByteString)
+data RouteTo = RouteTo
+  { routeToNode :: Node,
+    routeToData :: Maybe ByteString
+  }
   deriving stock (Show, Generic)
 
-data RoutedFrom = RoutedFrom Node (Maybe ByteString)
+data RoutedFrom = RoutedFrom
+  { routedFromNode :: Node,
+    routedFromData :: Maybe ByteString
+  }
   deriving stock (Show, Generic)
 
 handleR2 :: Node -> (Node -> RoutedFrom -> Sem r ()) -> (RouteTo -> Sem r ())
@@ -22,9 +29,14 @@ r2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> I
 r2 node =
   interpret \case Close -> outputRouteTo Nothing
     . interpret \case Output maybeStr -> outputRouteTo (Just maybeStr)
-    . interpret \case Input -> (>>= dataRoutedFromNode) <$> input
+    . interpret \case Input -> (>>= routedFromData) <$> inputBefore ((== node) . routedFromNode)
   where
-    dataRoutedFromNode (RoutedFrom sender maybeStr) = if sender == node then maybeStr else Nothing
+    inputBefore :: (Member (InputWithEOF i) r) => (i -> Bool) -> Sem r (Maybe i)
+    inputBefore f = do
+      x <- inputConc
+      case x of
+        Just y -> if f y then pure $ Just y else inputBefore f
+        Nothing -> pure Nothing
     outputRouteTo :: (Member (Output RouteTo) r) => Maybe ByteString -> Sem r ()
     outputRouteTo = output . RouteTo node
 

@@ -29,7 +29,7 @@ library
     import: default
     hs-source-dirs: common
     build-depends: data-dword
-    exposed-modules: Polysemy.Socket, Pnet, Pnet.Routing
+    exposed-modules: Polysemy.Socket, Polysemy.Conc.Input, Pnet, Pnet.Routing
 
 executable pnetd
     import: default
