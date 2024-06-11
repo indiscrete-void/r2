@@ -22,7 +22,7 @@ data RoutedFrom = RoutedFrom
   }
   deriving stock (Show, Generic)
 
-handleR2 :: (Node -> RoutedFrom -> Sem r a) -> (Node -> RouteTo -> Sem r a)
+handleR2 :: (Node -> RoutedFrom -> m a) -> (Node -> RouteTo -> m a)
 handleR2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
 r2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
