@@ -44,3 +44,13 @@ executable pnet
     main-is: Pnet/Main.hs
     build-depends: pnet, base58-bytestring
     other-modules: Pnet.Options
+
+test-suite tests
+    import: default
+    main-is: Main.hs
+    type: exitcode-stdio-1.0
+    hs-source-dirs: tests
+    build-depends:
+        pnet,
+        tasty,
+        tasty-hunit,
