@@ -1,4 +1,4 @@
-module Pnet.Routing (Node, RouteTo (..), RoutedFrom (..), handleR2, r2) where
+module Pnet.Routing (Node, RouteTo (..), RoutedFrom (..), r2, runR2) where
 
 import Data.ByteString (ByteString)
 import Data.DoubleWord
@@ -22,11 +22,11 @@ data RoutedFrom = RoutedFrom
   }
   deriving stock (Show, Eq, Generic)
 
-handleR2 :: (Node -> RoutedFrom -> a) -> (Node -> RouteTo -> a)
-handleR2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
+r2 :: (Node -> RoutedFrom -> a) -> (Node -> RouteTo -> a)
+r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
-r2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
-r2 node =
+runR2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
+runR2 node =
   interpret \case Close -> outputRouteTo Nothing
     . interpret \case Output maybeStr -> outputRouteTo (Just maybeStr)
     . interpret \case Input -> (>>= routedFromData) <$> inputBefore ((== node) . routedFromNode)
