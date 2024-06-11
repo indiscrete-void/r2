@@ -14,13 +14,13 @@ data RouteTo = RouteTo
   { routeToNode :: Node,
     routeToData :: Maybe ByteString
   }
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
 
 data RoutedFrom = RoutedFrom
   { routedFromNode :: Node,
     routedFromData :: Maybe ByteString
   }
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
 
 handleR2 :: (Node -> RoutedFrom -> a) -> (Node -> RouteTo -> a)
 handleR2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr

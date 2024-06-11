@@ -14,7 +14,7 @@ common default
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
         ScopedTypeVariables TypeApplications TypeOperators TypeFamilies
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
-        DeriveGeneric DerivingStrategies EmptyDataDeriving
+        DeriveGeneric DerivingStrategies EmptyDataDeriving OverloadedStrings
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
