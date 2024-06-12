@@ -5,7 +5,6 @@ import Data.DoubleWord
 import Data.Serialize
 import GHC.Generics
 import Polysemy
-import Polysemy.Conc.Input
 import Polysemy.Transport
 
 type Node = Int256
@@ -33,7 +32,7 @@ runR2 node =
   where
     inputBefore :: (Member (InputWithEOF i) r) => (i -> Bool) -> Sem r (Maybe i)
     inputBefore f = do
-      x <- inputConc
+      x <- input
       case x of
         Just y -> if f y then pure $ Just y else inputBefore f
         Nothing -> pure Nothing
