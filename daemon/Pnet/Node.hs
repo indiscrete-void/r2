@@ -1,16 +1,13 @@
 module Pnet.Node
-  ( IpchainsMessage (..),
-    NodeToNodeMessage (..),
+  ( NodeToNodeMessage (..),
     pnetnd,
     mn2nn,
   )
 where
 
-import Data.ByteString
 import Data.Serialize
 import GHC.Generics
 import Pnet
-import Pnet.Routing
 import Polysemy hiding (send)
 import Polysemy.Extra.Trace
 import Polysemy.Fail
@@ -21,15 +18,7 @@ import Polysemy.Trace
 import Polysemy.Transport
 import Transport.Maybe
 
-data IpchainsMessage = IpchainsMessage
-  { ipchainsMessageSrc :: Node,
-    ipchainsMessageDst :: Node,
-    ipchainsMessageData :: ByteString
-  }
-  deriving stock (Show, Generic)
-
 data NodeToNodeMessage where
-  Ipchains :: IpchainsMessage -> NodeToNodeMessage
   Ping :: NodeToNodeMessage
   Pong :: NodeToNodeMessage
   deriving stock (Show, Generic)
@@ -50,8 +39,5 @@ pnetnd = trace "sending Ping" >> output Ping >> handle go >> close
   where
     go Ping = traceTagged "Ping" "Pong" >> output Pong
     go Pong = traceTagged "Pong" "doing nothing"
-    go _ = _
-
-instance Serialize IpchainsMessage
 
 instance Serialize NodeToNodeMessage
