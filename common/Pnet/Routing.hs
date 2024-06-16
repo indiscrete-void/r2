@@ -24,7 +24,7 @@ data RoutedFrom = RoutedFrom
 r2 :: (Node -> RoutedFrom -> a) -> (Node -> RouteTo -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
-runR2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo, Close] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
+runR2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
 runR2 node =
   interpret \case Close -> outputRouteTo Nothing
     . interpret \case Output maybeStr -> outputRouteTo (Just maybeStr)
