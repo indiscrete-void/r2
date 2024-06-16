@@ -25,13 +25,13 @@ testR2 :: TestTree
 testR2 =
   testGroup
     "r2"
-    [ testCase "r2 SendTo node0 (RouteTo nb msg) = SendTo node1 (RoutedFrom na msg)" $
+    [ testCase "r2 SendTo node0 (RouteTo node1 msg) = SendTo node1 (RoutedFrom node0 msg)" $
         r2 SendTo 0 (RouteTo 1 msg) @?= SendTo 1 (RoutedFrom 0 msg),
       let runTest i = run . runOutput . runInput i . runR2 node
-       in testCase "runTest (RoutedFrom node msg) (runR2 node cat) == RouteTo node msg" $
+       in testCase "runR2 node cat `feed` RoutedFrom node msg == RouteTo node msg" $
             runTest (RoutedFrom node msg) (input >>= output . fromJust) @?= RouteTo node msg,
       let runTest = run . runOutput . runInputList []
-       in testCase "runTest (runR2 node close) == RouteTo node Nothing" $
+       in testCase "runR2 node close == RouteTo node Nothing" $
             runTest (runR2 node close) @?= RouteTo node Nothing
     ]
   where
