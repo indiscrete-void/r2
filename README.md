@@ -19,9 +19,11 @@
 Daemon (`pnetd`) and manager (`pnet`) implement r2 (route to) protocol, which they both use to reach far nodes, provide resources to the network and implement multiplexing. `pnet-connect` expects a daemon on stdio and connects it to it's daemon, while `pnet-tunnel` expects an application layer program on stdio and connects it to application layer programs of other daemons. `pnetd` and `pnet` communicate over a UNIX socket
 
 ## r2
-At the core of pnet is r2 protocol which is used for multiplexing, tunneling and routing at the same time while being as simple as `r2 f n0 (RouteTo n1 msg) = f n1 (RoutedFrom n0 msg)`
+At the core of pnet is r2 protocol which is used for routing, multiplexing, tunneling and even ping at the same time while being as simple as `r2 f n0 (RouteTo n1 msg) = f n1 (RoutedFrom n0 msg)`
 
 r2 only supports single-hop routing, which is sufficient to implement _any_ routing (through recursion). Both multiplexing and tunneling are handled by node exposing a virtual node with an agreed-upon Int256 identifier. For multiplexing, the virtual node communicates using the same protocol on its channel, while in case of tunneling, the virtual node occupies the entire channel with raw tunnel (stdio/process) data
+
+r2 is ping as long as n0 equals n1
 
 ## Examples
 ```sh
