@@ -35,13 +35,13 @@ newtype TunnelMessage = TunnelMessage
   deriving stock (Show, Generic)
 
 data NodeToManagerMessage where
-  NodeList :: [Node] -> NodeToManagerMessage
+  NodeList :: [Address] -> NodeToManagerMessage
   DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
   deriving stock (Show, Generic)
 
 data ManagerToNodeMessage where
   ListNodes :: ManagerToNodeMessage
-  ConnectNode :: Transport -> Maybe Node -> ManagerToNodeMessage
+  ConnectNode :: Transport -> Maybe Address -> ManagerToNodeMessage
   ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
   deriving stock (Show, Generic)
 

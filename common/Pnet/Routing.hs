@@ -1,4 +1,4 @@
-module Pnet.Routing (Node, RouteTo (..), RoutedFrom (..), r2, runR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), r2, runR2) where
 
 import Data.ByteString (ByteString)
 import Data.DoubleWord
@@ -7,24 +7,24 @@ import GHC.Generics
 import Polysemy
 import Polysemy.Transport
 
-type Node = Int256
+type Address = Int256
 
 data RouteTo = RouteTo
-  { routeToNode :: Node,
+  { routeToNode :: Address,
     routeToData :: Maybe ByteString
   }
   deriving stock (Show, Eq, Generic)
 
 data RoutedFrom = RoutedFrom
-  { routedFromNode :: Node,
+  { routedFromNode :: Address,
     routedFromData :: Maybe ByteString
   }
   deriving stock (Show, Eq, Generic)
 
-r2 :: (Node -> RoutedFrom -> a) -> (Node -> RouteTo -> a)
+r2 :: (Address -> RoutedFrom -> a) -> (Address -> RouteTo -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
-runR2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo] r) => Node -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
+runR2 :: (Members '[InputWithEOF RoutedFrom, Output RouteTo] r) => Address -> InterpretersFor '[InputWithEOF ByteString, Output ByteString, Close] r
 runR2 node =
   interpret \case Close -> outputRouteTo Nothing
     . interpret \case Output maybeStr -> outputRouteTo (Just maybeStr)

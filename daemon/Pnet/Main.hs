@@ -21,7 +21,7 @@ import System.Exit
 import System.Posix
 import Text.Printf qualified as Text
 
-type State s = [(s, Node)]
+type State s = [(s, Address)]
 
 initialState :: State s
 initialState = []

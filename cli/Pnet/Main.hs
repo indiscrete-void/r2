@@ -17,7 +17,7 @@ import Polysemy.Transport
 import System.IO
 import Transport.Maybe
 
-parseNodeID :: String -> Maybe Node
+parseNodeID :: String -> Maybe Address
 parseNodeID = fmap (fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
 
 pnet :: (Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF NodeToManagerMessage) r, Member (Output ManagerToNodeMessage) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()

@@ -13,7 +13,7 @@ import Polysemy.Transport
 import Test.Tasty
 import Test.Tasty.HUnit
 
-data SendTo a = SendTo Node a deriving stock (Eq, Show)
+data SendTo a = SendTo Address a deriving stock (Eq, Show)
 
 runInput :: i -> InterpreterFor (InputWithEOF i) r
 runInput = runInputList . List.singleton
