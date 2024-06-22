@@ -46,3 +46,5 @@ instance Serialize Word128
 instance Serialize Int256
 
 instance Serialize RouteTo
+
+instance Serialize RoutedFrom
