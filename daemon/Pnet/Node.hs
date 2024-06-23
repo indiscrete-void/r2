@@ -1,43 +1,31 @@
 module Pnet.Node
-  ( NodeToNodeMessage (..),
-    pnetnd,
-    mn2nn,
+  ( pnetnd,
+    pnetnd',
   )
 where
 
-import Data.Serialize
-import GHC.Generics
-import Pnet
+import Data.ByteString
+import Pnet.Routing
 import Polysemy hiding (send)
 import Polysemy.Extra.Trace
 import Polysemy.Fail
-import Polysemy.Output
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Trace
 import Polysemy.Transport
-import Transport.Maybe
 
-data NodeToNodeMessage where
-  Ping :: NodeToNodeMessage
-  Pong :: NodeToNodeMessage
-  deriving stock (Show, Generic)
+ping :: ByteString
+ping = "ping"
 
-mn2nn :: (Member (InputWithEOF ManagerToNodeMessage) r, Member (Output NodeToManagerMessage) r, Member Decoder r, Member Fail r) => InterpretersFor (InputWithEOF NodeToNodeMessage ': Output NodeToNodeMessage ': '[]) r
-mn2nn = o2o . i2i
+pnetnd :: (Members (SocketEffects RoutedFrom RouteTo) r, Member Trace r, Member Fail r) => Sem r ()
+pnetnd = runR2 selfAddr (output ping >> traceTagged "pnetnd: r2 ping" (show ping) >> inputOrFail >>= go) >> close
   where
-    i2i :: (Member (InputWithEOF ManagerToNodeMessage) r, Member Decoder r, Member Fail r) => InterpreterFor (InputWithEOF NodeToNodeMessage) r
-    i2i = interpret \Input ->
-      let managerNodeData (ManagerNodeData (TunnelMessage maybeStr)) = maybeStr
-          managerNodeData _ = _
-       in Just <$> deserializeFrom (inputOrFail >>= maybeFailEOF . managerNodeData)
-    o2o :: (Member (Output NodeToManagerMessage) r) => InterpreterFor (Output NodeToNodeMessage) r
-    o2o = interpret \(Output msg) -> output . DaemonNodeData . TunnelMessage . Just $ serialize msg
+    go (RoutedFrom addr maybeMsg)
+      | addr == selfAddr = traceTagged "pnetnd: r2 ping" (show maybeMsg)
+      | otherwise = fail "pnetnd: r2 ping: got no reply"
 
-pnetnd :: (Members (SocketEffects NodeToNodeMessage NodeToNodeMessage) r, Member Trace r) => Sem r ()
-pnetnd = trace "sending Ping" >> output Ping >> handle go >> close
+pnetnd' :: (Members (SocketEffects ByteString ByteString) r, Member Trace r, Member Fail r) => Sem r ()
+pnetnd' = runUnserialized pnetnd
   where
-    go Ping = traceTagged "Ping" "Pong" >> output Pong
-    go Pong = traceTagged "Pong" "doing nothing"
-
-instance Serialize NodeToNodeMessage
+    runUnserialized :: (Members '[InputWithEOF ByteString, Output ByteString] r, Member Fail r) => InterpretersFor '[InputWithEOF RoutedFrom, Output RouteTo, Decoder] r
+    runUnserialized = runDecoder . serializeOutput @RouteTo . deserializeInput @RoutedFrom

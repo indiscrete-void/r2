@@ -1,7 +1,6 @@
 module Pnet
-  ( TunnelMessage (..),
-    NodeToManagerMessage (..),
-    ManagerToNodeMessage (..),
+  ( Request (..),
+    Response (..),
     pnetSocketAddr,
     pnetSocket,
     withPnetSocket,
@@ -14,7 +13,6 @@ where
 
 import Control.Applicative ((<|>))
 import Control.Exception
-import Data.ByteString (ByteString)
 import Data.Maybe
 import Data.Serialize
 import Debug.Trace
@@ -29,20 +27,13 @@ data Transport
   | Process String
   deriving stock (Show, Generic)
 
-newtype TunnelMessage = TunnelMessage
-  { tunnelMessageData :: Maybe ByteString
-  }
+data Request where
+  ListNodes :: Request
+  ConnectNode :: Transport -> Maybe Address -> Request
   deriving stock (Show, Generic)
 
-data NodeToManagerMessage where
-  NodeList :: [Address] -> NodeToManagerMessage
-  DaemonNodeData :: TunnelMessage -> NodeToManagerMessage
-  deriving stock (Show, Generic)
-
-data ManagerToNodeMessage where
-  ListNodes :: ManagerToNodeMessage
-  ConnectNode :: Transport -> Maybe Address -> ManagerToNodeMessage
-  ManagerNodeData :: TunnelMessage -> ManagerToNodeMessage
+data Response where
+  NodeList :: [Address] -> Response
   deriving stock (Show, Generic)
 
 timeout :: Int
@@ -83,8 +74,6 @@ withPnetSocket = bracket pnetSocket (`gracefulClose` timeout)
 
 instance Serialize Transport
 
-instance Serialize TunnelMessage
+instance Serialize Request
 
-instance Serialize NodeToManagerMessage
-
-instance Serialize ManagerToNodeMessage
+instance Serialize Response

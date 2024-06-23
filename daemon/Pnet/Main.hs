@@ -29,7 +29,7 @@ initialState = []
 whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
 whenJust = maybe (pure ())
 
-pnetd :: (Member (Accept s) r, Member (Sockets ManagerToNodeMessage NodeToManagerMessage s) r, Member (AtomicState (State s)) r, Member Trace r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
+pnetd :: (Member (Accept s) r, Member (Sockets Request Response s) r, Member (Sockets RoutedFrom RouteTo s) r, Member (AtomicState (State s)) r, Member Trace r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
 pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
   where
     go _ ListNodes = do
@@ -39,7 +39,7 @@ pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
     go s (ConnectNode transport maybeNodeID) = do
       traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . (:) . entry) maybeNodeID
-      traceTagged "pnetnd" . show =<< runFail (mn2nn pnetnd)
+      traceTagged "pnetnd" . show =<< runFail (socket s $ runR2 tmpAddr pnetnd')
       traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . List.delete . entry) maybeNodeID
       where
@@ -49,10 +49,12 @@ pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
 
 main :: IO ()
 main =
-  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF ManagerToNodeMessage ': Output NodeToManagerMessage ': '[]) r
-      runUnserialized = serializeOutput @NodeToManagerMessage . deserializeInput @ManagerToNodeMessage
-      runTransport s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . runUnserialized . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
-      runSocket s = acceptToIO s . runScopedBundle @(SocketEffects ManagerToNodeMessage NodeToManagerMessage) runTransport
+  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF Request ': Output Response ': '[]) r
+      runUnserialized = serializeOutput @Response . deserializeInput @Request
+      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF RoutedFrom ': Output RouteTo ': '[]) r
+      runUnserialized' = serializeOutput @RouteTo . deserializeInput @RoutedFrom
+      runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
+      runSocket s = acceptToIO s . runScopedBundle @(SocketEffects Request Response) (runTransport runUnserialized) . runScopedBundle @(SocketEffects RoutedFrom RouteTo) (runTransport runUnserialized')
       runAtomicState = void . atomicStateToIO initialState
       run s =
         runFinal @IO
