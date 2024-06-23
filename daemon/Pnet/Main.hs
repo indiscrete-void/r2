@@ -54,7 +54,7 @@ main =
       runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF RoutedFrom ': Output RouteTo ': '[]) r
       runUnserialized' = serializeOutput @RouteTo . deserializeInput @RoutedFrom
       runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
-      runSocket s = acceptToIO s . runScopedBundle @(SocketEffects Request Response) (runTransport runUnserialized) . runScopedBundle @(SocketEffects RoutedFrom RouteTo) (runTransport runUnserialized')
+      runSocket s = acceptToIO s . runScopedBundle @(TransportEffects Request Response) (runTransport runUnserialized) . runScopedBundle @(TransportEffects RoutedFrom RouteTo) (runTransport runUnserialized')
       runAtomicState = void . atomicStateToIO initialState
       run s =
         runFinal @IO
