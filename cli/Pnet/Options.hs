@@ -1,14 +1,19 @@
 module Pnet.Options (Options (..), Transport (..), Command (..), parse) where
 
+import Data.ByteString.Base58
+import Data.ByteString.Base58.Internal
+import Data.ByteString.Char8 qualified as BC
 import Options.Applicative
 import Pnet
+import Pnet.Routing
+import Transport.Maybe
 
 data Options = Options Command (Maybe FilePath)
 
 data Command
   = Ls
-  | Connect !Transport !(Maybe String)
-  | Tunnel !String !Transport
+  | Connect !Transport !(Maybe Address)
+  | Tunnel !Address !Transport
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -36,10 +41,10 @@ lsOpts :: Parser Command
 lsOpts = pure Ls
 
 connectOpts :: Parser Command
-connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (strOption $ long "node" <> short 'n')
+connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
 
 tunnelOpts :: Parser Command
-tunnelOpts = Tunnel <$> argument str (metavar "ID") <*> argument transport (metavar "TRANSPORT")
+tunnelOpts = Tunnel <$> argument address (metavar "ID") <*> argument transport (metavar "TRANSPORT")
 
 transport :: ReadM Transport
 transport = do
@@ -48,3 +53,8 @@ transport = do
     if arg == "-"
       then Stdio
       else Process arg
+
+address :: ReadM Address
+address = str >>= maybeFail "invalid node ID" . parseNodeID
+  where
+    parseNodeID = fmap (fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
