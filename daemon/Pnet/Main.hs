@@ -29,7 +29,7 @@ initialState = []
 whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
 whenJust = maybe (pure ())
 
-pnetd :: (Member (Accept s) r, Member (Sockets Request Response s) r, Member (Sockets RoutedFrom RouteTo s) r, Member (AtomicState (State s)) r, Member Trace r, Member Fail r, Member Decoder r, Member Async r, Eq s) => Sem r ()
+pnetd :: (Member (Accept s) r, Member (Sockets Request Response s) r, Member (Sockets RoutedFrom RouteTo s) r, Member (AtomicState (State s)) r, Member Trace r, Member Async r, Eq s) => Sem r ()
 pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
   where
     go _ ListNodes = do
@@ -45,7 +45,6 @@ pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
       where
         nodeIDStr = maybe "unknown node" show maybeNodeID
         entry nodeID = (s, nodeID)
-    go _ _ = _
 
 main :: IO ()
 main =
