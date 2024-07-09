@@ -20,9 +20,9 @@ pnet (Connect transport maybeAddress) = do
   case transport of
     Stdio -> async_ (handle nodeToIO) >> handle ioToNode
       where
-        ioToNode msg = traceTagged ("RoutedFrom " <> show tmpAddr) (show msg) >> output (RoutedFrom tmpAddr $ Just msg)
+        ioToNode msg = traceTagged ("RoutedFrom " <> show defaultAddr) (show msg) >> output (RoutedFrom defaultAddr $ Just msg)
         nodeToIO (RouteTo address maybeMsg)
-          | address == tmpAddr = traceTagged ("RouteTo " <> show address) (show maybeMsg) >> maybe close output maybeMsg
+          | address == defaultAddr = traceTagged ("RouteTo " <> show address) (show maybeMsg) >> maybe close output maybeMsg
           | otherwise = _
     _ -> _
 pnet _ = _

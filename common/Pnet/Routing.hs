@@ -1,4 +1,4 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), r2, runR2, selfAddr, tmpAddr) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), r2, runR2, selfAddr, defaultAddr) where
 
 import Data.ByteString (ByteString)
 import Data.DoubleWord
@@ -42,8 +42,8 @@ runR2 node =
 selfAddr :: Address
 selfAddr = -1
 
-tmpAddr :: Address
-tmpAddr = 0
+defaultAddr :: Address
+defaultAddr = 0
 
 instance Serialize Int128
 

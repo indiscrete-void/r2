@@ -39,7 +39,7 @@ pnetd = foreverAcceptAsync \s -> socket s (handle (go s) >> close)
     go s (ConnectNode transport maybeNodeID) = do
       traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . (:) . entry) maybeNodeID
-      traceTagged "pnetnd" . show =<< runFail (socket s $ runR2 tmpAddr pnetnd')
+      traceTagged "pnetnd" . show =<< runFail (socket s $ runR2 defaultAddr pnetnd')
       traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
       whenJust (atomicModify' . List.delete . entry) maybeNodeID
       where
