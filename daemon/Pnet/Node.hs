@@ -17,11 +17,11 @@ ping :: ByteString
 ping = "ping"
 
 pnetnd :: (Members (TransportEffects RoutedFrom RouteTo) r, Member Trace r, Member Fail r) => Sem r ()
-pnetnd = runR2 selfAddr (output ping >> traceTagged "pnetnd: r2 ping" (show ping) >> inputOrFail >>= go) >> close
+pnetnd = runR2 selfAddr go >> close
   where
-    go (RoutedFrom addr maybeMsg)
-      | addr == selfAddr = traceTagged "pnetnd: r2 ping" (show maybeMsg)
-      | otherwise = fail "pnetnd: r2 ping: got no reply"
+    go =
+      (output ping >> traceTagged "pnetnd: r2 ping" (show ping))
+        >> (inputOrFail >>= traceTagged "pnetnd: r2 ping" . show)
 
 pnetnd' :: (Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Fail r) => Sem r ()
 pnetnd' = runUnserialized pnetnd
