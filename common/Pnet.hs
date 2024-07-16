@@ -1,5 +1,5 @@
 module Pnet
-  ( Request (..),
+  ( Handshake (..),
     Response (..),
     pnetSocketAddr,
     pnetSocket,
@@ -27,9 +27,9 @@ data Transport
   | Process String
   deriving stock (Show, Generic)
 
-data Request where
-  ListNodes :: Request
-  ConnectNode :: Transport -> Maybe Address -> Request
+data Handshake where
+  ListNodes :: Handshake
+  ConnectNode :: Transport -> Maybe Address -> Handshake
   deriving stock (Show, Generic)
 
 data Response where
@@ -74,6 +74,6 @@ withPnetSocket = bracket pnetSocket (`gracefulClose` timeout)
 
 instance Serialize Transport
 
-instance Serialize Request
+instance Serialize Handshake
 
 instance Serialize Response
