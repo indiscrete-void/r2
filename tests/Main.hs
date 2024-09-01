@@ -27,10 +27,10 @@ testR2 =
     "r2"
     [ testCase "r2 SendTo node0 (RouteTo node1 msg) = SendTo node1 (RoutedFrom node0 msg)" $
         r2 SendTo 0 (RouteTo 1 msg) @?= SendTo 1 (RoutedFrom 0 msg),
-      let runTest i = run . runOutput . runInput i . runR2 node
+      let runTest i = run . runClose . runOutput . runInput i . runR2 node
        in testCase "runR2 node cat `feed` RoutedFrom node msg == RouteTo node msg" $
             runTest (RoutedFrom node msg) (input >>= output . fromJust) @?= RouteTo node msg,
-      let runTest = run . runOutput . runInputList []
+      let runTest = run . runClose . runOutput . runInputList []
        in testCase "runR2 node close == RouteTo node Nothing" $
             runTest (runR2 node close) @?= RouteTo node (Nothing :: Maybe ())
     ]
