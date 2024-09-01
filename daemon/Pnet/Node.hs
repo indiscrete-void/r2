@@ -16,7 +16,7 @@ import Polysemy.Transport
 ping :: ByteString
 ping = "ping"
 
-pnetnd :: (Members (TransportEffects RoutedFrom RouteTo) r, Member Trace r, Member Fail r) => Sem r ()
+pnetnd :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member Fail r) => Sem r ()
 pnetnd = runR2 selfAddr go >> close
   where
     go =
@@ -26,5 +26,5 @@ pnetnd = runR2 selfAddr go >> close
 pnetnd' :: (Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Fail r) => Sem r ()
 pnetnd' = runUnserialized pnetnd
   where
-    runUnserialized :: (Members '[InputWithEOF ByteString, Output ByteString] r, Member Fail r) => InterpretersFor '[InputWithEOF RoutedFrom, Output RouteTo, Decoder] r
-    runUnserialized = runDecoder . serializeOutput @RouteTo . deserializeInput @RoutedFrom
+    runUnserialized :: (Members '[InputWithEOF ByteString, Output ByteString] r, Member Fail r) => InterpretersFor '[InputWithEOF (RoutedFrom (Maybe ByteString)), Output (RouteTo (Maybe ByteString)), Decoder] r
+    runUnserialized = runDecoder . serializeOutput @(RouteTo (Maybe ByteString)) . deserializeInput @(RoutedFrom (Maybe ByteString))

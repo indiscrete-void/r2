@@ -1,4 +1,5 @@
 import Control.Monad
+import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Network.Socket (bind, listen)
 import Pnet
@@ -29,7 +30,7 @@ initialState = []
 whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
 whenJust = maybe (pure ())
 
-pnetd :: (Member (Accept s) r, Member (Sockets Handshake Response s) r, Member (Sockets RoutedFrom RouteTo s) r, Member (AtomicState (State s)) r, Member Trace r, Member Async r, Eq s, Member Fail r) => Sem r ()
+pnetd :: (Member (Accept s) r, Member (Sockets Handshake Response s) r, Member (Sockets (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString)) s) r, Member (AtomicState (State s)) r, Member Trace r, Member Async r, Eq s, Member Fail r) => Sem r ()
 pnetd = foreverAcceptAsync \s -> socket s (inputOrFail >>= go s >> close)
   where
     go _ ListNodes = do
@@ -50,10 +51,10 @@ main :: IO ()
 main =
   let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF Handshake ': Output Response ': '[]) r
       runUnserialized = serializeOutput @Response . deserializeInput @Handshake
-      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF RoutedFrom ': Output RouteTo ': '[]) r
-      runUnserialized' = serializeOutput @RouteTo . deserializeInput @RoutedFrom
+      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe ByteString)) ': Output (RouteTo (Maybe ByteString)) ': '[]) r
+      runUnserialized' = serializeOutput @(RouteTo (Maybe ByteString)) . deserializeInput @(RoutedFrom (Maybe ByteString))
       runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
-      runSocket s = acceptToIO s . runScopedBundle @(TransportEffects Handshake Response) (runTransport runUnserialized) . runScopedBundle @(TransportEffects RoutedFrom RouteTo) (runTransport runUnserialized')
+      runSocket s = acceptToIO s . runScopedBundle @(TransportEffects Handshake Response) (runTransport runUnserialized) . runScopedBundle @(TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) (runTransport runUnserialized')
       runAtomicState = void . atomicStateToIO initialState
       run s =
         runFinal @IO

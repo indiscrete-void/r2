@@ -1,6 +1,5 @@
-module Pnet.Routing (Address, ConnectTo (..), ConnectionFrom (..), RouteTo (..), RoutedFrom (..), r2, runR2, selfAddr, defaultAddr, matchR2, connectTo, acceptR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, runR2, selfAddr, defaultAddr, connectR2, acceptR2) where
 
-import Data.ByteString (ByteString)
 import Data.DoubleWord
 import Data.Serialize hiding (Fail, get)
 import GHC.Generics
@@ -10,35 +9,27 @@ import Polysemy.Transport
 
 type Address = Int256
 
-data RouteTo = RouteTo
+data RouteTo msg = RouteTo
   { routeToNode :: Address,
-    routeToData :: Maybe ByteString
+    routeToData :: msg
   }
   deriving stock (Show, Eq, Generic)
 
-data RoutedFrom = RoutedFrom
+data RoutedFrom msg = RoutedFrom
   { routedFromNode :: Address,
-    routedFromData :: Maybe ByteString
+    routedFromData :: msg
   }
   deriving stock (Show, Eq, Generic)
 
-newtype ConnectTo = ConnectTo
-  { connectToNode :: Address
-  }
-  deriving stock (Show, Eq, Generic)
+type Connection = ()
 
-newtype ConnectionFrom = ConnectionFrom
-  { connectionFromNode :: Address
-  }
-  deriving stock (Show, Eq, Generic)
-
-r2 :: (Address -> RoutedFrom -> a) -> (Address -> RouteTo -> a)
+r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
-runR2 :: (Members (TransportEffects RoutedFrom RouteTo) r) => Address -> InterpretersFor (TransportEffects ByteString ByteString) r
+runR2 :: (Members (TransportEffects (RoutedFrom (Maybe msg)) (RouteTo (Maybe msg))) r) => Address -> InterpretersFor (TransportEffects msg msg) r
 runR2 node =
   interpret \case Close -> outputRouteTo Nothing
-    . interpret \case Output maybeStr -> outputRouteTo (Just maybeStr)
+    . interpret \case Output maybeMsg -> outputRouteTo (Just maybeMsg)
     . interpret \case Input -> (>>= routedFromData) <$> inputBefore ((== node) . routedFromNode)
   where
     inputBefore :: (Member (InputWithEOF i) r) => (i -> Bool) -> Sem r (Maybe i)
@@ -47,17 +38,14 @@ runR2 node =
       case x of
         Just y -> if f y then pure $ Just y else inputBefore f
         Nothing -> pure Nothing
-    outputRouteTo :: (Member (Output RouteTo) r) => Maybe ByteString -> Sem r ()
+    outputRouteTo :: (Member (Output (RouteTo msg)) r) => msg -> Sem r ()
     outputRouteTo = output . RouteTo node
 
-connectTo :: (Member (Output ConnectTo) r) => Address -> Sem r ()
-connectTo = output . ConnectTo
+connectR2 :: (Member (Output (RouteTo Connection)) r) => Address -> Sem r ()
+connectR2 addr = output $ RouteTo addr ()
 
-matchR2 :: (Address -> ConnectionFrom -> a) -> (Address -> ConnectTo -> a)
-matchR2 f node (ConnectTo receiver) = f receiver $ ConnectionFrom node
-
-acceptR2 :: (Member (InputWithEOF ConnectionFrom) r, Member Fail r) => Sem r Address
-acceptR2 = connectionFromNode <$> inputOrFail
+acceptR2 :: (Member (InputWithEOF (RoutedFrom Connection)) r, Member Fail r) => Sem r Address
+acceptR2 = routedFromNode <$> inputOrFail
 
 selfAddr :: Address
 selfAddr = -1
@@ -71,6 +59,6 @@ instance Serialize Word128
 
 instance Serialize Int256
 
-instance Serialize RouteTo
+instance (Serialize msg) => Serialize (RouteTo msg)
 
-instance Serialize RoutedFrom
+instance (Serialize msg) => Serialize (RoutedFrom msg)

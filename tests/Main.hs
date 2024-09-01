@@ -32,10 +32,10 @@ testR2 =
             runTest (RoutedFrom node msg) (input >>= output . fromJust) @?= RouteTo node msg,
       let runTest = run . runOutput . runInputList []
        in testCase "runR2 node close == RouteTo node Nothing" $
-            runTest (runR2 node close) @?= RouteTo node Nothing
+            runTest (runR2 node close) @?= RouteTo node (Nothing :: Maybe ())
     ]
   where
-    msg = Just "hello, world!"
+    msg = Just ()
     node = 0
 
 testConcInput :: TestTree

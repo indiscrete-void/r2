@@ -1,3 +1,4 @@
+import Data.ByteString (ByteString)
 import Network.Socket hiding (close)
 import Pnet
 import Pnet.Options
@@ -13,7 +14,7 @@ import Polysemy.Trace
 import Polysemy.Transport
 import System.IO
 
-pnet :: (Member (InputWithEOF RouteTo) r, Member (Output RoutedFrom) r, Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
+pnet :: (Members (TransportEffects (RouteTo (Maybe ByteString)) (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
 pnet Ls = output ListNodes >> (inputOrFail @Response >>= traceTagged "Ls" . show)
 pnet (Connect transport maybeAddress) = do
   output (ConnectNode transport maybeAddress)
@@ -29,7 +30,7 @@ pnet _ = _
 
 main :: IO ()
 main =
-  let runUnserialized = runDecoder . deserializeInput @Response . serializeOutput @Handshake . deserializeInput @RouteTo . serializeOutput @RoutedFrom
+  let runUnserialized = runDecoder . deserializeInput @Response . serializeOutput @Handshake . deserializeInput @(RouteTo (Maybe ByteString)) . serializeOutput @(RoutedFrom (Maybe ByteString))
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
