@@ -1,3 +1,4 @@
+import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Network.Socket hiding (close)
 import Pnet
@@ -19,12 +20,10 @@ pnet Ls = output ListNodes >> (inputOrFail @Response >>= traceTagged "Ls" . show
 pnet (Connect transport maybeAddress) = do
   output (ConnectNode transport maybeAddress)
   case transport of
-    Stdio -> async_ (handle nodeToIO) >> handle ioToNode
+    Stdio -> async_ nodeToIO >> ioToNode
       where
-        ioToNode msg = traceTagged ("RoutedFrom " <> show defaultAddr) (show msg) >> output (RoutedFrom defaultAddr $ Just msg)
-        nodeToIO (RouteTo address maybeMsg)
-          | address == defaultAddr = traceTagged ("RouteTo " <> show address) (show maybeMsg) >> maybe close output maybeMsg
-          | otherwise = _
+        ioToNode = whenJustM input (exposeR2 defaultAddr . output)
+        nodeToIO = whenJustM (exposeR2 defaultAddr input) output
     _ -> _
 pnet _ = _
 
