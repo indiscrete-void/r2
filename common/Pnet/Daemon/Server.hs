@@ -1,5 +1,6 @@
 module Pnet.Daemon.Server (State, initialState, pnetcd) where
 
+import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Pnet
@@ -18,9 +19,6 @@ type State s = [(s, Address)]
 initialState :: State s
 initialState = []
 
-whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
-whenJust = maybe (pure ())
-
 pnetcd :: (Members (TransportEffects Handshake Response) r, Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (AtomicState (State s)) r, Member Trace r, Eq s) => s -> Sem r ()
 pnetcd = handle . go
   where
@@ -30,10 +28,10 @@ pnetcd = handle . go
       output (NodeList nodeList)
     go s (ConnectNode transport maybeNodeID) = do
       traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
-      whenJust (atomicModify' . (:) . entry) maybeNodeID
+      whenJust maybeNodeID (atomicModify' . (:) . entry)
       traceTagged "pnetnd" . show =<< runFail (runR2 defaultAddr pnetnd')
       traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
-      whenJust (atomicModify' . List.delete . entry) maybeNodeID
+      whenJust maybeNodeID (atomicModify' . List.delete . entry)
       where
         nodeIDStr = maybe "unknown node" show maybeNodeID
         entry nodeID = (s, nodeID)
