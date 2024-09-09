@@ -1,12 +1,8 @@
-module Pnet.Node
-  ( pnetnd,
-    pnetnd',
-  )
-where
+module Pnet.Daemon.Node (pnetnd, pnetnd') where
 
-import Data.ByteString
+import Data.ByteString (ByteString)
 import Pnet.Routing
-import Polysemy hiding (send)
+import Polysemy
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Serialize

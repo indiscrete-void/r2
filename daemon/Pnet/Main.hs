@@ -1,9 +1,9 @@
 import Control.Monad
 import Data.ByteString (ByteString)
-import Data.List qualified as List
 import Network.Socket (bind, listen)
 import Pnet
-import Pnet.Node
+import Pnet.Daemon
+import Pnet.Daemon.Server
 import Pnet.Options
 import Pnet.Routing
 import Polysemy hiding (run, send)
@@ -15,37 +15,9 @@ import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Socket.Accept
-import Polysemy.Sockets
-import Polysemy.Trace
 import Polysemy.Transport
 import System.Exit
 import System.Posix
-import Text.Printf qualified as Text
-
-type State s = [(s, Address)]
-
-initialState :: State s
-initialState = []
-
-whenJust :: (Monad m) => (a -> m ()) -> Maybe a -> m ()
-whenJust = maybe (pure ())
-
-pnetd :: (Member (Accept s) r, Member (Sockets Handshake Response s) r, Member (Sockets (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString)) s) r, Member (AtomicState (State s)) r, Member Trace r, Member Async r, Eq s, Member Fail r) => Sem r ()
-pnetd = foreverAcceptAsync \s -> socket s (inputOrFail >>= go s >> close)
-  where
-    go _ ListNodes = do
-      nodeList <- map snd <$> atomicGet
-      traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
-      output (NodeList nodeList)
-    go s (ConnectNode transport maybeNodeID) = do
-      traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
-      whenJust (atomicModify' . (:) . entry) maybeNodeID
-      traceTagged "pnetnd" . show =<< runFail (socket s $ runR2 defaultAddr pnetnd')
-      traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
-      whenJust (atomicModify' . List.delete . entry) maybeNodeID
-      where
-        nodeIDStr = maybe "unknown node" show maybeNodeID
-        entry nodeID = (s, nodeID)
 
 main :: IO ()
 main =

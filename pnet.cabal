@@ -29,14 +29,14 @@ library
     import: default
     hs-source-dirs: common
     build-depends: data-dword
-    exposed-modules: Polysemy.Socket, Polysemy.Conc.Input, Pnet, Pnet.Routing
+    exposed-modules: Polysemy.Socket, Polysemy.Sockets, Polysemy.Socket.Accept, Polysemy.Conc.Input, Pnet, Pnet.Routing, Pnet.Daemon.Node, Pnet.Daemon.Server, Pnet.Daemon, Pnet.Client
 
 executable pnetd
     import: default
     hs-source-dirs: daemon
     main-is: Pnet/Main.hs
     build-depends: pnet
-    other-modules: Polysemy.Sockets, Polysemy.Socket.Accept, Pnet.Node, Pnet.Options
+    other-modules: Pnet.Options
 
 executable pnet
     import: default

@@ -1,19 +1,15 @@
-module Pnet.Options (Options (..), Transport (..), Command (..), parse) where
+module Pnet.Options (Options (..), Transport (..), parse) where
 
 import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
 import Options.Applicative
 import Pnet
+import Pnet.Client
 import Pnet.Routing
 import Transport.Maybe
 
 data Options = Options Command (Maybe FilePath)
-
-data Command
-  = Ls
-  | Connect !Transport !(Maybe Address)
-  | Tunnel !Address !Transport
 
 parse :: IO Options
 parse = execParser parserInfo
