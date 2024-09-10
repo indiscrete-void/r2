@@ -19,7 +19,7 @@ type State s = [(s, Address)]
 initialState :: State s
 initialState = []
 
-pnetcd :: (Members (TransportEffects Handshake Response) r, Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (AtomicState (State s)) r, Member Trace r, Eq s) => s -> Sem r ()
+pnetcd :: (Members (TransportEffects Handshake Response) r, Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) r, Member (AtomicState (State s)) r, Member Trace r, Eq s) => s -> Sem r ()
 pnetcd = handle . go
   where
     go _ ListNodes = do
@@ -29,7 +29,7 @@ pnetcd = handle . go
     go s (ConnectNode transport maybeNodeID) = do
       traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
       whenJust maybeNodeID (atomicModify' . (:) . entry)
-      traceTagged "pnetnd" . show =<< runFail (runR2 defaultAddr pnetnd')
+      traceTagged "pnetnd" . show =<< runFail (runR2 defaultAddr pnetnd)
       traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
       whenJust maybeNodeID (atomicModify' . List.delete . entry)
       where
