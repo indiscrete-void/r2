@@ -33,7 +33,7 @@ inputBefore f = do
     Just y -> if f y then pure $ Just y else inputBefore f
     Nothing -> pure Nothing
 
-exposeR2 :: (Members (TransportEffects (RouteTo (Maybe msg)) (RoutedFrom (Maybe msg))) r) => Address -> InterpretersFor (TransportEffects msg msg) r
+exposeR2 :: (Members (TransportEffects (RouteTo (Maybe i)) (RoutedFrom (Maybe o))) r) => Address -> InterpretersFor (TransportEffects i o) r
 exposeR2 addr =
   interpret \case Close -> outputRoutedFrom Nothing
     . interpret \case (Output msg) -> outputRoutedFrom (Just msg)
@@ -42,7 +42,7 @@ exposeR2 addr =
     outputRoutedFrom :: (Member (Output (RoutedFrom msg)) r) => msg -> Sem r ()
     outputRoutedFrom = output . RoutedFrom addr
 
-runR2 :: (Members (TransportEffects (RoutedFrom (Maybe msg)) (RouteTo (Maybe msg))) r) => Address -> InterpretersFor (TransportEffects msg msg) r
+runR2 :: (Members (TransportEffects (RoutedFrom (Maybe i)) (RouteTo (Maybe o))) r) => Address -> InterpretersFor (TransportEffects i o) r
 runR2 node =
   interpret \case Close -> outputRouteTo Nothing
     . interpret \case Output maybeMsg -> outputRouteTo (Just maybeMsg)
