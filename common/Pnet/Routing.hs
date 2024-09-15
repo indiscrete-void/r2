@@ -1,7 +1,9 @@
 module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, runR2, selfAddr, defaultAddr, connectR2, acceptR2, exposeR2) where
 
+import Data.ByteString
+import Data.ByteString qualified as BS
 import Data.DoubleWord
-import Data.Serialize hiding (Fail, get)
+import Data.Serialize
 import GHC.Generics
 import Polysemy
 import Polysemy.Fail
@@ -69,6 +71,30 @@ instance Serialize Word128
 
 instance Serialize Int256
 
-instance (Serialize msg) => Serialize (RouteTo msg)
+instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
+  put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
+  get = do
+    addr <- get
+    len <- get
+    RouteTo addr <$> getByteString len
 
-instance (Serialize msg) => Serialize (RoutedFrom msg)
+instance (Serialize msg) => Serialize (RouteTo msg) where
+  put (RouteTo addr msg) = put (RouteTo addr (encode msg))
+  get = do
+    addr <- get
+    _ <- get @Int
+    RouteTo addr <$> get
+
+instance {-# OVERLAPPING #-} Serialize (RoutedFrom ByteString) where
+  put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
+  get = do
+    addr <- get
+    len <- get
+    RoutedFrom addr <$> getByteString len
+
+instance (Serialize msg) => Serialize (RoutedFrom msg) where
+  put (RoutedFrom addr msg) = put (RoutedFrom addr (encode msg))
+  get = do
+    addr <- get
+    _ <- get @Int
+    RoutedFrom addr <$> get
