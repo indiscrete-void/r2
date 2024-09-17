@@ -73,10 +73,7 @@ instance Serialize Int256
 
 instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = do
-    addr <- get
-    len <- get
-    RouteTo addr <$> getByteString len
+  get = liftM2 RouteTo get (get >>= getByteString)
 
 instance (Serialize msg) => Serialize (RouteTo msg) where
   put (RouteTo addr msg) = put (RouteTo addr (encode msg))
@@ -87,10 +84,7 @@ instance (Serialize msg) => Serialize (RouteTo msg) where
 
 instance {-# OVERLAPPING #-} Serialize (RoutedFrom ByteString) where
   put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = do
-    addr <- get
-    len <- get
-    RoutedFrom addr <$> getByteString len
+  get = liftM2 RoutedFrom get (get >>= getByteString)
 
 instance (Serialize msg) => Serialize (RoutedFrom msg) where
   put (RoutedFrom addr msg) = put (RoutedFrom addr (encode msg))
