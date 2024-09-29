@@ -1,5 +1,6 @@
 module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, runR2, selfAddr, defaultAddr, connectR2, acceptR2, exposeR2) where
 
+import Control.Monad
 import Data.ByteString
 import Data.ByteString qualified as BS
 import Data.DoubleWord
@@ -9,7 +10,7 @@ import Polysemy
 import Polysemy.Fail
 import Polysemy.Transport
 
-type Address = Int256
+type Address = Word256
 
 data RouteTo msg = RouteTo
   { routeToNode :: Address,
@@ -65,11 +66,9 @@ selfAddr = -1
 defaultAddr :: Address
 defaultAddr = 0
 
-instance Serialize Int128
-
 instance Serialize Word128
 
-instance Serialize Int256
+instance Serialize Word256
 
 instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
