@@ -2,6 +2,7 @@ import Control.Monad
 import Control.Monad.Extra
 import Data.List qualified as List
 import Data.Maybe
+import Data.Serialize
 import Pnet.Routing
 import Polysemy
 import Polysemy.Async
@@ -32,7 +33,11 @@ testR2 =
             runTest (RoutedFrom defaultAddr msg) (input >>= output . fromJust) @?= RouteTo defaultAddr msg,
       let runTest = run . runClose . runOutput . runInputList []
        in testCase "runR2 node close = RouteTo node Nothing" $
-            runTest (runR2 defaultAddr close) @?= RouteTo defaultAddr (Nothing :: Maybe ())
+            runTest (runR2 defaultAddr close) @?= RouteTo defaultAddr (Nothing :: Maybe ()),
+      testCase "encode (RouteTo node (encode msg)) = encode (RouteTo node msg)" $
+        encode (RouteTo defaultAddr (encode msg)) @?= encode (RouteTo defaultAddr msg),
+      testCase "encode (RoutedFrom node (encode msg)) = encode (RoutedFrom node msg)" $
+        encode (RoutedFrom defaultAddr (encode msg)) @?= encode (RoutedFrom defaultAddr msg)
     ]
   where
     msg = Just ()
