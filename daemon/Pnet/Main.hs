@@ -15,15 +15,16 @@ import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Socket.Accept
+import Polysemy.Trace
 import Polysemy.Transport
 import System.Exit
 import System.Posix
 
 main :: IO ()
 main =
-  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF Handshake ': Output Response ': '[]) r
+  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF Handshake ': Output Response ': '[]) r
       runUnserialized = serializeOutput @Response . deserializeInput @Handshake
-      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': Output (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': '[]) r
+      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': Output (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': '[]) r
       runUnserialized' = serializeOutput @(RouteTo (Maybe (RouteTo (Maybe ByteString)))) . deserializeInput @(RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))
       runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s = acceptToIO s . runScopedBundle @(TransportEffects Handshake Response) (runTransport runUnserialized) . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) (runTransport runUnserialized')

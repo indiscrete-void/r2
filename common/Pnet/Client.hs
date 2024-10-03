@@ -18,7 +18,7 @@ data Command
   | Tunnel !Address !Transport
 
 pnet :: (Members (TransportEffects (RouteTo (Maybe ByteString)) (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
-pnet Ls = output ListNodes >> (inputOrFail @Response >>= traceTagged "Ls" . show)
+pnet Ls = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
 pnet (Connect transport maybeAddress) = do
   output (ConnectNode transport maybeAddress)
   case transport of

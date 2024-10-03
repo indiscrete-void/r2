@@ -20,17 +20,17 @@ initialState :: State s
 initialState = []
 
 pnetcd :: (Members (TransportEffects Handshake Response) r, Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) r, Member (AtomicState (State s)) r, Member Trace r, Eq s) => s -> Sem r ()
-pnetcd = handle . go
+pnetcd = traceTagged "pnetcd" . handle . go
   where
-    go _ ListNodes = do
+    go _ ListNodes = traceTagged "ListNodes" do
       nodeList <- map snd <$> atomicGet
-      traceTagged "ListNodes" (Text.printf "responding with `%s`" (show nodeList))
+      trace (Text.printf "responding with `%s`" (show nodeList))
       output (NodeList nodeList)
-    go s (ConnectNode transport maybeNodeID) = do
-      traceTagged "NodeAvailability" (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
+    go s (ConnectNode transport maybeNodeID) = traceTagged "connection" do
+      trace (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
       whenJust maybeNodeID (atomicModify' . (:) . entry)
-      traceTagged "pnetnd" . show =<< runFail (runR2 defaultAddr pnetnd)
-      traceTagged "NodeAvailability" (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
+      traceTagged "pnetnd" . trace . show =<< runFail (runR2 defaultAddr pnetnd)
+      trace (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
       whenJust maybeNodeID (atomicModify' . List.delete . entry)
       where
         nodeIDStr = maybe "unknown node" show maybeNodeID
