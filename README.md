@@ -1,4 +1,4 @@
-# r2net (route-to network)
+# r2net (Route-to network)
 ## Overview
 ```
                                x----------------------------------------x
