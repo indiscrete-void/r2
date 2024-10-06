@@ -6,12 +6,14 @@ import Data.ByteString qualified as BS
 import Data.DoubleWord
 import Data.Functor
 import Data.Serialize
+import Data.Word
 import GHC.Generics
 import Polysemy
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Trace
 import Polysemy.Transport
+import System.Random.Stateful
 import Text.Printf qualified as Text
 
 type Address = Word256
@@ -85,6 +87,18 @@ defaultAddr = 0
 instance Serialize Word128
 
 instance Serialize Word256
+
+instance Uniform Word128 where
+  uniformM g = do
+    l <- uniformM @Word64 g
+    r <- uniformM @Word64 g
+    pure $ Word128 l r
+
+instance Uniform Word256 where
+  uniformM g = do
+    l <- uniformM @Word128 g
+    r <- uniformM @Word128 g
+    pure $ Word256 l r
 
 instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
