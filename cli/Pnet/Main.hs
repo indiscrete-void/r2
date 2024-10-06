@@ -8,6 +8,7 @@ import Polysemy hiding (run)
 import Polysemy.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Process
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Transport
@@ -15,10 +16,10 @@ import System.IO
 
 main :: IO ()
 main =
-  let runUnserialized = runDecoder . deserializeInput @Response . serializeOutput @Handshake . deserializeInput @(RouteTo (Maybe ByteString)) . serializeOutput @(RoutedFrom (Maybe ByteString))
+  let runUnserialized = runDecoder . deserializeInput @Response . serializeOutput @Handshake . deserializeInput @(RouteTo (Maybe ByteString)) . serializeOutput @(RoutedFrom (Maybe ByteString)) . deserializeInput @(RouteTo ByteString) . serializeOutput @(RoutedFrom ByteString)
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
-      run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio
+      run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio . scopedProcToIOFinal bufferSize
    in withPnetSocket \s -> do
         (Options command maybeSocketPath) <- parse
         connect s =<< pnetSocketAddr maybeSocketPath

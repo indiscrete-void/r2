@@ -5,6 +5,7 @@ pkgs.haskellPackages.developPackage {
   root = ./.;
   source-overrides = {
     polysemy-transport = ../polysemy-transport;
+    polysemy-scoped-process = ../polysemy-scoped-process;
   };
 
   modifier = drv:
