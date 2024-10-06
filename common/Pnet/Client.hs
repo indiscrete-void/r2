@@ -1,6 +1,5 @@
-module Pnet.Client (Command (..), pnet) where
+module Pnet.Client (Command (..), listNodes, connectNode, pnet) where
 
-import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Pnet
 import Pnet.Routing
@@ -17,14 +16,34 @@ data Command
   | Connect !Transport !(Maybe Address)
   | Tunnel !Address !Transport
 
-pnet :: (Members (TransportEffects (RouteTo (Maybe ByteString)) (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member ByteOutput r, Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r, Member Close r, Member Async r) => Command -> Sem r ()
-pnet Ls = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
-pnet (Connect transport maybeAddress) = do
-  output (ConnectNode transport maybeAddress)
-  case transport of
-    Stdio -> async_ nodeToIO >> ioToNode
-      where
-        ioToNode = whenJustM input (exposeR2 defaultAddr . output)
-        nodeToIO = whenJustM (exposeR2 defaultAddr input) output
-    _ -> _
-pnet _ = _
+streamIO :: (Member Async r, Members (TransportEffects ByteString ByteString) r, Member (InputWithEOF (RouteTo ByteString)) r, Member (Output (RoutedFrom ByteString)) r, Member Trace r) => Sem r ()
+streamIO = async_ nodeToIO >> ioToNode
+  where
+    ioToNode = handle $ output . RoutedFrom defaultAddr
+    nodeToIO = handle $ r2Sem (const $ output . routedFromData) defaultAddr
+
+streamTransport :: (Member Async r, Members (TransportEffects ByteString ByteString) r, Member (InputWithEOF (RouteTo ByteString)) r, Member (Output (RoutedFrom ByteString)) r, Member Trace r) => Transport -> Sem r ()
+streamTransport Stdio = streamIO
+streamTransport (Process _) = _
+
+listNodes :: (Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r) => Sem r ()
+listNodes = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
+
+connectNode :: (Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r, Member Async r, Member (Output Handshake) r, Members (TransportEffects ByteString ByteString) r, Member Trace r) => Transport -> Maybe Address -> Sem r ()
+connectNode transport maybeAddress = output (ConnectNode transport maybeAddress) >> streamTransport transport
+
+pnet ::
+  ( Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r,
+    Member ByteInputWithEOF r,
+    Member ByteOutput r,
+    Member (InputWithEOF Response) r,
+    Member (Output Handshake) r,
+    Member Fail r,
+    Member Trace r,
+    Member Async r
+  ) =>
+  Command ->
+  Sem r ()
+pnet Ls = listNodes
+pnet (Connect transport maybeAddress) = connectNode transport maybeAddress
+pnet (Tunnel _ _) = _

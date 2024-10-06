@@ -1,4 +1,4 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, runR2, selfAddr, defaultAddr, connectR2, acceptR2, exposeR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, selfAddr, defaultAddr, connectR2, acceptR2) where
 
 import Control.Monad
 import Data.ByteString
@@ -7,8 +7,11 @@ import Data.DoubleWord
 import Data.Serialize
 import GHC.Generics
 import Polysemy
+import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Trace
 import Polysemy.Transport
+import Text.Printf qualified as Text
 
 type Address = Word256
 
@@ -29,6 +32,9 @@ type Connection = ()
 r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
+r2Sem :: (Show msg, Member Trace r) => (Address -> RoutedFrom msg -> Sem r ()) -> (Address -> RouteTo msg -> Sem r ())
+r2Sem f node i = traceTagged "handleR2" (trace $ Text.printf "handling %s from %s" (show i) (show node)) >> r2 f node i
+
 inputBefore :: (Member (InputWithEOF i) r) => (i -> Bool) -> Sem r (Maybe i)
 inputBefore f = do
   x <- input
@@ -36,14 +42,8 @@ inputBefore f = do
     Just y -> if f y then pure $ Just y else inputBefore f
     Nothing -> pure Nothing
 
-exposeR2 :: (Members (TransportEffects (RouteTo (Maybe i)) (RoutedFrom (Maybe o))) r) => Address -> InterpretersFor (TransportEffects i o) r
-exposeR2 addr =
-  interpret \case Close -> outputRoutedFrom Nothing
-    . interpret \case (Output msg) -> outputRoutedFrom (Just msg)
-    . interpret \case Input -> (>>= routeToData) <$> inputBefore ((== addr) . routeToNode)
-  where
-    outputRoutedFrom :: (Member (Output (RoutedFrom msg)) r) => msg -> Sem r ()
-    outputRoutedFrom = output . RoutedFrom addr
+outputRouteTo :: (Member (Output (RouteTo msg)) r) => Address -> msg -> Sem r ()
+outputRouteTo node = output . RouteTo node
 
 runR2 :: (Members (TransportEffects (RoutedFrom (Maybe i)) (RouteTo (Maybe o))) r) => Address -> InterpretersFor (TransportEffects i o) r
 runR2 node =
