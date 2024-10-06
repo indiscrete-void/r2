@@ -1,9 +1,10 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, selfAddr, defaultAddr, connectR2, acceptR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, selfAddr, defaultAddr, connectR2, acceptR2) where
 
 import Control.Monad
 import Data.ByteString
 import Data.ByteString qualified as BS
 import Data.DoubleWord
+import Data.Functor
 import Data.Serialize
 import GHC.Generics
 import Polysemy
@@ -37,25 +38,40 @@ r2Sem f node i = traceTagged "handleR2" (trace $ Text.printf "handling %s from %
 
 inputBefore :: (Member (InputWithEOF i) r) => (i -> Bool) -> Sem r (Maybe i)
 inputBefore f = do
-  x <- input
-  case x of
-    Just y -> if f y then pure $ Just y else inputBefore f
+  maybeX <- input
+  case maybeX of
+    Just x ->
+      if f x
+        then pure $ Just x
+        else inputBefore f
     Nothing -> pure Nothing
 
 outputRouteTo :: (Member (Output (RouteTo msg)) r) => Address -> msg -> Sem r ()
 outputRouteTo node = output . RouteTo node
 
-runR2 :: (Members (TransportEffects (RoutedFrom (Maybe i)) (RouteTo (Maybe o))) r) => Address -> InterpretersFor (TransportEffects i o) r
-runR2 node =
-  interpret \case Close -> outputRouteTo Nothing
-    . interpret \case Output maybeMsg -> outputRouteTo (Just maybeMsg)
-    . interpret \case Input -> (>>= routedFromData) <$> inputBefore ((== node) . routedFromNode)
+runR2Close :: (Member (Output (RouteTo (Maybe o))) r, Member Trace r) => Address -> InterpreterFor Close r
+runR2Close node = traceTagged ("runR2Close " <> show node) . go . raiseUnder @Trace
   where
-    outputRouteTo :: (Member (Output (RouteTo msg)) r) => msg -> Sem r ()
-    outputRouteTo = output . RouteTo node
+    go = interpret \case Close -> trace "closing" >> outputRouteTo node Nothing
 
-connectR2 :: (Member (Output (RouteTo Connection)) r) => Address -> Sem r ()
-connectR2 addr = output $ RouteTo addr ()
+runR2Input :: (Member (InputWithEOF (RoutedFrom (Maybe i))) r, Member Trace r, Show i) => Address -> InterpreterFor (InputWithEOF i) r
+runR2Input node = traceTagged ("runR2Input " <> show node) . go . raiseUnder @Trace
+  where
+    go = interpret \case Input -> inputBefore ((== node) . routedFromNode) >>= \msg -> let msgData = msg >>= routedFromData in trace (show msgData) $> msgData
+
+runR2Output :: (Member (Output (RouteTo (Maybe o))) r, Member Trace r, Show o) => Address -> InterpreterFor (Output o) r
+runR2Output node = traceTagged ("runR2Output " <> show node) . go . raiseUnder @Trace
+  where
+    go = interpret \case Output msg -> trace (show msg) >> outputRouteTo node (Just msg)
+
+runR2 :: (Members (TransportEffects (RoutedFrom (Maybe i)) (RouteTo (Maybe o))) r, Member Trace r, Show i, Show o) => Address -> InterpretersFor (TransportEffects i o) r
+runR2 node =
+  runR2Close node
+    . runR2Output node
+    . runR2Input node
+
+connectR2 :: (Member (Output (RouteTo Connection)) r, Member Trace r) => Address -> Sem r ()
+connectR2 addr = traceTagged "connectR2" (trace $ "connecting to " <> show addr) >> output (RouteTo addr ())
 
 acceptR2 :: (Member (InputWithEOF (RoutedFrom Connection)) r, Member Fail r) => Sem r Address
 acceptR2 = routedFromNode <$> inputOrFail
