@@ -1,19 +1,76 @@
-module Pnet.Daemon.Node (pnetnd) where
+module Pnet.Daemon.Node (State, initialState, stateAddNode, stateDeleteNode, route, tunnelProcess, pnetnd) where
 
-import Data.ByteString (ByteString)
+import Control.Monad.Extra
+import Data.ByteString
+import Data.List qualified as List
+import Data.Maybe
+import Pnet
 import Pnet.Routing
 import Polysemy
+import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Sockets
 import Polysemy.Trace
 import Polysemy.Transport
 
-ping :: ByteString
-ping = "ping"
+type State s = [(s, Address)]
 
-pnetnd :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member Fail r) => Sem r ()
-pnetnd = traceTagged "pnetnd" . traceTagged "r2 ping" $ runR2 selfAddr go >> close
+initialState :: State s
+initialState = []
+
+stateAddNode :: (Member (AtomicState (State s)) r) => (s, Address) -> Sem r ()
+stateAddNode = atomicModify' . (:)
+
+stateDeleteNode :: (Member (AtomicState (State s)) r, Eq s) => (s, Address) -> Sem r ()
+stateDeleteNode = atomicModify' . List.delete
+
+runAddress :: (Member (AtomicState (State s)) r) => (s -> InterpreterFor (Output o) r) -> Address -> InterpreterFor (Output o) r
+runAddress f addr m = do
+  s <- lookupSocket <$> atomicGet
+  f s m
   where
-    go =
-      (output ping >> trace (show ping))
-        >> (inputOrFail >>= trace . show)
+    lookupSocket = fst . fromJust . List.find ((== addr) . snd)
+
+route ::
+  forall s r.
+  ( Member (AtomicState (State s)) r,
+    Member (InputWithEOF (RouteTo ByteString)) r,
+    Member Trace r
+  ) =>
+  (s -> InterpreterFor (Output (RoutedFrom ByteString)) r) ->
+  Address ->
+  Sem r ()
+route f sender = traceTagged "route" $ raise @Trace do
+  trace ("routing for " ++ show sender)
+  let sendTo :: Address -> RoutedFrom ByteString -> Sem r ()
+      sendTo addr = runAddress f addr . output
+  handle (r2Sem sendTo sender)
+
+tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r) => Address -> Sem r ()
+tunnelProcess addr = traceTagged ("tunnel " <> show addr) do
+  trace ("tunneling for " ++ show addr)
+  connectR2 addr
+  runR2Output addr $ output NodeRoute
+  runR2 addr inputToOutput
+
+pnetnd ::
+  ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
+    Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
+    Member (InputWithEOF (RoutedFrom (Maybe NodeHandshake))) r,
+    Member (InputWithEOF (RouteTo ByteString)) r,
+    Member (Output (RouteTo (Maybe NodeHandshake))) r,
+    Member (AtomicState (State s)) r,
+    Member Fail r,
+    Member Trace r,
+    Member (Output (RouteTo Connection)) r
+  ) =>
+  Address ->
+  Address ->
+  Sem r ()
+pnetnd peer addr = traceTagged "pnetnd" $ raise @Trace do
+  trace ("accepted " <> show addr)
+  handshake <- runR2Input @NodeHandshake addr $ inputOrFail @NodeHandshake
+  case handshake of
+    NodeRoute -> route socketOutput peer
+    NodeTunnel -> tunnelProcess addr

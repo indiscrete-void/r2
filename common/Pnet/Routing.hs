@@ -1,4 +1,4 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, selfAddr, defaultAddr, connectR2, acceptR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, defaultAddr, connectR2, acceptR2) where
 
 import Control.Monad
 import Data.ByteString
@@ -77,9 +77,6 @@ connectR2 addr = traceTagged "connectR2" (trace $ "connecting to " <> show addr)
 
 acceptR2 :: (Member (InputWithEOF (RoutedFrom Connection)) r, Member Fail r) => Sem r Address
 acceptR2 = routedFromNode <$> inputOrFail
-
-selfAddr :: Address
-selfAddr = -1
 
 defaultAddr :: Address
 defaultAddr = 0

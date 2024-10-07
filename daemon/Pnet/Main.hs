@@ -3,7 +3,7 @@ import Data.ByteString (ByteString)
 import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Daemon
-import Pnet.Daemon.Server
+import Pnet.Daemon.Node
 import Pnet.Options
 import Pnet.Routing
 import Polysemy hiding (run, send)
@@ -22,12 +22,33 @@ import System.Posix
 
 main :: IO ()
 main =
-  let runUnserialized :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF Handshake ': Output Response ': '[]) r
-      runUnserialized = serializeOutput @Response . deserializeInput @Handshake
-      runUnserialized' :: (Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': Output (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': '[]) r
-      runUnserialized' = serializeOutput @(RouteTo (Maybe (RouteTo (Maybe ByteString)))) . deserializeInput @(RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))
+  let runUnserialized :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF Handshake ': Output Response ': '[]) r
+      runUnserialized = serializeOutput . deserializeInput
+      runUnserialized' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RouteTo ByteString) ': Output (RoutedFrom ByteString) ': '[]) r
+      runUnserialized' = serializeOutput . deserializeInput
+      runUnserialized'' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom Connection))) ': Output (RouteTo (Maybe (RouteTo Connection))) ': '[]) r
+      runUnserialized'' = serializeOutput . deserializeInput
+      runUnserialized''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))))) ': Output (RouteTo (Maybe (RouteTo (Maybe (RouteTo (Maybe ByteString)))))) ': '[]) r
+      runUnserialized''' = serializeOutput . deserializeInput
+      runUnserialized'''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': Output (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': '[]) r
+      runUnserialized'''' = serializeOutput . deserializeInput
+      runUnserialized''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': Output (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': '[]) r
+      runUnserialized''''' = serializeOutput . deserializeInput
+      runUnserialized'''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) ': Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake)))) ': '[]) r
+      runUnserialized'''''' = serializeOutput . deserializeInput
+      runUnserialized''''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RouteTo ByteString))) ': Output (RouteTo (Maybe (RoutedFrom ByteString))) ': '[]) r
+      runUnserialized''''''' = serializeOutput . deserializeInput
       runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
-      runSocket s = acceptToIO s . runScopedBundle @(TransportEffects Handshake Response) (runTransport runUnserialized) . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) (runTransport runUnserialized')
+      runSocket s =
+        acceptToIO s
+          . runScopedBundle @(TransportEffects Handshake Response) (runTransport runUnserialized)
+          . runScopedBundle @(TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) (runTransport runUnserialized')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom Connection))) (RouteTo (Maybe (RouteTo Connection)))) (runTransport runUnserialized'')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))))) (RouteTo (Maybe (RouteTo (Maybe (RouteTo (Maybe ByteString))))))) (runTransport runUnserialized''')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) (runTransport runUnserialized'''')
+          . runScopedBundle @(TransportEffects (RouteTo (Maybe (RouteTo (Maybe ByteString)))) (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))) (runTransport runUnserialized''''')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) (runTransport runUnserialized'''''')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString)))) (runTransport runUnserialized''''''')
       runAtomicState = void . atomicStateToIO initialState
       run s =
         runFinal @IO
