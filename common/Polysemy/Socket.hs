@@ -10,7 +10,7 @@ import Polysemy.Transport
 import Transport.Maybe
 
 inputToSocket :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpreterFor ByteInputWithEOF r
-inputToSocket bufferSize s = traceTagged "io" . go . raiseUnder @Trace
+inputToSocket bufferSize s = traceTagged ("inputToSocket " <> show s) . go . raiseUnder @Trace
   where
     go = interpret \Input -> do
       str <- embed (eofToNothing <$> IO.recv s bufferSize)
@@ -18,7 +18,7 @@ inputToSocket bufferSize s = traceTagged "io" . go . raiseUnder @Trace
       pure str
 
 outputToSocket :: (Member (Embed IO) r, Member Trace r) => IO.Socket -> InterpreterFor ByteOutput r
-outputToSocket s = traceTagged "io" . go . raiseUnder @Trace
+outputToSocket s = traceTagged ("outputToSocket " <> show s) . go . raiseUnder @Trace
   where
     go = interpret \(Output str) -> void $ trace (show str) >> embed (IO.send s str)
 
