@@ -22,7 +22,7 @@ main =
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio . scopedProcToIOFinal bufferSize
-   in hSetBuffering stderr LineBuffering >> withPnetSocket \s -> do
+   in withPnetSocket \s -> do
         (Options command maybeSocketPath) <- parse
         gen <- initStdGen >>= newIOGenM
         self <- uniformM @Address gen
