@@ -62,6 +62,15 @@ connectNode cmd s transport maybeNodeID = traceTagged "connection" do
     nodeIDStr = maybe "unknown node" show maybeNodeID
     entry nodeID = (s, nodeID)
 
+routeClient :: (Eq s, Member (InputWithEOF (RouteTo ByteString)) r, Member (AtomicState (State s)) r, Member (Sockets i (RouteTo (Maybe (RoutedFrom ByteString))) s) r, Member Trace r) => s -> Address -> Sem r ()
+routeClient s sender =
+  let runClientOutput c =
+        socketOutput c
+          . runR2Output defaultAddr
+          . raiseUnder @(Output (RouteTo (Maybe (RoutedFrom ByteString))))
+      entry = (s, sender)
+   in stateAddNode entry >> route runClientOutput sender >> stateDeleteNode entry
+
 pnetcd ::
   ( Members (TransportEffects Handshake Response) r,
     Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom Connection))) (RouteTo (Maybe (RouteTo Connection)))) r,
@@ -84,8 +93,4 @@ pnetcd ::
 pnetcd cmd s = handle \case
   ListNodes -> listNodes
   (ConnectNode transport maybeNodeID) -> connectNode cmd s transport maybeNodeID
-  Route sender ->
-    let entry = (s, sender)
-     in stateAddNode entry >> route runClientOutput sender >> stateDeleteNode entry
-  where
-    runClientOutput s = socketOutput s . runR2Output defaultAddr . raiseUnder @(Output (RouteTo (Maybe (RoutedFrom ByteString))))
+  Route sender -> routeClient s sender
