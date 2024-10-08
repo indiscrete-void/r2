@@ -44,6 +44,10 @@ tunnelTransport self address =
     >> runR2Output @ByteString address inputToOutput
     >> runR2Close @ByteString address close
 
+tunnel :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Close r, Member Async r) => Address -> Address -> Transport -> Sem r ()
+tunnel self address Stdio = tunnelTransport self address
+tunnel self address (Process cmd) = execIO (ioShell cmd) $ tunnelTransport self address
+
 pnet ::
   ( Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r,
     Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
@@ -63,5 +67,4 @@ pnet ::
   Sem r ()
 pnet _ Ls = listNodes
 pnet _ (Connect transport maybeAddress) = connectNode transport maybeAddress
-pnet self (Tunnel address Stdio) = tunnelTransport self address
-pnet self (Tunnel address (Process cmd)) = execIO (ioShell cmd) $ tunnelTransport self address
+pnet self (Tunnel address transport) = tunnel self address transport
