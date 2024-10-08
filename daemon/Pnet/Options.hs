@@ -2,7 +2,7 @@ module Pnet.Options (Options (..), parse) where
 
 import Options.Applicative
 
-data Options = Options (Maybe FilePath) Bool
+data Options = Options (Maybe FilePath) Bool String
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -21,3 +21,4 @@ opts =
   Options
     <$> optional (strOption $ long "socket" <> short 's')
     <*> flag False True (long "daemon" <> short 'd')
+    <*> argument str (metavar "CMD")

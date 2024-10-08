@@ -11,6 +11,7 @@ import Polysemy.Async
 import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Process
 import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
@@ -50,6 +51,7 @@ main =
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) (runTransport runUnserialized'''''')
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString)))) (runTransport runUnserialized''''''')
       runAtomicState = void . atomicStateToIO initialState
+      runProcess = scopedProcToIOFinal bufferSize
       run s =
         runFinal @IO
           . asyncToIOFinal
@@ -57,13 +59,14 @@ main =
           . embedToFinal @IO
           . failToEmbed @IO
           . traceToStdoutBuffered
+          . runProcess
           . runSocket s
           . runAtomicState
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
    in withPnetSocket \s -> do
-        (Options maybeSocketPath daemon) <- parse
+        (Options maybeSocketPath daemon cmd) <- parse
         addr <- pnetSocketAddr maybeSocketPath
         bind s addr
         listen s 5
-        forkIf daemon $ run s pnetd
+        forkIf daemon . run s $ pnetd cmd

@@ -36,7 +36,6 @@ library
         Polysemy.Conc.Input,
         Pnet,
         Pnet.Routing,
-        Pnet.Routing.Transfer,
         Pnet.Daemon.Node,
         Pnet.Daemon.Server,
         Pnet.Daemon,

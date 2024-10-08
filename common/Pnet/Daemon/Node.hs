@@ -1,18 +1,23 @@
 module Pnet.Daemon.Node (State, initialState, stateAddNode, stateDeleteNode, route, tunnelProcess, pnetnd) where
 
-import Control.Monad.Extra
 import Data.ByteString
 import Data.List qualified as List
 import Data.Maybe
 import Pnet
 import Pnet.Routing
 import Polysemy
+import Polysemy.Async
 import Polysemy.AtomicState
+import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Process
+import Polysemy.Scoped
 import Polysemy.Sockets
+import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
+import System.Process.Extra
 
 type State s = [(s, Address)]
 
@@ -47,12 +52,15 @@ route f sender = traceTagged "route" $ raise @Trace do
       sendTo addr = runAddress f addr . output
   handle (r2Sem sendTo sender)
 
-tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r) => Address -> Sem r ()
-tunnelProcess addr = traceTagged ("tunnel " <> show addr) do
+tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r, Member (Scoped CreateProcess Process) r, Member Async r) => Address -> String -> Sem r ()
+tunnelProcess addr cmd = traceTagged ("tunnel " <> show addr) do
   trace ("tunneling for " ++ show addr)
   connectR2 addr
   runR2Output addr $ output NodeRoute
-  runR2 addr inputToOutput
+  execIO (ioShell cmd) $ do
+    async_ $ runR2Output addr (inputToOutput @ByteString)
+    runR2Input addr (inputToOutput @ByteString)
+    runR2Close @ByteString addr close
 
 pnetnd ::
   ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
@@ -63,14 +71,17 @@ pnetnd ::
     Member (AtomicState (State s)) r,
     Member Fail r,
     Member Trace r,
-    Member (Output (RouteTo Connection)) r
+    Member (Output (RouteTo Connection)) r,
+    Member (Scoped CreateProcess Process) r,
+    Member Async r
   ) =>
+  String ->
   Address ->
   Address ->
   Sem r ()
-pnetnd peer addr = traceTagged "pnetnd" $ raise @Trace do
+pnetnd cmd peer addr = traceTagged "pnetnd" $ raise @Trace do
   trace ("accepted " <> show addr)
   handshake <- runR2Input @NodeHandshake addr $ inputOrFail @NodeHandshake
   case handshake of
     NodeRoute -> route socketOutput peer
-    NodeTunnel -> tunnelProcess addr
+    NodeTunnel -> tunnelProcess addr cmd

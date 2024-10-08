@@ -7,12 +7,16 @@ import Pnet
 import Pnet.Daemon.Node
 import Pnet.Routing
 import Polysemy
+import Polysemy.Async
 import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Process qualified as Sem
+import Polysemy.Scoped
 import Polysemy.Sockets
 import Polysemy.Trace
 import Polysemy.Transport
+import System.Process.Extra
 import Text.Printf qualified as Text
 
 listNodes :: (Member (AtomicState (State s)) r, Member (Output Response) r, Member Trace r) => Sem r ()
@@ -29,14 +33,17 @@ connectNode ::
     Member (Input (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))))) r,
     Member (Input (Maybe (RoutedFrom (Maybe (RouteTo ByteString))))) r,
     Member (Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member Async r,
     Member Trace r,
     Eq s
   ) =>
+  String ->
   s ->
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode s transport maybeNodeID = traceTagged "connection" do
+connectNode cmd s transport maybeNodeID = traceTagged "connection" do
   let nodeID = fromJust maybeNodeID
   trace (Text.printf "%s connected over `%s`" nodeIDStr (show transport))
   whenJust maybeNodeID (stateAddNode . entry)
@@ -47,7 +54,7 @@ connectNode s transport maybeNodeID = traceTagged "connection" do
           . runR2 @(RoutedFrom (Maybe NodeHandshake)) @(RouteTo (Maybe NodeHandshake)) defaultAddr
           . runR2Input @(RouteTo ByteString) defaultAddr
           . runR2Input @(RoutedFrom (Maybe NodeHandshake)) defaultAddr
-          $ forever (acceptR2 >>= pnetnd nodeID)
+          $ forever (acceptR2 >>= pnetnd cmd nodeID)
       )
   trace (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
   whenJust maybeNodeID (stateDeleteNode . entry)
@@ -66,14 +73,17 @@ pnetcd ::
     Member (InputWithEOF (RouteTo ByteString)) r,
     Member (Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) r,
     Member (AtomicState (State s)) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member Async r,
     Member Trace r,
     Eq s
   ) =>
+  String ->
   s ->
   Sem r ()
-pnetcd s = handle \case
+pnetcd cmd s = handle \case
   ListNodes -> listNodes
-  (ConnectNode transport maybeNodeID) -> connectNode s transport maybeNodeID
+  (ConnectNode transport maybeNodeID) -> connectNode cmd s transport maybeNodeID
   Route sender ->
     let entry = (s, sender)
      in stateAddNode entry >> route runClientOutput sender >> stateDeleteNode entry
