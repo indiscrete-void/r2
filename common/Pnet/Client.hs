@@ -36,13 +36,13 @@ connectNode :: (Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteS
 connectNode transport maybeAddress = output (ConnectNode transport maybeAddress) >> streamTransport transport
 
 tunnelTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r) => Address -> Address -> Sem r ()
-tunnelTransport self address =
+tunnelTransport self address = do
   output (Route self)
-    >> connectR2 address
-    >> runR2Output @NodeHandshake address (output NodeTunnel)
-    >> async_ (runR2Input @ByteString address inputToOutput)
-    >> runR2Output @ByteString address inputToOutput
-    >> runR2Close @ByteString address close
+  connectR2 address
+  runR2Output @NodeHandshake address (output NodeTunnel)
+  async_ (runR2Input @ByteString address inputToOutput)
+  runR2Output @ByteString address inputToOutput
+  runR2Close @ByteString address close
 
 tunnel :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Close r, Member Async r) => Address -> Address -> Transport -> Sem r ()
 tunnel self address Stdio = tunnelTransport self address
