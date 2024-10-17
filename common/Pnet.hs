@@ -64,8 +64,8 @@ defaultUserPnetSocketPath = go <$> getEffectiveUserID
 pnetSocket :: IO Socket
 pnetSocket = do
   s <- socket AF_UNIX Stream defaultProtocol
-  setSocketOption s RecvTimeOut (timeout * 1024)
-  setSocketOption s SendTimeOut (timeout * 1024)
+  setSocketOption s RecvTimeOut timeout
+  setSocketOption s SendTimeOut timeout
   pure s
 
 pnetSocketAddr :: Maybe FilePath -> IO SockAddr
@@ -77,7 +77,7 @@ pnetSocketAddr customPath = do
   pure $ SockAddrUnix path
 
 withPnetSocket :: (Socket -> IO a) -> IO a
-withPnetSocket = bracket pnetSocket (`gracefulClose` timeout)
+withPnetSocket = bracket pnetSocket close
 
 instance Serialize Transport
 
