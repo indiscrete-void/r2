@@ -58,9 +58,10 @@ tunnelProcess addr cmd = traceTagged ("tunnel " <> show addr) do
   connectR2 addr
   runR2Output addr $ output NodeRoute
   execIO (ioShell cmd) $ do
-    async_ $ runR2Output addr (inputToOutput @ByteString)
+    i2R2O <- async $ runR2Output addr (inputToOutput @ByteString)
     runR2Input addr (inputToOutput @ByteString)
     runR2Close @ByteString addr close
+    await_ i2R2O
 
 pnetnd ::
   ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
