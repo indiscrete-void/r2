@@ -1,4 +1,4 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, defaultAddr, connectR2, acceptR2) where
+module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, defaultAddr, connectR2, acceptR2, ioToR2) where
 
 import Control.Monad
 import Data.ByteString
@@ -9,6 +9,8 @@ import Data.Serialize
 import Data.Word
 import GHC.Generics
 import Polysemy
+import Polysemy.Async
+import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Trace
@@ -77,6 +79,13 @@ connectR2 addr = traceTagged "connectR2" (trace $ "connecting to " <> show addr)
 
 acceptR2 :: (Member (InputWithEOF (RoutedFrom Connection)) r, Member Fail r) => Sem r Address
 acceptR2 = routedFromNode <$> inputOrFail
+
+ioToR2 :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member ByteOutput r, Member Trace r, Member Async r, Member Close r) => Address -> Sem r ()
+ioToR2 addr =
+  sequenceConcurrently_
+    [ runR2Input addr (inputToOutput @ByteString) >> close,
+      runR2Output addr (inputToOutput @ByteString) >> runR2Close @ByteString addr close
+    ]
 
 defaultAddr :: Address
 defaultAddr = 0

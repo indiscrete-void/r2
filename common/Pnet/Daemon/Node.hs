@@ -8,13 +8,11 @@ import Pnet.Routing
 import Polysemy
 import Polysemy.Async
 import Polysemy.AtomicState
-import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Scoped
 import Polysemy.Sockets
-import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
 import System.Process.Extra
@@ -57,11 +55,7 @@ tunnelProcess addr cmd = traceTagged ("tunnel " <> show addr) do
   trace ("tunneling for " ++ show addr)
   connectR2 addr
   runR2Output addr $ output NodeRoute
-  execIO (ioShell cmd) $ do
-    sequenceConcurrently_
-      [ runR2Input addr (inputToOutput @ByteString) >> close,
-        runR2Output addr (inputToOutput @ByteString) >> runR2Close @ByteString addr close
-      ]
+  execIO (ioShell cmd) $ ioToR2 addr
 
 pnetnd ::
   ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
