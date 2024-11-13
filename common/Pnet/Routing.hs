@@ -83,8 +83,8 @@ acceptR2 = routedFromNode <$> inputOrFail
 ioToR2 :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member ByteOutput r, Member Trace r, Member Async r, Member Close r) => Address -> Sem r ()
 ioToR2 addr =
   sequenceConcurrently_
-    [ runR2Input addr (inputToOutput @ByteString) >> close,
-      runR2Output addr (inputToOutput @ByteString) >> runR2Close @ByteString addr close
+    [ runR2Input addr inputToOutput >> close,
+      runR2Output addr inputToOutput >> runR2Close @ByteString addr close
     ]
 
 defaultAddr :: Address
