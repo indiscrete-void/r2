@@ -1,8 +1,10 @@
-module Pnet.Routing (Address, RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, defaultAddr, connectR2, acceptR2, ioToR2) where
+module Pnet.Routing (Address (..), RouteTo (..), RoutedFrom (..), Connection, r2, r2Sem, runR2, runR2Input, runR2Output, runR2Close, defaultAddr, connectR2, acceptR2, ioToR2) where
 
 import Control.Monad
 import Data.ByteString
 import Data.ByteString qualified as BS
+import Data.ByteString.Base58
+import Data.ByteString.Base58.Internal
 import Data.DoubleWord
 import Data.Functor
 import Data.Serialize
@@ -18,7 +20,8 @@ import Polysemy.Transport
 import System.Random.Stateful
 import Text.Printf qualified as Text
 
-type Address = Word256
+newtype Address = Addr {unAddr :: Word256}
+  deriving stock (Eq, Generic)
 
 data RouteTo msg = RouteTo
   { routeToNode :: Address,
@@ -88,11 +91,15 @@ ioToR2 addr =
     ]
 
 defaultAddr :: Address
-defaultAddr = 0
+defaultAddr = Addr 0
+
+instance Serialize Address
 
 instance Serialize Word128
 
 instance Serialize Word256
+
+instance Uniform Address
 
 instance Uniform Word128 where
   uniformM g = do
@@ -105,6 +112,9 @@ instance Uniform Word256 where
     l <- uniformM @Word128 g
     r <- uniformM @Word128 g
     pure $ Word256 l r
+
+instance Show Address where
+  show (Addr addr) = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
 
 instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs

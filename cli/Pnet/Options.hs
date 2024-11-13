@@ -53,4 +53,4 @@ transport = do
 address :: ReadM Address
 address = str >>= maybeFail "invalid node ID" . parseNodeID
   where
-    parseNodeID = fmap (fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
+    parseNodeID = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
