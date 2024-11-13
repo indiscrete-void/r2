@@ -43,8 +43,24 @@ testR2 =
   where
     msg = Just ()
 
+testConcInput :: TestTree
+testConcInput =
+  testGroup
+    "Concurrent Input"
+    [ let in' = [0 .. 128] :: [Int]
+          out = map Just in' <> [Nothing]
+          runTest = runFinal @IO . asyncToIOFinal . resourceToIOFinal . interpretRace . interpretMaskFinal . embedToFinal @IO . evalState [] . interpretLockReentrant
+          runChild = evalState @Int 0 . runInputList in' . (fmap fst . runOutputList)
+          go = whileJustM (inputConc >>= \i -> output i >> pure (void i))
+       in testCase "inputConc" . runTest $ do
+            threads <- replicateM 128 . async $ do
+              actualOut <- runChild go
+              embedFinal @IO $ actualOut @?= out
+            mapM_ await threads
+    ]
+
 tests :: TestTree
-tests = testGroup "Unit Tests" [testR2]
+tests = testGroup "Unit Tests" [testR2, testConcInput]
 
 main :: IO ()
 main = defaultMain tests
