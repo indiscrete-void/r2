@@ -1,7 +1,6 @@
 module Pnet
   ( Handshake (..),
     Response (..),
-    NodeHandshake (..),
     pnetSocketAddr,
     pnetSocket,
     withPnetSocket,
@@ -31,16 +30,12 @@ data Transport
 data Handshake where
   ListNodes :: Handshake
   ConnectNode :: Transport -> Maybe Address -> Handshake
-  Route :: Address -> Handshake
+  Route :: Maybe Address -> Handshake
+  TunnelProcess :: Handshake
   deriving stock (Show, Generic)
 
 data Response where
   NodeList :: [Address] -> Response
-  deriving stock (Show, Generic)
-
-data NodeHandshake where
-  NodeRoute :: NodeHandshake
-  NodeTunnel :: NodeHandshake
   deriving stock (Show, Generic)
 
 timeout :: Int
@@ -84,5 +79,3 @@ instance Serialize Transport
 instance Serialize Handshake
 
 instance Serialize Response
-
-instance Serialize NodeHandshake

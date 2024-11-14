@@ -50,19 +50,19 @@ route f sender = traceTagged "route" $ raise @Trace do
       sendTo addr = runAddress f addr . output
   handle (r2Sem sendTo sender)
 
-tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r, Member (Scoped CreateProcess Process) r, Member Async r) => Address -> String -> Sem r ()
+tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe Handshake))) r, Member (Output (RouteTo Connection)) r, Member (Scoped CreateProcess Process) r, Member Async r) => Address -> String -> Sem r ()
 tunnelProcess addr cmd = traceTagged ("tunnel " <> show addr) do
   trace ("tunneling for " ++ show addr)
   connectR2 addr
-  runR2Output addr $ output NodeRoute
+  runR2Output addr $ output (Route Nothing)
   execIO (ioShell cmd) $ ioToR2 addr
 
 pnetnd ::
   ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
     Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
-    Member (InputWithEOF (RoutedFrom (Maybe NodeHandshake))) r,
+    Member (InputWithEOF (RoutedFrom (Maybe Handshake))) r,
     Member (InputWithEOF (RouteTo ByteString)) r,
-    Member (Output (RouteTo (Maybe NodeHandshake))) r,
+    Member (Output (RouteTo (Maybe Handshake))) r,
     Member (AtomicState (State s)) r,
     Member Fail r,
     Member Trace r,
@@ -76,7 +76,8 @@ pnetnd ::
   Sem r ()
 pnetnd cmd peer addr = traceTagged "pnetnd" $ raise @Trace do
   trace ("accepted " <> show addr)
-  handshake <- runR2Input @NodeHandshake addr $ inputOrFail @NodeHandshake
+  handshake <- runR2Input @Handshake addr $ inputOrFail @Handshake
   case handshake of
-    NodeRoute -> route socketOutput peer
-    NodeTunnel -> tunnelProcess addr cmd
+    Route _ -> route socketOutput peer
+    TunnelProcess -> tunnelProcess addr cmd
+    _ -> _

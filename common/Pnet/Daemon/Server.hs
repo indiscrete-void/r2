@@ -30,9 +30,9 @@ connectNode ::
     Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom Connection))) (RouteTo (Maybe (RouteTo Connection)))) r,
     Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) r,
     Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
-    Member (Input (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))))) r,
+    Member (Input (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))))) r,
     Member (Input (Maybe (RoutedFrom (Maybe (RouteTo ByteString))))) r,
-    Member (Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) r,
+    Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member Async r,
     Member Trace r,
@@ -51,9 +51,9 @@ connectNode cmd s transport maybeNodeID = traceTagged "connection" do
     =<< runFail
       ( runR2 @(RoutedFrom Connection) @(RouteTo Connection) defaultAddr
           . runR2 @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) defaultAddr
-          . runR2 @(RoutedFrom (Maybe NodeHandshake)) @(RouteTo (Maybe NodeHandshake)) defaultAddr
+          . runR2 @(RoutedFrom (Maybe Handshake)) @(RouteTo (Maybe Handshake)) defaultAddr
           . runR2Input @(RouteTo ByteString) defaultAddr
-          . runR2Input @(RoutedFrom (Maybe NodeHandshake)) defaultAddr
+          . runR2Input @(RoutedFrom (Maybe Handshake)) defaultAddr
           $ forever (acceptR2 >>= pnetnd cmd nodeID)
       )
   trace (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
@@ -77,10 +77,10 @@ pnetcd ::
     Members (TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) r,
     Member (Sockets (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString))) s) r,
     Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
-    Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake))))) r,
+    Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake))))) r,
     Member (InputWithEOF (RoutedFrom (Maybe (RouteTo ByteString)))) r,
     Member (InputWithEOF (RouteTo ByteString)) r,
-    Member (Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) r,
+    Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r,
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member Async r,
@@ -93,4 +93,5 @@ pnetcd ::
 pnetcd cmd s = handle \case
   ListNodes -> listNodes
   (ConnectNode transport maybeNodeID) -> connectNode cmd s transport maybeNodeID
-  Route sender -> routeClient s sender
+  Route (Just sender) -> routeClient s sender
+  _ -> _

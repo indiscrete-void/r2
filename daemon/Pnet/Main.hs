@@ -35,7 +35,7 @@ main =
       runUnserialized'''' = serializeOutput . deserializeInput
       runUnserialized''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RouteTo (Maybe (RouteTo (Maybe ByteString)))) ': Output (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) ': '[]) r
       runUnserialized''''' = serializeOutput . deserializeInput
-      runUnserialized'''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) ': Output (RouteTo (Maybe (RouteTo (Maybe NodeHandshake)))) ': '[]) r
+      runUnserialized'''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) ': Output (RouteTo (Maybe (RouteTo (Maybe Handshake)))) ': '[]) r
       runUnserialized'''''' = serializeOutput . deserializeInput
       runUnserialized''''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe (RouteTo ByteString))) ': Output (RouteTo (Maybe (RoutedFrom ByteString))) ': '[]) r
       runUnserialized''''''' = serializeOutput . deserializeInput
@@ -48,7 +48,7 @@ main =
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))))) (RouteTo (Maybe (RouteTo (Maybe (RouteTo (Maybe ByteString))))))) (runTransport runUnserialized''')
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) (RouteTo (Maybe (RouteTo (Maybe ByteString))))) (runTransport runUnserialized'''')
           . runScopedBundle @(TransportEffects (RouteTo (Maybe (RouteTo (Maybe ByteString)))) (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))) (runTransport runUnserialized''''')
-          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) (RouteTo (Maybe (RouteTo (Maybe NodeHandshake))))) (runTransport runUnserialized'''''')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) (RouteTo (Maybe (RouteTo (Maybe Handshake))))) (runTransport runUnserialized'''''')
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString)))) (runTransport runUnserialized''''''')
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize

@@ -22,7 +22,7 @@ pnetd ::
     Member (Sockets (RouteTo (Maybe (RouteTo (Maybe ByteString)))) (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) s) r,
     Member (Sockets (RoutedFrom (Maybe (RoutedFrom Connection))) (RouteTo (Maybe (RouteTo Connection))) s) r,
     Member (Sockets (RoutedFrom (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))))) (RouteTo (Maybe (RouteTo (Maybe (RouteTo (Maybe ByteString)))))) s) r,
-    Member (Sockets (RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) (RouteTo (Maybe (RouteTo (Maybe NodeHandshake)))) s) r,
+    Member (Sockets (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) (RouteTo (Maybe (RouteTo (Maybe Handshake)))) s) r,
     Member (Sockets (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString))) s) r,
     Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
     Member (AtomicState (State s)) r,
@@ -40,6 +40,6 @@ pnetd cmd = foreverAcceptAsync \s ->
     . socket @(RoutedFrom (Maybe (RoutedFrom Connection))) @(RouteTo (Maybe (RouteTo Connection))) s
     . socket @(RoutedFrom (Maybe (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))))) @(RouteTo (Maybe (RouteTo (Maybe (RouteTo (Maybe ByteString)))))) s
     . socket @(RouteTo ByteString) @(RoutedFrom ByteString) s
-    . socket @(RoutedFrom (Maybe (RoutedFrom (Maybe NodeHandshake)))) @(RouteTo (Maybe (RouteTo (Maybe NodeHandshake)))) s
+    . socket @(RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) @(RouteTo (Maybe (RouteTo (Maybe Handshake)))) s
     . socket @(RoutedFrom (Maybe (RouteTo ByteString))) @(RouteTo (Maybe (RoutedFrom ByteString))) s
     $ pnetcd cmd s

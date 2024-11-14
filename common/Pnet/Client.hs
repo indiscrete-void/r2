@@ -35,17 +35,17 @@ streamTransport (Process cmd) = execIO (ioShell cmd) streamIO
 connectNode :: (Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r, Member Async r, Member (Output Handshake) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member (Scoped CreateProcess Process) r) => Transport -> Maybe Address -> Sem r ()
 connectNode transport maybeAddress = output (ConnectNode transport maybeAddress) >> streamTransport transport
 
-tunnelTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r) => Address -> Address -> Sem r ()
+tunnelTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe Handshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r) => Address -> Address -> Sem r ()
 tunnelTransport self address = do
-  output (Route self)
+  output (Route $ Just self)
   connectR2 address
-  runR2Output @NodeHandshake address (output NodeTunnel)
+  runR2Output @Handshake address (output TunnelProcess)
   sequenceConcurrently_
     [ runR2Input @ByteString address inputToOutput >> close,
       runR2Output @ByteString address inputToOutput >> runR2Close @ByteString address close
     ]
 
-tunnel :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo (Maybe NodeHandshake))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Close r, Member Async r) => Address -> Address -> Transport -> Sem r ()
+tunnel :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo (Maybe Handshake))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Close r, Member Async r) => Address -> Address -> Transport -> Sem r ()
 tunnel self address Stdio = tunnelTransport self address
 tunnel self address (Process cmd) = execIO (ioShell cmd) $ tunnelTransport self address
 
@@ -53,7 +53,7 @@ pnet ::
   ( Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r,
     Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
     Member (Output (RouteTo Connection)) r,
-    Member (Output (RouteTo (Maybe NodeHandshake))) r,
+    Member (Output (RouteTo (Maybe Handshake))) r,
     Member (InputWithEOF Response) r,
     Member (Output Handshake) r,
     Member (Scoped CreateProcess Process) r,
