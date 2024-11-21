@@ -114,7 +114,9 @@ instance Uniform Word256 where
     pure $ Word256 l r
 
 instance Show Address where
-  show (Addr addr) = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
+  show (Addr addr)
+    | addr == unAddr defaultAddr = "<default>"
+    | otherwise = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
 
 instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
