@@ -53,7 +53,6 @@ connectNode cmd s transport maybeNodeID = traceTagged "connection" do
           . runR2 @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) defaultAddr
           . runR2 @(RoutedFrom (Maybe Handshake)) @(RouteTo (Maybe Handshake)) defaultAddr
           . runR2Input @(RouteTo ByteString) defaultAddr
-          . runR2Input @(RoutedFrom (Maybe Handshake)) defaultAddr
           $ forever (acceptR2 >>= pnetnd cmd nodeID)
       )
   trace (Text.printf "%s disconnected from `%s`" nodeIDStr (show transport))
