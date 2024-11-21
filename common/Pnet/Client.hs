@@ -1,6 +1,8 @@
 module Pnet.Client (Command (..), listNodes, connectNode, pnet) where
 
+import Control.Monad
 import Data.ByteString (ByteString)
+import Data.Maybe
 import Pnet
 import Pnet.Routing
 import Polysemy
@@ -12,12 +14,13 @@ import Polysemy.Process
 import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
+import Polysemy.Wait
 import System.Process.Extra
 
 data Command
   = Ls
   | Connect !Transport !(Maybe Address)
-  | Tunnel !Address !Transport
+  | Tunnel !Transport !(Maybe Address)
 
 listNodes :: (Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r) => Sem r ()
 listNodes = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
@@ -28,26 +31,35 @@ streamIO = async_ nodeToIO >> ioToNode
     ioToNode = handle $ output . RoutedFrom defaultAddr
     nodeToIO = handle $ r2Sem (const $ output . routedFromData) defaultAddr
 
-streamTransport :: (Member Async r, Members (TransportEffects ByteString ByteString) r, Member (InputWithEOF (RouteTo ByteString)) r, Member (Output (RoutedFrom ByteString)) r, Member Trace r, Member (Scoped CreateProcess Process) r) => Transport -> Sem r ()
-streamTransport Stdio = streamIO
-streamTransport (Process cmd) = execIO (ioShell cmd) streamIO
+streamIOWithEOF :: (Member Async r, Members (TransportEffects ByteString ByteString) r, Member (InputWithEOF (RouteTo (Maybe ByteString))) r, Member (Output (RoutedFrom (Maybe ByteString))) r, Member Trace r) => Sem r ()
+streamIOWithEOF = async_ nodeToIO >> ioToNode
+  where
+    ioToNode = do
+      i <- input
+      output $ RoutedFrom defaultAddr i
+      when (isJust i) ioToNode
+    nodeToIO = handle $ r2Sem (const $ maybe close output . routedFromData) defaultAddr
+
+runTransport :: (Members (TransportEffects ByteString ByteString) r, Member (Scoped CreateProcess Process) r) => Transport -> InterpretersFor (TransportEffects ByteString ByteString) r
+runTransport Stdio = subsume_
+runTransport (Process cmd) = execIO (ioShell cmd) . raise3Under @Wait
 
 connectNode :: (Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r, Member Async r, Member (Output Handshake) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member (Scoped CreateProcess Process) r) => Transport -> Maybe Address -> Sem r ()
-connectNode transport maybeAddress = output (ConnectNode transport maybeAddress) >> streamTransport transport
+connectNode transport maybeAddress = output (ConnectNode transport maybeAddress) >> runTransport transport streamIO
 
-tunnelTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe Handshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r) => Address -> Address -> Sem r ()
-tunnelTransport self address = do
+transportToR2 :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Async r, Member Close r) => Address -> Transport -> Sem r ()
+transportToR2 address Stdio = ioToR2 address
+transportToR2 address (Process cmd) = execIO (ioShell cmd) $ ioToR2 address
+
+r2ProcToTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe Handshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r, Member (Scoped CreateProcess Process) r) => Address -> Address -> Transport -> Sem r ()
+r2ProcToTransport self address transport = do
   output (Route $ Just self)
   connectR2 address
   runR2Output @Handshake address (output TunnelProcess)
-  sequenceConcurrently_
-    [ runR2Input @ByteString address inputToOutput >> close,
-      runR2Output @ByteString address inputToOutput >> runR2Close @ByteString address close
-    ]
+  transportToR2 address transport
 
-tunnel :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member ByteInputWithEOF r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo (Maybe Handshake))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member ByteOutput r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Close r, Member Async r) => Address -> Address -> Transport -> Sem r ()
-tunnel self address Stdio = tunnelTransport self address
-tunnel self address (Process cmd) = execIO (ioShell cmd) $ tunnelTransport self address
+procToTransport :: (Member (Input (Maybe ByteString)) r, Member (Output Handshake) r, Member (Output ByteString) r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Async r, Member Close r, Member (Input (Maybe (RouteTo (Maybe ByteString)))) r, Member (Output (RoutedFrom (Maybe ByteString))) r) => Transport -> Sem r ()
+procToTransport transport = output TunnelProcess >> runTransport transport streamIOWithEOF
 
 pnet ::
   ( Members (TransportEffects (RouteTo ByteString) (RoutedFrom ByteString)) r,
@@ -56,6 +68,8 @@ pnet ::
     Member (Output (RouteTo (Maybe Handshake))) r,
     Member (InputWithEOF Response) r,
     Member (Output Handshake) r,
+    Member (InputWithEOF (RouteTo (Maybe ByteString))) r,
+    Member (Output (RoutedFrom (Maybe ByteString))) r,
     Member (Scoped CreateProcess Process) r,
     Member ByteInputWithEOF r,
     Member ByteOutput r,
@@ -68,4 +82,5 @@ pnet ::
   Sem r ()
 pnet _ Ls = listNodes
 pnet _ (Connect transport maybeAddress) = connectNode transport maybeAddress
-pnet self (Tunnel address transport) = tunnel self address transport
+pnet _ (Tunnel transport Nothing) = procToTransport transport
+pnet self (Tunnel transport (Just address)) = r2ProcToTransport self address transport

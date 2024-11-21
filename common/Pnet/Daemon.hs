@@ -25,6 +25,7 @@ pnetd ::
     Member (Sockets (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) (RouteTo (Maybe (RouteTo (Maybe Handshake)))) s) r,
     Member (Sockets (RoutedFrom (Maybe (RouteTo ByteString))) (RouteTo (Maybe (RoutedFrom ByteString))) s) r,
     Member (Sockets (RouteTo ByteString) (RoutedFrom ByteString) s) r,
+    Member (Sockets (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString)) s) r,
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member Trace r,
@@ -42,4 +43,5 @@ pnetd cmd = foreverAcceptAsync \s ->
     . socket @(RouteTo ByteString) @(RoutedFrom ByteString) s
     . socket @(RoutedFrom (Maybe (RoutedFrom (Maybe Handshake)))) @(RouteTo (Maybe (RouteTo (Maybe Handshake)))) s
     . socket @(RoutedFrom (Maybe (RouteTo ByteString))) @(RouteTo (Maybe (RoutedFrom ByteString))) s
+    . socket @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) s
     $ pnetcd cmd s

@@ -40,7 +40,7 @@ connectOpts :: Parser Command
 connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
 
 tunnelOpts :: Parser Command
-tunnelOpts = Tunnel <$> argument address (metavar "ID") <*> argument transport (metavar "TRANSPORT")
+tunnelOpts = Tunnel <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
 
 transport :: ReadM Transport
 transport = do

@@ -82,6 +82,8 @@ pnetcd ::
     Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r,
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
+    Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r,
+    Member (Output (RouteTo (Maybe ByteString))) r,
     Member Async r,
     Member Trace r,
     Eq s
@@ -93,4 +95,7 @@ pnetcd cmd s = handle \case
   ListNodes -> listNodes
   (ConnectNode transport maybeNodeID) -> connectNode cmd s transport maybeNodeID
   Route (Just sender) -> routeClient s sender
-  _ -> _
+  Route Nothing -> _
+  TunnelProcess -> traceTagged ("tunnel " <> show defaultAddr) do
+    trace ("tunneling for " ++ show defaultAddr)
+    procToR2 cmd defaultAddr

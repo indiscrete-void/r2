@@ -1,4 +1,4 @@
-module Pnet.Daemon.Node (State, initialState, stateAddNode, stateDeleteNode, route, tunnelProcess, pnetnd) where
+module Pnet.Daemon.Node (State, initialState, stateAddNode, stateDeleteNode, route, procToR2, pnetnd) where
 
 import Data.ByteString
 import Data.List qualified as List
@@ -50,12 +50,15 @@ route f sender = traceTagged "route" $ raise @Trace do
       sendTo addr = runAddress f addr . output
   handle (r2Sem sendTo sender)
 
-tunnelProcess :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member Trace r, Member (Output (RouteTo (Maybe Handshake))) r, Member (Output (RouteTo Connection)) r, Member (Scoped CreateProcess Process) r, Member Async r) => Address -> String -> Sem r ()
-tunnelProcess addr cmd = traceTagged ("tunnel " <> show addr) do
+procToR2 :: (Member (Scoped CreateProcess Process) r, Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member (Output (RouteTo (Maybe ByteString))) r, Member Trace r, Member Async r) => String -> Address -> Sem r ()
+procToR2 cmd = execIO (ioShell cmd) . ioToR2
+
+tunnelProcess :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member (Scoped CreateProcess Process) r, Member (Output (RouteTo (Maybe Handshake))) r, Member (Output (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member Trace r, Member Async r) => String -> Address -> Sem r ()
+tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) do
   trace ("tunneling for " ++ show addr)
   connectR2 addr
   runR2Output addr $ output (Route Nothing)
-  execIO (ioShell cmd) $ ioToR2 addr
+  procToR2 cmd addr
 
 pnetnd ::
   ( Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r,
@@ -79,5 +82,5 @@ pnetnd cmd peer addr = traceTagged "pnetnd" $ raise @Trace do
   handshake <- runR2Input @Handshake addr $ inputOrFail @Handshake
   case handshake of
     Route _ -> route socketOutput peer
-    TunnelProcess -> tunnelProcess addr cmd
+    TunnelProcess -> tunnelProcess cmd addr
     _ -> _
