@@ -15,7 +15,7 @@ common default
         ScopedTypeVariables TypeApplications TypeOperators TypeFamilies
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
         DeriveGeneric DerivingStrategies EmptyDataDeriving OverloadedStrings
-        FlexibleInstances
+        FlexibleInstances QuantifiedConstraints IncoherentInstances
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
@@ -36,8 +36,6 @@ library
         Polysemy.Socket.Accept,
         Pnet,
         Pnet.Routing,
-        Pnet.Daemon.Node,
-        Pnet.Daemon.Server,
         Pnet.Daemon,
         Pnet.Client
 

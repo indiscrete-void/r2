@@ -118,10 +118,6 @@ instance Show Address where
     | addr == unAddr defaultAddr = "<default>"
     | otherwise = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
 
-instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
-  put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RouteTo get (get >>= getByteString)
-
 instance (Serialize msg) => Serialize (RouteTo msg) where
   put (RouteTo addr msg) = put (RouteTo addr (encode msg))
   get = do
@@ -129,9 +125,9 @@ instance (Serialize msg) => Serialize (RouteTo msg) where
     _ <- get @Int
     RouteTo addr <$> get
 
-instance {-# OVERLAPPING #-} Serialize (RoutedFrom ByteString) where
-  put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RoutedFrom get (get >>= getByteString)
+instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
+  put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
+  get = liftM2 RouteTo get (get >>= getByteString)
 
 instance (Serialize msg) => Serialize (RoutedFrom msg) where
   put (RoutedFrom addr msg) = put (RoutedFrom addr (encode msg))
@@ -139,3 +135,7 @@ instance (Serialize msg) => Serialize (RoutedFrom msg) where
     addr <- get
     _ <- get @Int
     RoutedFrom addr <$> get
+
+instance {-# OVERLAPPING #-} Serialize (RoutedFrom ByteString) where
+  put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
+  get = liftM2 RoutedFrom get (get >>= getByteString)

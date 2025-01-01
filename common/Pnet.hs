@@ -1,5 +1,6 @@
 module Pnet
   ( Handshake (..),
+    Self (..),
     Response (..),
     pnetSocketAddr,
     pnetSocket,
@@ -25,12 +26,15 @@ import System.Posix
 data Transport
   = Stdio
   | Process String
+  deriving stock (Eq, Show, Generic)
+
+newtype Self = Self {unSelf :: Address}
   deriving stock (Show, Generic)
 
 data Handshake where
-  ListNodes :: Handshake
   ConnectNode :: Transport -> Maybe Address -> Handshake
-  Route :: Maybe Address -> Handshake
+  ListNodes :: Handshake
+  Route :: Handshake
   TunnelProcess :: Handshake
   deriving stock (Show, Generic)
 
@@ -75,6 +79,8 @@ withPnetSocket :: (Socket -> IO a) -> IO a
 withPnetSocket = bracket pnetSocket close
 
 instance Serialize Transport
+
+instance Serialize Self
 
 instance Serialize Handshake
 

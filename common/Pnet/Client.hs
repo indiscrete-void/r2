@@ -51,9 +51,9 @@ transportToR2 :: (Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Membe
 transportToR2 address Stdio = ioToR2 address
 transportToR2 address (Process cmd) = execIO (ioShell cmd) $ ioToR2 address
 
-r2ProcToTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe Handshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r, Member (Scoped CreateProcess Process) r) => Address -> Address -> Transport -> Sem r ()
-r2ProcToTransport self address transport = do
-  output (Route $ Just self)
+r2ProcToTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) (RouteTo (Maybe ByteString))) r, Member (Output (RouteTo Connection)) r, Member (Output Handshake) r, Member (Output (RouteTo (Maybe Handshake))) r, Members (TransportEffects ByteString ByteString) r, Member Trace r, Member Async r, Member (Scoped CreateProcess Process) r) => Address -> Transport -> Sem r ()
+r2ProcToTransport address transport = do
+  output Route
   connectR2 address
   runR2Output @Handshake address (output TunnelProcess)
   transportToR2 address transport
@@ -71,6 +71,7 @@ pnet ::
     Member (InputWithEOF (RouteTo (Maybe ByteString))) r,
     Member (Output (RoutedFrom (Maybe ByteString))) r,
     Member (Scoped CreateProcess Process) r,
+    Member (Output Self) r,
     Member ByteInputWithEOF r,
     Member ByteOutput r,
     Member Fail r,
@@ -80,7 +81,9 @@ pnet ::
   Address ->
   Command ->
   Sem r ()
-pnet _ Ls = listNodes
-pnet _ (Connect transport maybeAddress) = connectNode transport maybeAddress
-pnet _ (Tunnel transport Nothing) = procToTransport transport
-pnet self (Tunnel transport (Just address)) = r2ProcToTransport self address transport
+pnet me cmd = output (Self me) >> go cmd
+  where
+    go Ls = listNodes
+    go (Connect transport maybeAddress) = connectNode transport maybeAddress
+    go (Tunnel transport Nothing) = procToTransport transport
+    go (Tunnel transport (Just address)) = r2ProcToTransport address transport
