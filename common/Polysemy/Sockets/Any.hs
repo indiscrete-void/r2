@@ -1,9 +1,9 @@
 module Polysemy.Sockets.Any (SocketAny, bundleSocketAnyEffects, SocketsAny, socketAny, socketOutputAny) where
 
 import Polysemy
+import Polysemy.Any
 import Polysemy.Bundle
 import Polysemy.Scoped
-import Polysemy.Serialize.Any
 import Polysemy.Transport
 
 type SocketAny c = Bundle (Any c)
