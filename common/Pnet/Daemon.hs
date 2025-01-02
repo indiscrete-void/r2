@@ -3,7 +3,6 @@ module Pnet.Daemon where
 import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Data.List qualified as List
-import Data.Maybe
 import Pnet
 import Pnet.Routing
 import Polysemy
@@ -32,7 +31,7 @@ data NodeData s = NodeData
   }
   deriving stock (Eq, Show)
 
-data NodeTransport s = Sock s | Router Transport (NodeData s)
+data NodeTransport s = Sock s | Router Transport Address
   deriving stock (Eq, Show)
 
 type State s = [NodeData s]
@@ -46,8 +45,8 @@ stateAddNode = atomicModify' . (:)
 stateDeleteNode :: (Member (AtomicState (State s)) r, Eq s) => NodeData s -> Sem r ()
 stateDeleteNode = atomicModify' . List.delete
 
-stateLookupNode :: (Member (AtomicState (State s)) r) => Address -> Sem r (NodeData s)
-stateLookupNode addr = fromJust . List.find ((== addr) . nodeDataAddr) <$> atomicGet
+stateLookupNode :: (Member (AtomicState (State s)) r) => Address -> Sem r (Maybe (NodeData s))
+stateLookupNode addr = List.find ((== addr) . nodeDataAddr) <$> atomicGet
 
 procToR2 :: (Member (Scoped CreateProcess Process) r, Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member (Output (RouteTo (Maybe ByteString))) r, Member Trace r, Member Async r) => String -> Address -> Sem r ()
 procToR2 cmd = execIO (ioShell cmd) . ioToR2
@@ -81,11 +80,11 @@ connectNode ::
     forall ox. (c ox) => c (Maybe ox)
   ) =>
   String ->
-  NodeData s ->
+  Address ->
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode cmd nodeData transport maybeNewNodeID =
+connectNode cmd router transport maybeNewNodeID =
   traceTagged "connection" $
     trace . show @(Either String ())
       =<< runFail
@@ -95,13 +94,15 @@ connectNode cmd nodeData transport maybeNewNodeID =
             . runR2Input @(RouteTo ByteString) defaultAddr
             . runR2Input @Handshake defaultAddr
             . runR2Output @Handshake defaultAddr
-            $ forever (acceptR2 >>= pnetnd cmd . NodeData (Router transport nodeData))
+            $ forever (acceptR2 >>= pnetnd cmd . NodeData (Router transport router))
         )
 
 runNodeOutput ::
   forall c s o r.
-  ( Member (SocketsAny c s) r,
+  ( Member (AtomicState (State s)) r,
+    Member (SocketsAny c s) r,
     Member Trace r,
+    Member Fail r,
     Show o,
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
@@ -111,10 +112,12 @@ runNodeOutput ::
   InterpreterFor (Output o) r
 runNodeOutput (NodeData transport addr) = case transport of
   Sock s -> socketAny s . outputToAny . insertAt @1 @(Any c)
-  Router _ routerData ->
+  Router _ router -> \m -> do
+    (Just routerData) <- stateLookupNode router
     runNodeOutput routerData
       . runR2Output @o addr
       . raiseUnder @(Output (RouteTo (Maybe o)))
+      $ m
 
 route ::
   forall c s r.
@@ -124,7 +127,8 @@ route ::
     c (RoutedFrom ByteString),
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
-    Member Trace r
+    Member Trace r,
+    Member Fail r
   ) =>
   Address ->
   Sem r ()
@@ -132,7 +136,7 @@ route sender = traceTagged "route" $ raise @Trace do
   trace ("routing for " ++ show sender)
   let sendTo :: Address -> RoutedFrom ByteString -> Sem r ()
       sendTo addr msg = do
-        nodeData <- stateLookupNode addr
+        (Just nodeData) <- stateLookupNode addr
         runNodeOutput nodeData $ output msg
   handle (r2Sem sendTo sender)
 
@@ -172,7 +176,7 @@ pnetnd cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" $ raise @Trace do
   stateAddNode nodeData
   handshake <- inputOrFail @Handshake
   case handshake of
-    (ConnectNode transport maybeNodeID) -> connectNode cmd nodeData transport maybeNodeID
+    (ConnectNode transport maybeNodeID) -> connectNode cmd addr transport maybeNodeID
     ListNodes -> listNodes
     Route -> route addr
     TunnelProcess -> tunnelProcess cmd addr
