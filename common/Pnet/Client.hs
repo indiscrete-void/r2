@@ -56,7 +56,7 @@ r2ProcToTransport :: (Members (TransportEffects (RoutedFrom (Maybe ByteString)) 
 r2ProcToTransport address transport = do
   output Route
   connectR2 address
-  runR2Output @Handshake address (output TunnelProcess)
+  runR2Output address (output TunnelProcess)
   transportToR2 address transport
 
 procToTransport :: (Member (Input (Maybe ByteString)) r, Member (Output Handshake) r, Member (Output ByteString) r, Member (Scoped CreateProcess Process) r, Member Trace r, Member Async r, Member Close r, Member (Input (Maybe (RouteTo (Maybe ByteString)))) r, Member (Output (RoutedFrom (Maybe ByteString))) r) => Transport -> Sem r ()
