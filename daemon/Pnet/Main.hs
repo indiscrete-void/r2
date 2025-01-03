@@ -81,8 +81,8 @@ main =
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
    in withPnetSocket \s -> do
-        (Options maybeSocketPath daemon cmd) <- parse
+        (Options maybeSocketPath daemon self cmd) <- parse
         addr <- pnetSocketAddr maybeSocketPath
         bind s addr
         listen s 5
-        forkIf daemon . run s $ pnetd cmd
+        forkIf daemon . run s $ pnetd self cmd

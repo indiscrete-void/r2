@@ -210,12 +210,14 @@ pnetcd ::
     c (RoutedFrom ByteString),
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
-    Member (InputWithEOF Handshake) r
+    Member (InputWithEOF Handshake) r,
+    Member (Output Self) r
   ) =>
+  Address ->
   String ->
   s ->
   Sem r ()
-pnetcd cmd s = unSelf <$> inputOrFail @Self >>= pnetnd cmd . NodeData (Sock s)
+pnetcd self cmd s = output (Self self) >> unSelf <$> inputOrFail @Self >>= pnetnd cmd . NodeData (Sock s)
 
 pnetd ::
   ( Member (Accept s) r,
@@ -243,9 +245,10 @@ pnetd ::
     forall ox. (c ox) => c (Maybe ox),
     Member (Sockets (RoutedFrom (Maybe Handshake)) (RouteTo (Maybe Handshake)) s) r
   ) =>
+  Address ->
   String ->
   Sem r ()
-pnetd cmd = foreverAcceptAsync \s ->
+pnetd self cmd = foreverAcceptAsync \s ->
   socket @Handshake @Response s
     . socket @(RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) @(RouteTo (Maybe (RouteTo (Maybe ByteString)))) s
     . socket @(RouteTo (Maybe (RouteTo (Maybe ByteString)))) @(RoutedFrom (Maybe (RoutedFrom (Maybe ByteString)))) s
@@ -258,4 +261,4 @@ pnetd cmd = foreverAcceptAsync \s ->
     . socket @(RoutedFrom (Maybe Handshake)) @(RouteTo (Maybe Handshake)) s
     . socket @(RoutedFrom Connection) @(RouteTo Connection) s
     . socket @Self @Self s
-    $ pnetcd cmd s
+    $ pnetcd self cmd s

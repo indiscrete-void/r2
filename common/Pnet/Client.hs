@@ -16,6 +16,7 @@ import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Wait
 import System.Process.Extra
+import Text.Printf qualified as Text
 
 data Command
   = Ls
@@ -76,12 +77,17 @@ pnet ::
     Member ByteOutput r,
     Member Fail r,
     Member Trace r,
-    Member Async r
+    Member Async r,
+    Member (InputWithEOF Self) r
   ) =>
   Address ->
   Command ->
   Sem r ()
-pnet me cmd = output (Self me) >> go cmd
+pnet me cmd = do
+  output (Self me)
+  server <- unSelf <$> inputOrFail @Self
+  trace $ Text.printf "communicating with %s" (show server)
+  go cmd
   where
     go Ls = listNodes
     go (Connect transport maybeAddress) = connectNode transport maybeAddress
