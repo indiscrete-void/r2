@@ -174,14 +174,14 @@ pnetnd ::
 pnetnd cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" $ raise @Trace do
   trace (Text.printf "%s connected" $ show nodeData)
   stateAddNode nodeData
-  handshake <- inputOrFail @Handshake
-  case handshake of
-    (ConnectNode transport maybeNodeID) -> connectNode cmd addr transport maybeNodeID
-    ListNodes -> listNodes
-    Route -> route addr
-    TunnelProcess -> tunnelProcess cmd addr
+  handle go
   trace (Text.printf "%s disconnected" $ show nodeData)
   stateDeleteNode nodeData
+  where
+    go (ConnectNode transport maybeNodeID) = connectNode cmd addr transport maybeNodeID
+    go ListNodes = listNodes
+    go Route = route addr
+    go TunnelProcess = tunnelProcess cmd addr
 
 pnetcd ::
   ( Member Trace r,
