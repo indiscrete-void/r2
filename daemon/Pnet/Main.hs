@@ -48,6 +48,8 @@ main =
       runUnserialized'''''''''' = serializeOutput . deserializeInput
       runUnserialized''''''''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom Connection) ': Output (RouteTo Connection) ': '[]) r
       runUnserialized''''''''''' = serializeOutput . deserializeInput
+      runUnserialized'''''''''''' :: (Member Trace r, Member Fail r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Trace r) => InterpretersFor (InputWithEOF (RoutedFrom (Maybe Self)) ': Output (RouteTo (Maybe Self)) ': '[]) r
+      runUnserialized'''''''''''' = serializeOutput . deserializeInput
       runUnserializedAny :: (Member Trace r, Member Decoder r, Member ByteInputWithEOF r, Member ByteOutput r, Member Fail r) => InterpretersFor (InputAny ShowAndSerialize ': OutputAny ShowAndSerialize ': '[]) r
       runUnserializedAny = serializeAnyOutput . deserializeAnyInput
       runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
@@ -66,6 +68,7 @@ main =
           . runScopedBundle @(TransportEffects Self Self) (runTransport runUnserialized''''''''')
           . runScopedBundle @(TransportEffects (RoutedFrom (Maybe Handshake)) (RouteTo (Maybe Handshake))) (runTransport runUnserialized'''''''''')
           . runScopedBundle @(TransportEffects (RoutedFrom Connection) (RouteTo Connection)) (runTransport runUnserialized''''''''''')
+          . runScopedBundle @(TransportEffects (RoutedFrom (Maybe Self)) (RouteTo (Maybe Self))) (runTransport runUnserialized'''''''''''')
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =

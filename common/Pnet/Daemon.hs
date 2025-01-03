@@ -49,6 +49,12 @@ stateDeleteNode = atomicModify' . List.delete
 stateLookupNode :: (Member (AtomicState (State s)) r) => Address -> Sem r (Maybe (NodeData s))
 stateLookupNode addr = List.find ((== addr) . nodeDataAddr) <$> atomicGet
 
+stateReflectNode :: (Show s, Eq s, Member (AtomicState (State s)) r, Member Trace r, Member Resource r) => NodeData s -> Sem r c -> Sem r c
+stateReflectNode nodeData = bracket_ addNode delNode
+  where
+    addNode = trace (Text.printf "storing %s" $ show nodeData) >> stateAddNode nodeData
+    delNode = trace (Text.printf "forgetting %s" $ show nodeData) >> stateDeleteNode nodeData
+
 procToR2 :: (Member (Scoped CreateProcess Process) r, Member (InputWithEOF (RoutedFrom (Maybe ByteString))) r, Member (Output (RouteTo (Maybe ByteString))) r, Member Trace r, Member Async r) => String -> Address -> Sem r ()
 procToR2 cmd = execIO (ioShell cmd) . ioToR2
 
@@ -79,15 +85,25 @@ connectNode ::
     c (RoutedFrom ByteString),
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
-    Member Resource r
+    Member Resource r,
+    Member Fail r,
+    Member (InputWithEOF (RoutedFrom (Maybe Self))) r,
+    Member (Output (RouteTo (Maybe Self))) r
   ) =>
+  Address ->
   String ->
   Address ->
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode cmd router transport maybeNewNodeID =
-  traceTagged "connection" $
+connectNode self cmd router transport maybeNewNodeID = traceTagged "connection" do
+  addr <- runR2 @Self @Self defaultAddr do
+    output (Self self)
+    unSelf <$> inputOrFail
+  whenJust maybeNewNodeID \knownNodeAddr ->
+    when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
+  let nodeData = NodeData (Router transport router) addr
+  stateReflectNode nodeData $
     trace . show @(Either String ())
       =<< runFail
         ( runR2 @(RoutedFrom Connection) @(RouteTo Connection) defaultAddr
@@ -96,7 +112,7 @@ connectNode cmd router transport maybeNewNodeID =
             . runR2Input @(RouteTo ByteString) defaultAddr
             . runR2Input @Handshake defaultAddr
             . runR2Output @Handshake defaultAddr
-            $ forever (acceptR2 >>= pnetnd cmd . NodeData (Router transport router))
+            $ forever (acceptR2 >>= pnetnd self cmd . NodeData (Router transport addr))
         )
 
 runNodeOutput ::
@@ -147,7 +163,6 @@ pnetnd ::
     Member (AtomicState (State s)) r,
     Member Fail r,
     Eq s,
-    Show (NodeData s),
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))) r,
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake))))) r,
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom Connection)))) r,
@@ -169,16 +184,17 @@ pnetnd ::
     Member (InputWithEOF Handshake) r,
     Member (Output (RouteTo (Maybe ByteString))) r,
     Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r,
-    Member Resource r
+    Member Resource r,
+    Member (InputWithEOF (RoutedFrom (Maybe Self))) r,
+    Member (Output (RouteTo (Maybe Self))) r
   ) =>
+  Address ->
   String ->
   NodeData s ->
   Sem r ()
-pnetnd cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" . bracket_ addNode delNode $ handle go
+pnetnd self cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" . stateReflectNode nodeData $ handle go
   where
-    addNode = trace (Text.printf "%s connected" $ show nodeData) >> stateAddNode nodeData
-    delNode = trace (Text.printf "%s disconnected" $ show nodeData) >> stateDeleteNode nodeData
-    go (ConnectNode transport maybeNodeID) = connectNode cmd addr transport maybeNodeID
+    go (ConnectNode transport maybeNodeID) = connectNode self cmd addr transport maybeNodeID
     go ListNodes = listNodes
     go Route = route addr
     go TunnelProcess = tunnelProcess cmd addr
@@ -188,7 +204,6 @@ pnetcd ::
     Member (AtomicState (State s)) r,
     Member Fail r,
     Eq s,
-    Show (NodeData s),
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe ByteString))))) r,
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom (Maybe Handshake))))) r,
     Member (InputWithEOF (RoutedFrom (Maybe (RoutedFrom Connection)))) r,
@@ -212,13 +227,15 @@ pnetcd ::
     forall ox. (c ox) => c (Maybe ox),
     Member (InputWithEOF Handshake) r,
     Member (Output Self) r,
-    Member Resource r
+    Member Resource r,
+    Member (InputWithEOF (RoutedFrom (Maybe Self))) r,
+    Member (Output (RouteTo (Maybe Self))) r
   ) =>
   Address ->
   String ->
   s ->
   Sem r ()
-pnetcd self cmd s = output (Self self) >> unSelf <$> inputOrFail @Self >>= pnetnd cmd . NodeData (Sock s)
+pnetcd self cmd s = output (Self self) >> unSelf <$> inputOrFail @Self >>= pnetnd self cmd . NodeData (Sock s)
 
 pnetd ::
   ( Member (Accept s) r,
@@ -245,7 +262,8 @@ pnetd ::
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
     Member (Sockets (RoutedFrom (Maybe Handshake)) (RouteTo (Maybe Handshake)) s) r,
-    Member Resource r
+    Member Resource r,
+    Member (Sockets (RoutedFrom (Maybe Self)) (RouteTo (Maybe Self)) s) r
   ) =>
   Address ->
   String ->
@@ -261,6 +279,7 @@ pnetd self cmd = foreverAcceptAsync \s ->
     . socket @(RoutedFrom (Maybe (RouteTo ByteString))) @(RouteTo (Maybe (RoutedFrom ByteString))) s
     . socket @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) s
     . socket @(RoutedFrom (Maybe Handshake)) @(RouteTo (Maybe Handshake)) s
+    . socket @(RoutedFrom (Maybe Self)) @(RouteTo (Maybe Self)) s
     . socket @(RoutedFrom Connection) @(RouteTo Connection) s
     . socket @Self @Self s
     $ pnetcd self cmd s
