@@ -1,6 +1,5 @@
 import Control.Monad
 import Data.ByteString (ByteString)
-import Data.Serialize
 import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Daemon
@@ -13,6 +12,7 @@ import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
+import Polysemy.Resource
 import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
@@ -71,6 +71,7 @@ main =
       run s =
         runFinal @IO
           . asyncToIOFinal
+          . resourceToIOFinal
           . runDecoder
           . embedToFinal @IO
           . failToEmbed @IO

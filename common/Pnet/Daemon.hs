@@ -13,6 +13,7 @@ import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
+import Polysemy.Resource
 import Polysemy.Scoped
 import Polysemy.Socket.Accept
 import Polysemy.Sockets
@@ -77,7 +78,8 @@ connectNode ::
     Member (SocketsAny c s) r,
     c (RoutedFrom ByteString),
     forall ox. (c ox) => c (RouteTo ox),
-    forall ox. (c ox) => c (Maybe ox)
+    forall ox. (c ox) => c (Maybe ox),
+    Member Resource r
   ) =>
   String ->
   Address ->
@@ -166,18 +168,16 @@ pnetnd ::
     forall ox. (c ox) => c (Maybe ox),
     Member (InputWithEOF Handshake) r,
     Member (Output (RouteTo (Maybe ByteString))) r,
-    Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r
+    Member (Output (RouteTo (Maybe (RouteTo (Maybe Handshake))))) r,
+    Member Resource r
   ) =>
   String ->
   NodeData s ->
   Sem r ()
-pnetnd cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" $ raise @Trace do
-  trace (Text.printf "%s connected" $ show nodeData)
-  stateAddNode nodeData
-  handle go
-  trace (Text.printf "%s disconnected" $ show nodeData)
-  stateDeleteNode nodeData
+pnetnd cmd nodeData@(NodeData _ addr) = traceTagged "pnetnd" . bracket_ addNode delNode $ handle go
   where
+    addNode = trace (Text.printf "%s connected" $ show nodeData) >> stateAddNode nodeData
+    delNode = trace (Text.printf "%s disconnected" $ show nodeData) >> stateDeleteNode nodeData
     go (ConnectNode transport maybeNodeID) = connectNode cmd addr transport maybeNodeID
     go ListNodes = listNodes
     go Route = route addr
@@ -211,7 +211,8 @@ pnetcd ::
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
     Member (InputWithEOF Handshake) r,
-    Member (Output Self) r
+    Member (Output Self) r,
+    Member Resource r
   ) =>
   Address ->
   String ->
@@ -243,7 +244,8 @@ pnetd ::
     c (RoutedFrom ByteString),
     forall ox. (c ox) => c (RouteTo ox),
     forall ox. (c ox) => c (Maybe ox),
-    Member (Sockets (RoutedFrom (Maybe Handshake)) (RouteTo (Maybe Handshake)) s) r
+    Member (Sockets (RoutedFrom (Maybe Handshake)) (RouteTo (Maybe Handshake)) s) r,
+    Member Resource r
   ) =>
   Address ->
   String ->
