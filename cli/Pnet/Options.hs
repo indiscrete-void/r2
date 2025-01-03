@@ -1,13 +1,9 @@
 module Pnet.Options (Options (..), Transport (..), parse) where
 
-import Data.ByteString.Base58
-import Data.ByteString.Base58.Internal
-import Data.ByteString.Char8 qualified as BC
 import Options.Applicative
 import Pnet
 import Pnet.Client
-import Pnet.Routing
-import Transport.Maybe
+import Pnet.Options.Parse
 
 data Options = Options Command (Maybe FilePath)
 
@@ -41,16 +37,3 @@ connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional 
 
 tunnelOpts :: Parser Command
 tunnelOpts = Tunnel <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
-
-transport :: ReadM Transport
-transport = do
-  arg <- str
-  pure
-    if arg == "-"
-      then Stdio
-      else Process arg
-
-address :: ReadM Address
-address = str >>= maybeFail "invalid node ID" . parseNodeID
-  where
-    parseNodeID = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack

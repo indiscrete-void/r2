@@ -35,6 +35,7 @@ library
         Polysemy.Sockets.Any,
         Polysemy.Socket.Accept,
         Pnet,
+        Pnet.Options.Parse,
         Pnet.Routing,
         Pnet.Daemon,
         Pnet.Client
