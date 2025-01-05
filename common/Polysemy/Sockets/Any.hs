@@ -12,7 +12,7 @@ bundleSocketAnyEffects :: forall c r. (Member (SocketAny c) r) => InterpretersFo
 bundleSocketAnyEffects =
   sendBundle @Close @(Any c)
     . sendBundle @(OutputAny c) @(Any c)
-    . sendBundle @(InputAny c) @(Any c)
+    . sendBundle @(InputAnyWithEOF c) @(Any c)
 
 type SocketsAny c s = Scoped s (SocketAny c)
 
@@ -20,4 +20,4 @@ socketAny :: (Member (SocketsAny c s) r) => s -> InterpretersFor (Any c) r
 socketAny s = scoped s . bundleSocketAnyEffects . raise3Under
 
 socketOutputAny :: forall c s r. (Member (SocketsAny c s) r) => s -> InterpreterFor (OutputAny c) r
-socketOutputAny s = socketAny s . raise @(InputAny c) . raiseUnder @Close
+socketOutputAny s = socketAny s . raise @(InputAnyWithEOF c) . raiseUnder @Close
