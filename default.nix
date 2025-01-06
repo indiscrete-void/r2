@@ -6,7 +6,7 @@ pkgs.haskellPackages.developPackage {
   source-overrides = {
     polysemy-transport = fetchGit {
       url = "https://gitlab.com/indiscrete_void/polysemy-transport.git";
-      rev = "1d1c32909fde548a19d84daaf705ab7e8ba4db97";
+      rev = "4907f81809bab6b3ee3559eb4c087cf71a387b89";
     };
 
     polysemy-scoped-process = fetchGit {
