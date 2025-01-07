@@ -109,8 +109,8 @@ connectNode ::
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     cs Self,
     cs (RoutedFrom Connection),
-    cs (RoutedFrom ByteString),
-    cs (RouteTo ByteString),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
     cs Handshake,
     cs Response,
     c (),
@@ -144,8 +144,8 @@ runNodeOutput ::
     Member (SocketsAny cs s) r,
     Member (OutputAny cs) r,
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom ByteString),
-    cs (RouteTo ByteString),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
     Member Trace r,
     Member Fail r,
     cs ~ Show :&: c
@@ -164,21 +164,21 @@ runNodeOutput (NodeData transport addr) = case transport of
 route ::
   forall c s r cs.
   ( Member (AtomicState (State s)) r,
-    Member (InputWithEOF (RouteTo ByteString)) r,
+    Member (InputWithEOF (RouteTo Raw)) r,
     Member (SocketsAny cs s) r,
     Member (OutputAny cs) r,
     Member Trace r,
     Member Fail r,
     cs ~ Show :&: c,
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom ByteString),
-    cs (RouteTo ByteString)
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw)
   ) =>
   Address ->
   Sem r ()
 route sender = traceTagged "route" $ raise @Trace do
   trace ("routing for " ++ show sender)
-  let sendTo :: Address -> RoutedFrom ByteString -> Sem r ()
+  let sendTo :: Address -> RoutedFrom Raw -> Sem r ()
       sendTo addr msg = do
         (Just nodeData) <- stateLookupNode addr
         runNodeOutput nodeData $ outputAny msg
@@ -199,8 +199,8 @@ pnetnd ::
     cs ~ Show :&: c,
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    cs (RoutedFrom ByteString),
-    cs (RouteTo ByteString),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
     cs Handshake,
     cs Response,
     cs Self,
@@ -219,7 +219,7 @@ pnetnd self cmd nodeData@(NodeData _ addr) =
     ListNodes ->
       outputToAny @Response $ listNodes
     Route ->
-      inputToAny @(RouteTo ByteString) $ route addr
+      inputToAny @(RouteTo Raw) $ route addr
     TunnelProcess ->
       ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd addr
 
@@ -238,8 +238,8 @@ pnetcd ::
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     cs (RoutedFrom Connection),
-    cs (RoutedFrom ByteString),
-    cs (RouteTo ByteString),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
     cs Handshake,
     cs Response,
     cs Self,
@@ -272,8 +272,8 @@ pnetd ::
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     cs (RoutedFrom Connection),
-    cs (RouteTo ByteString),
-    cs (RoutedFrom ByteString),
+    cs (RouteTo Raw),
+    cs (RoutedFrom Raw),
     cs Handshake,
     cs Response,
     cs Self,

@@ -31,8 +31,8 @@ listNodes = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= tr
 streamIO ::
   ( Member Async r,
     Members (TransportEffects ByteString ByteString) r,
-    Member (InputWithEOF (RouteTo ByteString)) r,
-    Member (Output (RoutedFrom ByteString)) r,
+    Member (InputWithEOF (RouteTo Raw)) r,
+    Member (Output (RoutedFrom Raw)) r,
     Member Trace r
   ) =>
   Sem r ()
@@ -70,8 +70,8 @@ connectNode ::
   ( Member Async r,
     Members (Any cs) r,
     cs Handshake,
-    cs (RouteTo ByteString),
-    cs (RoutedFrom ByteString),
+    cs (RouteTo Raw),
+    cs (RoutedFrom Raw),
     Members (TransportEffects ByteString ByteString) r,
     Member Trace r,
     Member (Scoped CreateProcess Process) r
@@ -81,7 +81,7 @@ connectNode ::
   Sem r ()
 connectNode transport maybeAddress =
   outputAny (ConnectNode transport maybeAddress)
-    >> runTransport transport (ioToAny @(RouteTo ByteString) @(RoutedFrom ByteString) $ streamIO)
+    >> runTransport transport (ioToAny @(RouteTo Raw) @(RoutedFrom Raw) $ streamIO)
 
 transportToR2 ::
   ( Member ByteInputWithEOF r,
@@ -156,8 +156,8 @@ pnet ::
     forall msg. (cs msg) => cs (RoutedFrom msg),
     forall msg. (cs msg) => cs (RouteTo msg),
     forall msg. (cs msg) => cs (Maybe msg),
-    cs (RouteTo ByteString),
-    cs (RoutedFrom ByteString),
+    cs (RouteTo Raw),
+    cs (RoutedFrom Raw),
     cs Self,
     cs Handshake,
     cs (RouteTo Connection),

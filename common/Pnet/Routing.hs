@@ -3,6 +3,7 @@ module Pnet.Routing
     RouteTo (..),
     RoutedFrom (..),
     Connection,
+    Raw,
     r2,
     r2Sem,
     runR2,
@@ -53,6 +54,8 @@ data RoutedFrom msg = RoutedFrom
     routedFromData :: msg
   }
   deriving stock (Show, Eq, Generic)
+
+type Raw = ByteString
 
 type Connection = ()
 
@@ -193,7 +196,7 @@ instance (Serialize msg) => Serialize (RouteTo msg) where
     _ <- get @Int
     RouteTo addr <$> get
 
-instance {-# OVERLAPPING #-} Serialize (RouteTo ByteString) where
+instance {-# OVERLAPPING #-} Serialize (RouteTo Raw) where
   put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
   get = liftM2 RouteTo get (get >>= getByteString)
 
@@ -204,6 +207,6 @@ instance (Serialize msg) => Serialize (RoutedFrom msg) where
     _ <- get @Int
     RoutedFrom addr <$> get
 
-instance {-# OVERLAPPING #-} Serialize (RoutedFrom ByteString) where
+instance {-# OVERLAPPING #-} Serialize (RoutedFrom Raw) where
   put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
   get = liftM2 RoutedFrom get (get >>= getByteString)
