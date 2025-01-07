@@ -144,6 +144,8 @@ runNodeOutput ::
     Member (SocketsAny cs s) r,
     Member (OutputAny cs) r,
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
+    cs (RoutedFrom ByteString),
+    cs (RouteTo ByteString),
     Member Trace r,
     Member Fail r,
     cs ~ Show :&: c
@@ -169,7 +171,8 @@ route ::
     Member Fail r,
     cs ~ Show :&: c,
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom ByteString)
+    cs (RoutedFrom ByteString),
+    cs (RouteTo ByteString)
   ) =>
   Address ->
   Sem r ()

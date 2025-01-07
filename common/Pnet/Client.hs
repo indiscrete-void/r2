@@ -156,6 +156,8 @@ pnet ::
     forall msg. (cs msg) => cs (RoutedFrom msg),
     forall msg. (cs msg) => cs (RouteTo msg),
     forall msg. (cs msg) => cs (Maybe msg),
+    cs (RouteTo ByteString),
+    cs (RoutedFrom ByteString),
     cs Self,
     cs Handshake,
     cs (RouteTo Connection),
