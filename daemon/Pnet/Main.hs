@@ -1,12 +1,11 @@
 import Control.Constraint
 import Control.Monad
-import Data.ByteString (ByteString)
 import Data.Serialize
+import Data.Typeable
 import Network.Socket (bind, listen)
 import Pnet
 import Pnet.Daemon
 import Pnet.Options
-import Pnet.Routing
 import Polysemy hiding (run, send)
 import Polysemy.Any
 import Polysemy.Async
@@ -28,7 +27,7 @@ main =
   let runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s =
         acceptToIO s
-          . runScopedBundle @(Any (Show :&: Serialize)) (runTransport $ serializeAnyOutput . deserializeAnyInput)
+          . runScopedBundle @(Any (Show :&: (Serialize :&: Typeable))) (runTransport $ serializeAnyOutput . deserializeAnyInput)
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =
