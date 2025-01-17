@@ -126,7 +126,8 @@ r2ProcToTransport address transport = do
   outputAny Route
   outputToAny @(RouteTo Connection) $ connectR2 address
   runR2Output address (outputAny TunnelProcess)
-  transportToR2 address transport
+  runR2Input address . runR2Output address $
+    transportToR2 defaultAddr transport
 
 procToTransport ::
   ( Member (Input (Maybe ByteString)) r,
