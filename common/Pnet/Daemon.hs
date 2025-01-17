@@ -259,7 +259,7 @@ pnetcd self cmd s =
     >>= pnetnd self cmd . NodeData (Sock s)
 
 pnetd ::
-  forall c s r cs.
+  forall c cs s r.
   ( Member (Accept s) r,
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,

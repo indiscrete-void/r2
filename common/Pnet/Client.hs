@@ -147,6 +147,7 @@ procToTransport transport =
     >> runTransport transport (ioToAny @(RouteTo (Maybe ByteString)) @(RoutedFrom (Maybe ByteString)) streamIOWithEOF)
 
 pnet ::
+  forall c cs r.
   ( Members (Any cs) r,
     Members (TransportEffects ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
