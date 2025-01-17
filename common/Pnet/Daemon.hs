@@ -132,12 +132,14 @@ connectNode self cmd router transport maybeNewNodeID = traceTagged "connection" 
   stateReflectNode nodeData $
     trace . show @(Either String ())
       =<< runFail
-        ( inputToAny @(RoutedFrom Connection)
-            . runR2 defaultAddr
+        ( runR2 defaultAddr
+            . inputToAny @(RoutedFrom Connection)
             $ forever
-              ( acceptR2 >>= pnetnd self cmd . NodeData (Router transport addr)
+              ( acceptR2 >>= go addr
               )
         )
+  where
+    go parent addr = runR2 addr (pnetnd self cmd $ NodeData (Router transport parent) addr)
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
