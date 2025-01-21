@@ -122,22 +122,23 @@ connectNode ::
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode self cmd router transport maybeNewNodeID = traceTagged "connection" do
+connectNode self cmd router transport maybeNewNodeID = do
   addr <- runR2 defaultAddr do
     outputAny (Self self)
     unSelf <$> inputAnyOrFail
   whenJust maybeNewNodeID \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
-  let nodeData = NodeData (Router transport router) addr
-  stateReflectNode nodeData $
-    trace . show @(Either String ())
-      =<< runFail
-        ( runR2 defaultAddr
-            . inputToAny @(RoutedFrom Connection)
-            $ forever
-              ( acceptR2 >>= go addr
-              )
-        )
+  traceTagged ("connection " <> show addr) do
+    let nodeData = NodeData (Router transport router) addr
+    stateReflectNode nodeData $
+      trace . show @(Either String ())
+        =<< runFail
+          ( runR2 defaultAddr
+              . inputToAny @(RoutedFrom Connection)
+              $ forever
+                ( acceptR2 >>= go addr
+                )
+          )
   where
     go parent addr = runR2 addr (pnetnd self cmd $ NodeData (Router transport parent) addr)
 
