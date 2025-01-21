@@ -41,7 +41,7 @@ initialState :: State s
 initialState = []
 
 stateAddNode :: (Member (AtomicState (State s)) r) => NodeData s -> Sem r ()
-stateAddNode = atomicModify' . (:)
+stateAddNode = atomicModify' . (<>) . List.singleton
 
 stateDeleteNode :: (Member (AtomicState (State s)) r, Eq s) => NodeData s -> Sem r ()
 stateDeleteNode = atomicModify' . List.delete
