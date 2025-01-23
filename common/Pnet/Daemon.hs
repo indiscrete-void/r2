@@ -80,12 +80,20 @@ tunnelProcess ::
     c ByteString,
     c (),
     Member Trace r,
-    Member Async r
+    Member Async r,
+    Member (Output (RouteTo Connection)) r,
+    c Handshake
   ) =>
   String ->
   Address ->
+  Address ->
   Sem r ()
-tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) $ procToR2 cmd defaultAddr
+tunnelProcess cmd self addr = traceTagged ("tunnel " <> show addr) do
+  connectR2 self
+  runR2Output self do
+    outputAny Route
+    runR2Output addr $
+      procToR2 cmd defaultAddr
 
 listNodes :: (Member (AtomicState (State s)) r, Member (Output Response) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
@@ -114,7 +122,8 @@ connectNode ::
     cs Handshake,
     cs Response,
     c (),
-    c ByteString
+    c ByteString,
+    c (RouteTo Connection)
   ) =>
   Address ->
   String ->
@@ -134,13 +143,14 @@ connectNode self cmd router transport maybeNewNodeID = do
       trace . show @(Either String ())
         =<< runFail
           ( runR2 defaultAddr
+              . outputToAny @(RouteTo Connection)
               . inputToAny @(RoutedFrom Connection)
               $ forever
                 ( acceptR2 >>= go addr
                 )
           )
   where
-    go parent addr = runR2 addr (pnetnd self cmd $ NodeData (Router transport parent) addr)
+    go parent addr = runR2Input addr (pnetnd self cmd $ NodeData (Router transport parent) addr)
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
@@ -209,7 +219,9 @@ pnetnd ::
     cs Self,
     cs (RoutedFrom Connection),
     c (),
-    c ByteString
+    c ByteString,
+    Member (Output (RouteTo Connection)) r,
+    c (RouteTo Connection)
   ) =>
   Address ->
   String ->
@@ -224,7 +236,7 @@ pnetnd self cmd nodeData@(NodeData _ addr) =
     Route ->
       inputToAny @(RouteTo Raw) $ route addr
     TunnelProcess ->
-      ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd addr
+      ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd self addr
 
 pnetcd ::
   forall c s r cs.
@@ -248,7 +260,8 @@ pnetcd ::
     cs Self,
     c (),
     c ByteString,
-    Member Async r
+    Member Async r,
+    c (RouteTo Connection)
   ) =>
   Address ->
   String ->
@@ -257,7 +270,7 @@ pnetcd ::
 pnetcd self cmd s =
   outputAny (Self self)
     >> unSelf <$> inputAnyOrFail @Self
-    >>= pnetnd self cmd . NodeData (Sock s)
+    >>= ignoreOutput @(RouteTo Connection) . pnetnd self cmd . NodeData (Sock s)
 
 pnetd ::
   forall c cs s r.
@@ -281,7 +294,8 @@ pnetd ::
     cs Response,
     cs Self,
     c (),
-    c ByteString
+    c ByteString,
+    c (RouteTo Connection)
   ) =>
   Address ->
   String ->
