@@ -80,20 +80,12 @@ tunnelProcess ::
     c ByteString,
     c (),
     Member Trace r,
-    Member Async r,
-    Member (Output (RouteTo Connection)) r,
-    c Handshake
+    Member Async r
   ) =>
   String ->
   Address ->
-  Address ->
   Sem r ()
-tunnelProcess cmd self addr = traceTagged ("tunnel " <> show addr) do
-  connectR2 self
-  runR2Output self do
-    outputAny Route
-    runR2Output addr $
-      procToR2 cmd defaultAddr
+tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) $ procToR2 cmd defaultAddr
 
 listNodes :: (Member (AtomicState (State s)) r, Member (Output Response) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
@@ -150,7 +142,15 @@ connectNode self cmd router transport maybeNewNodeID = do
                 )
           )
   where
-    go parent addr = runR2Input addr (pnetnd self cmd $ NodeData (Router transport parent) addr)
+    handleHandshakeR2 nodeData Route = handleHandshake self cmd nodeData Route
+    handleHandshakeR2 nodeData@(NodeData _ addr) handshake = do
+      connectR2 self
+      runR2Output self $ do
+        outputAny Route
+        runR2Output addr $ handleHandshake self cmd nodeData handshake
+    go parent addr =
+      let nodeData = NodeData (Router transport parent) addr
+       in runR2Input addr $ runNodeHandler (handleHandshakeR2 nodeData) nodeData
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
@@ -197,7 +197,7 @@ route sender = traceTagged "route" $ raise @Trace do
         runNodeOutput nodeData $ outputAny msg
   handle (r2Sem sendTo sender)
 
-pnetnd ::
+handleHandshake ::
   forall c s r cs.
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -220,23 +220,38 @@ pnetnd ::
     cs (RoutedFrom Connection),
     c (),
     c ByteString,
-    Member (Output (RouteTo Connection)) r,
     c (RouteTo Connection)
   ) =>
   Address ->
   String ->
   NodeData s ->
+  Handshake ->
   Sem r ()
-pnetnd self cmd nodeData@(NodeData _ addr) =
-  inputToAny @Handshake . traceTagged "pnetnd" . stateReflectNode nodeData $ handle \case
-    (ConnectNode transport maybeNodeID) ->
-      connectNode self cmd addr transport maybeNodeID
-    ListNodes ->
-      outputToAny @Response $ listNodes
-    Route ->
-      inputToAny @(RouteTo Raw) $ route addr
-    TunnelProcess ->
-      ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd self addr
+handleHandshake self cmd (NodeData _ addr) = \case
+  (ConnectNode transport maybeNodeID) ->
+    connectNode self cmd addr transport maybeNodeID
+  ListNodes ->
+    outputToAny @Response $ listNodes
+  Route ->
+    inputToAny @(RouteTo Raw) $ route addr
+  TunnelProcess ->
+    ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd addr
+
+runNodeHandler ::
+  forall c s r cs.
+  ( Member (AtomicState (State s)) r,
+    Members (Any cs) r,
+    Member Resource r,
+    Member Trace r,
+    Show s,
+    Eq s,
+    cs ~ Show :&: c,
+    cs Handshake
+  ) =>
+  (Handshake -> Sem r ()) ->
+  NodeData s ->
+  Sem r ()
+runNodeHandler f nodeData@(NodeData _ addr) = traceTagged ("pnetnd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $ handle (raise @(InputWithEOF Handshake) . raise @Trace . f)
 
 pnetcd ::
   forall c s r cs.
@@ -267,10 +282,11 @@ pnetcd ::
   String ->
   s ->
   Sem r ()
-pnetcd self cmd s =
+pnetcd self cmd s = do
   outputAny (Self self)
-    >> unSelf <$> inputAnyOrFail @Self
-    >>= ignoreOutput @(RouteTo Connection) . pnetnd self cmd . NodeData (Sock s)
+  addr <- unSelf <$> inputAnyOrFail @Self
+  let nodeData = NodeData (Sock s) addr
+  runNodeHandler (handleHandshake self cmd nodeData) nodeData
 
 pnetd ::
   forall c cs s r.
