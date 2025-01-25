@@ -143,8 +143,7 @@ connectNode self cmd router transport maybeNewNodeID = do
           )
   where
     handleHandshakeR2 nodeData Route = handleHandshake self cmd nodeData Route
-    handleHandshakeR2 nodeData@(NodeData _ addr) handshake = do
-      connectR2 self
+    handleHandshakeR2 nodeData@(NodeData _ addr) handshake = bracket_ (connectR2 self) (runR2Close self close) do
       runR2Output self $ do
         outputAny Route
         runR2Output addr $ handleHandshake self cmd nodeData handshake
@@ -246,12 +245,15 @@ runNodeHandler ::
     Show s,
     Eq s,
     cs ~ Show :&: c,
-    cs Handshake
+    cs Handshake,
+    Member Fail r
   ) =>
   (Handshake -> Sem r ()) ->
   NodeData s ->
   Sem r ()
-runNodeHandler f nodeData@(NodeData _ addr) = traceTagged ("pnetnd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $ handle (raise @(InputWithEOF Handshake) . raise @Trace . f)
+runNodeHandler f nodeData@(NodeData _ addr) =
+  traceTagged ("pnetnd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $
+    inputOrFail @Handshake >>= raise @(InputWithEOF Handshake) . raise @Trace . f
 
 pnetcd ::
   forall c s r cs.
