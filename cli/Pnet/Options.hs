@@ -22,18 +22,24 @@ parserInfo =
 opts :: Parser Options
 opts =
   Options
-    <$> hsubparser
+    <$> commandOpts
+    <*> optional (strOption $ long "socket" <> short 's')
+
+commandOpts :: Parser Command
+commandOpts =
+  Command
+    <$> optional (option address $ long "target" <> short 't')
+    <*> hsubparser
       ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
           <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
           <> command "tunnel" (info tunnelOpts $ progDesc "Provide transport for application layer")
       )
-    <*> optional (strOption $ long "socket" <> short 's')
 
-lsOpts :: Parser Command
+lsOpts :: Parser Action
 lsOpts = pure Ls
 
-connectOpts :: Parser Command
+connectOpts :: Parser Action
 connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
 
-tunnelOpts :: Parser Command
-tunnelOpts = Tunnel <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
+tunnelOpts :: Parser Action
+tunnelOpts = Tunnel <$> argument transport (metavar "TRANSPORT")
