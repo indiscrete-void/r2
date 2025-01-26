@@ -142,11 +142,13 @@ connectNode self cmd router transport maybeNewNodeID = do
                 )
           )
   where
-    handleHandshakeR2 nodeData Route = handleHandshake self cmd nodeData Route
-    handleHandshakeR2 nodeData@(NodeData _ addr) handshake = bracket_ (connectR2 self) (runR2Close self close) do
+    runR2OutputSession addr m = bracket_ (connectR2 self) (runR2Close self close) do
       runR2Output self $ do
         outputAny Route
-        runR2Output addr $ handleHandshake self cmd nodeData handshake
+        runR2Output addr m
+    runOutputSession _ Route = subsume_
+    runOutputSession (NodeData _ addr) _ = runR2OutputSession addr
+    handleHandshakeR2 nodeData handshake = runOutputSession nodeData handshake $ handleHandshake self cmd nodeData handshake
     go parent addr =
       let nodeData = NodeData (Router transport parent) addr
        in runR2Input addr $ runNodeHandler (handleHandshakeR2 nodeData) nodeData

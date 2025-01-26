@@ -108,7 +108,7 @@ procToTransport ::
   Sem r ()
 procToTransport transport = outputAny TunnelProcess >> transportToR2 defaultAddr transport
 
-setupR2 ::
+runR2Session ::
   ( Members (Any cs) r,
     Member Trace r,
     cs Handshake,
@@ -120,11 +120,25 @@ setupR2 ::
   ) =>
   Address ->
   InterpretersFor (Any cs) r
-setupR2 target m = do
+runR2Session target m = do
   outputAny Route
   outputToAny @(RouteTo Connection) $
     connectR2 target
   runR2 target m
+
+runSession ::
+  ( Members (Any cs) r,
+    Member Trace r,
+    cs Handshake,
+    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
+    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
+    cs ~ Show :&: c,
+    cs (RouteTo Connection),
+    cs Connection
+  ) =>
+  Maybe Address ->
+  InterpretersFor (Any cs) r
+runSession = maybe subsume_ runR2Session
 
 pnet ::
   forall c cs r.
@@ -154,7 +168,7 @@ pnet me (Command target action) = do
   outputAny (Self me)
   server <- unSelf <$> inputToAny (inputOrFail @Self)
   trace $ Text.printf "communicating with %s" (show server)
-  maybe subsume_ setupR2 target $ case action of
+  runSession target $ case action of
     Ls -> ioToAny listNodes
     (Connect transport maybeAddress) -> connectNode transport maybeAddress
     (Tunnel transport) -> procToTransport transport
