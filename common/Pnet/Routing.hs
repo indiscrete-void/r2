@@ -15,6 +15,7 @@ module Pnet.Routing
     acceptR2,
     Stream (..),
     ioToR2,
+    parseAddressBase58,
   )
 where
 
@@ -24,6 +25,7 @@ import Data.ByteString
 import Data.ByteString qualified as BS
 import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
+import Data.ByteString.Char8 qualified as BC
 import Data.DoubleWord
 import Data.Functor
 import Data.Serialize
@@ -42,6 +44,9 @@ import Text.Printf qualified as Text
 
 newtype Address = Addr {unAddr :: Word256}
   deriving stock (Eq, Generic)
+
+parseAddressBase58 :: String -> Maybe Address
+parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
 
 data RouteTo msg = RouteTo
   { routeToNode :: Address,
