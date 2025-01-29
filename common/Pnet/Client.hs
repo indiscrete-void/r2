@@ -10,6 +10,7 @@ import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Internal.Kind
 import Polysemy.Process
 import Polysemy.Scoped
 import Polysemy.Trace
@@ -24,12 +25,19 @@ data Action
   | Tunnel !Transport
 
 data Command = Command
-  { commandTarget :: Maybe Address,
+  { commandTargetChain :: [Address],
     commandAction :: Action
   }
 
-listNodes :: (Member (InputWithEOF Response) r, Member (Output Handshake) r, Member Fail r, Member Trace r) => Sem r ()
-listNodes = traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
+listNodes ::
+  ( Members (Any cs) r,
+    cs Handshake,
+    cs Response,
+    Member Fail r,
+    Member Trace r
+  ) =>
+  Sem r ()
+listNodes = ioToAny $ traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
 
 streamIO ::
   ( Member Async r,
@@ -126,19 +134,47 @@ runR2Session target m = do
     connectR2 target
   runR2 target m
 
-runSession ::
+runChainSession ::
+  forall c cs r.
   ( Members (Any cs) r,
     Member Trace r,
-    cs Handshake,
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     cs ~ Show :&: c,
     cs (RouteTo Connection),
-    cs Connection
+    cs Connection,
+    cs Handshake
   ) =>
-  Maybe Address ->
+  [Address] ->
   InterpretersFor (Any cs) r
-runSession = maybe subsume_ runR2Session
+runChainSession [] m = subsume_ m
+runChainSession (addr : rest) m =
+  let mdup = insertAt @3 @(Any cs) m
+   in runR2Session addr $ runChainSession rest mdup
+
+handleAction ::
+  ( Members (Any cs) r,
+    Members (TransportEffects ByteString ByteString) r,
+    Member (Scoped CreateProcess Process) r,
+    Member Fail r,
+    Member Trace r,
+    Member Async r,
+    cs ~ Show :&: c,
+    forall msg. (cs msg) => cs (RoutedFrom msg),
+    forall msg. (cs msg) => cs (RouteTo msg),
+    forall msg. (cs msg) => cs (Maybe msg),
+    cs (RouteTo Raw),
+    cs (RoutedFrom Raw),
+    cs Handshake,
+    cs Connection,
+    cs Response,
+    cs ByteString
+  ) =>
+  Action ->
+  Sem r ()
+handleAction Ls = listNodes
+handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
+handleAction (Tunnel transport) = procToTransport transport
 
 pnet ::
   forall c cs r.
@@ -164,11 +200,10 @@ pnet ::
   Address ->
   Command ->
   Sem r ()
-pnet me (Command target action) = do
+pnet me (Command targetChain action) = do
   outputAny (Self me)
   server <- unSelf <$> inputToAny (inputOrFail @Self)
   trace $ Text.printf "communicating with %s" (show server)
-  runSession target $ case action of
-    Ls -> ioToAny listNodes
-    (Connect transport maybeAddress) -> connectNode transport maybeAddress
-    (Tunnel transport) -> procToTransport transport
+  subsume_ @(Append (Any cs) r) @r $
+    runChainSession targetChain $
+      handleAction action

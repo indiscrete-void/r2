@@ -1,9 +1,11 @@
 module Pnet.Options (Options (..), Transport (..), parse) where
 
+import Data.List.Extra
 import Options.Applicative
 import Pnet
 import Pnet.Client
 import Pnet.Options.Parse
+import Pnet.Routing
 
 data Options = Options Command (Maybe FilePath)
 
@@ -28,7 +30,7 @@ opts =
 commandOpts :: Parser Command
 commandOpts =
   Command
-    <$> optional (option address $ long "target" <> short 't')
+    <$> many (option address $ long "target" <> short 't')
     <*> hsubparser
       ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
           <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
