@@ -40,11 +40,14 @@ type State s = [NodeData s]
 initialState :: State s
 initialState = []
 
+withReverse :: ([a] -> [b]) -> [a] -> [b]
+withReverse f = reverse . f . reverse
+
 stateAddNode :: (Member (AtomicState (State s)) r) => NodeData s -> Sem r ()
-stateAddNode nodeData = atomicModify' (<> [nodeData])
+stateAddNode nodeData = atomicModify' $ withReverse (nodeData :)
 
 stateDeleteNode :: (Member (AtomicState (State s)) r, Eq s) => NodeData s -> Sem r ()
-stateDeleteNode = atomicModify' . List.delete
+stateDeleteNode nodeData = atomicModify' $ withReverse (List.delete nodeData)
 
 stateLookupNode :: (Member (AtomicState (State s)) r) => Address -> Sem r (Maybe (NodeData s))
 stateLookupNode addr = List.find ((== addr) . nodeDataAddr) <$> atomicGet
