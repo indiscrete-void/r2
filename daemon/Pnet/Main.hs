@@ -18,6 +18,7 @@ import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Socket
 import Polysemy.Socket.Accept
+import Polysemy.Trace
 import Polysemy.Transport
 import System.Exit
 import System.Posix
@@ -32,15 +33,16 @@ main =
       runProcess = scopedProcToIOFinal bufferSize
       run s =
         runFinal @IO
+          . ignoreTrace
           . asyncToIOFinal
           . resourceToIOFinal
           . runDecoder
           . embedToFinal @IO
           . failToEmbed @IO
-          . traceToStdoutBuffered
           . runProcess
           . runSocket s
           . runAtomicState
+          . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
    in withPnetSocket \s -> do

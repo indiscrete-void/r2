@@ -10,6 +10,7 @@ import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Serialize
 import Polysemy.Socket
+import Polysemy.Trace
 import Polysemy.Transport
 import System.IO
 import System.Random.Stateful
@@ -20,7 +21,7 @@ main =
   let runUnserialized = runDecoder . deserializeAnyInput . serializeAnyOutput
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
-      run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . traceToStderrBuffered . runTransport s . runStdio . scopedProcToIOFinal bufferSize
+      run s = runFinal . ignoreTrace . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . runTransport s . runStdio . scopedProcToIOFinal bufferSize . traceToStderrBuffered
    in withPnetSocket \s -> do
         (Options command maybeSocketPath) <- parse
         gen <- initStdGen >>= newIOGenM
