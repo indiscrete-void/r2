@@ -96,6 +96,22 @@ listNodes = traceTagged "ListNodes" do
   trace (Text.printf "responding with `%s`" (show nodeList))
   output (NodeList nodeList)
 
+exchangeSelves ::
+  ( Member (InputAny Maybe c) r,
+    Member (OutputAny c) r,
+    c Self,
+    Member Fail r
+  ) =>
+  Address ->
+  Maybe Address ->
+  Sem r Address
+exchangeSelves self maybeKnownAddr = do
+  outputAny (Self self)
+  addr <- unSelf <$> inputAnyOrFail
+  whenJust maybeKnownAddr \knownNodeAddr ->
+    when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
+  pure self
+
 connectNode ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -127,11 +143,7 @@ connectNode ::
   Maybe Address ->
   Sem r ()
 connectNode self cmd router transport maybeNewNodeID = do
-  addr <- runR2 defaultAddr do
-    outputAny (Self self)
-    unSelf <$> inputAnyOrFail
-  whenJust maybeNewNodeID \knownNodeAddr ->
-    when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
+  addr <- runR2 defaultAddr $ exchangeSelves self maybeNewNodeID
   traceTagged ("connection " <> show addr) do
     let nodeData = NodeData (Router transport router) addr
     stateReflectNode nodeData $
@@ -290,8 +302,7 @@ pnetcd ::
   s ->
   Sem r ()
 pnetcd self cmd s = do
-  outputAny (Self self)
-  addr <- unSelf <$> inputAnyOrFail @Self
+  addr <- exchangeSelves self Nothing
   let nodeData = NodeData (Sock s) addr
   runNodeHandler (handleHandshake self cmd nodeData) nodeData
 
