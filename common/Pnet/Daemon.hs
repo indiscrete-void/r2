@@ -1,4 +1,4 @@
-module Pnet.Daemon where
+module Pnet.Daemon (State, initialState, pnetd) where
 
 import Control.Constraint
 import Control.Monad.Extra
