@@ -23,6 +23,7 @@ common default
         -Wno-missing-local-signatures -Wno-monomorphism-restriction
         -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
         -fplugin=Polysemy.Plugin -Wno-orphans -threaded
+	-Wno-name-shadowing
     if flag(pedantic)
         ghc-options: -Werror
 
