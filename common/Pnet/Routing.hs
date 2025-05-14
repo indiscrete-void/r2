@@ -44,6 +44,7 @@ import Text.Printf qualified as Text
 
 newtype Address = Addr {unAddr :: Word256}
   deriving stock (Eq, Generic)
+  deriving Num via Word256
 
 parseAddressBase58 :: String -> Maybe Address
 parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack

@@ -16,6 +16,7 @@ common default
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
         DeriveGeneric DerivingStrategies EmptyDataDeriving OverloadedStrings
         FlexibleInstances QuantifiedConstraints IncoherentInstances StandaloneKindSignatures
+        DerivingVia
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
