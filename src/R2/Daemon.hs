@@ -110,7 +110,7 @@ exchangeSelves self maybeKnownAddr = do
   addr <- unSelf <$> inputAnyOrFail
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
-  pure self
+  pure addr
 
 connectNode ::
   ( Member (AtomicState (State s)) r,
