@@ -1,9 +1,9 @@
-module Pnet.Client (Command (..), Action (..), listNodes, connectNode, pnet) where
+module R2.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
 
 import Control.Constraint
 import Data.ByteString (ByteString)
-import Pnet
-import Pnet.Routing
+import R2
+import R2.Routing
 import Polysemy
 import Polysemy.Any
 import Polysemy.Async
@@ -176,7 +176,7 @@ handleAction Ls = listNodes
 handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
 handleAction (Tunnel transport) = procToTransport transport
 
-pnet ::
+r2c ::
   forall c cs r.
   ( Members (Any cs) r,
     Members (TransportEffects ByteString ByteString) r,
@@ -200,7 +200,7 @@ pnet ::
   Address ->
   Command ->
   Sem r ()
-pnet me (Command targetChain action) = do
+r2c me (Command targetChain action) = do
   outputAny (Self me)
   server <- unSelf <$> inputToAny (inputOrFail @Self)
   trace $ Text.printf "communicating with %s" (show server)

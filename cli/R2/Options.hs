@@ -1,11 +1,11 @@
-module Pnet.Options (Options (..), Transport (..), parse) where
+module R2.Options (Options (..), Transport (..), parse) where
 
 import Data.List.Extra
 import Options.Applicative
-import Pnet
-import Pnet.Client
-import Pnet.Options.Parse
-import Pnet.Routing
+import R2
+import R2.Client
+import R2.Options.Parse
+import R2.Routing
 
 data Options = Options Command (Maybe FilePath)
 
@@ -17,7 +17,7 @@ parserInfo =
   info
     (helper <*> opts)
     ( fullDesc
-        <> progDesc "Mananges pnet daemon, creates bidirectional link between it and the outer world"
+        <> progDesc "Mananges r2 daemon, creates bidirectional link between it and the outer world"
         <> header "Pandora Network manager"
     )
 

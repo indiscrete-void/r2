@@ -1,8 +1,8 @@
-module Pnet.Options (Options (..), parse) where
+module R2.Options (Options (..), parse) where
 
 import Options.Applicative
-import Pnet.Options.Parse
-import Pnet.Routing
+import R2.Options.Parse
+import R2.Routing
 
 data Options = Options (Maybe FilePath) Bool Address String
 

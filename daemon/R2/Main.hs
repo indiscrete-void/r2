@@ -3,9 +3,9 @@ import Control.Monad
 import Data.Serialize
 import Data.Typeable
 import Network.Socket (bind, listen)
-import Pnet
-import Pnet.Daemon
-import Pnet.Options
+import R2
+import R2.Daemon
+import R2.Options
 import Polysemy hiding (run, send)
 import Polysemy.Any
 import Polysemy.Async
@@ -45,9 +45,9 @@ main =
           . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
-   in withPnetSocket \s -> do
+   in withR2Socket \s -> do
         (Options maybeSocketPath daemon self cmd) <- parse
-        addr <- pnetSocketAddr maybeSocketPath
+        addr <- r2SocketAddr maybeSocketPath
         bind s addr
         listen s 5
-        forkIf daemon . run s $ pnetd self cmd
+        forkIf daemon . run s $ r2d self cmd

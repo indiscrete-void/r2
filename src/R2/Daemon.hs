@@ -1,11 +1,11 @@
-module Pnet.Daemon (State, initialState, pnetd) where
+module R2.Daemon (State, initialState, r2d) where
 
 import Control.Constraint
 import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Data.List qualified as List
-import Pnet
-import Pnet.Routing
+import R2
+import R2.Routing
 import Polysemy
 import Polysemy.Any
 import Polysemy.Async
@@ -269,10 +269,10 @@ runNodeHandler ::
   NodeData s ->
   Sem r ()
 runNodeHandler f nodeData@(NodeData _ addr) =
-  traceTagged ("pnetnd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $
+  traceTagged ("r2nd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $
     inputOrFail @Handshake >>= raise @(InputWithEOF Handshake) . raise @Trace . f
 
-pnetcd ::
+r2cd ::
   forall c s r cs.
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -301,12 +301,12 @@ pnetcd ::
   String ->
   s ->
   Sem r ()
-pnetcd self cmd s = do
+r2cd self cmd s = do
   addr <- exchangeSelves self Nothing
   let nodeData = NodeData (Sock s) addr
   runNodeHandler (handleHandshake self cmd nodeData) nodeData
 
-pnetd ::
+r2d ::
   forall c cs s r.
   ( Member (Accept s) r,
     Member (AtomicState (State s)) r,
@@ -333,6 +333,6 @@ pnetd ::
   Address ->
   String ->
   Sem r ()
-pnetd self cmd = foreverAcceptAsync \s -> socketAny s do
-  result <- runFail $ pnetcd self cmd s
+r2d self cmd = foreverAcceptAsync \s -> socketAny s do
+  result <- runFail $ r2cd self cmd s
   trace $ show result

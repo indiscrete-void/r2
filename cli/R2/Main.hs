@@ -1,8 +1,8 @@
 import Network.Socket hiding (close)
-import Pnet
-import Pnet.Client
-import Pnet.Options
-import Pnet.Routing
+import R2
+import R2.Client
+import R2.Options
+import R2.Routing
 import Polysemy hiding (run)
 import Polysemy.Async
 import Polysemy.Extra.Trace
@@ -22,10 +22,10 @@ main =
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . ignoreTrace . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . runTransport s . runStdio . scopedProcToIOFinal bufferSize . traceToStderrBuffered
-   in withPnetSocket \s -> do
+   in withR2Socket \s -> do
         (Options command maybeSocketPath) <- parse
         gen <- initStdGen >>= newIOGenM
         self <- uniformM @Address gen
         hPrintf stderr "me: %s\n" $ show self
-        connect s =<< pnetSocketAddr maybeSocketPath
-        run s $ pnet self command
+        connect s =<< r2SocketAddr maybeSocketPath
+        run s $ r2c self command

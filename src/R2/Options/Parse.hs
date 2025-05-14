@@ -1,8 +1,8 @@
-module Pnet.Options.Parse (transport, address) where
+module R2.Options.Parse (transport, address) where
 
 import Options.Applicative
-import Pnet
-import Pnet.Routing
+import R2
+import R2.Routing
 import Transport.Maybe
 
 transport :: ReadM Transport

@@ -1,4 +1,4 @@
-module Pnet.Routing
+module R2.Routing
   ( Address (..),
     RouteTo (..),
     RoutedFrom (..),

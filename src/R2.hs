@@ -1,10 +1,10 @@
-module Pnet
+module R2
   ( Handshake (..),
     Self (..),
     Response (..),
-    pnetSocketAddr,
-    pnetSocket,
-    withPnetSocket,
+    r2SocketAddr,
+    r2Socket,
+    withR2Socket,
     timeout,
     bufferSize,
     queueSize,
@@ -19,7 +19,7 @@ import Data.Serialize
 import Debug.Trace
 import GHC.Generics
 import Network.Socket
-import Pnet.Routing
+import R2.Routing
 import System.Environment
 import System.Posix
 
@@ -51,32 +51,32 @@ bufferSize = 8192
 queueSize :: Int
 queueSize = 16
 
-defaultPnetSocketPath :: FilePath
-defaultPnetSocketPath = "/run/pnet.sock"
+defaultR2SocketPath :: FilePath
+defaultR2SocketPath = "/run/r2.sock"
 
-defaultUserPnetSocketPath :: IO FilePath
-defaultUserPnetSocketPath = go <$> getEffectiveUserID
+defaultUserR2SocketPath :: IO FilePath
+defaultUserR2SocketPath = go <$> getEffectiveUserID
   where
-    go 0 = defaultPnetSocketPath
-    go n = concat ["/run/user/", show n, "/pnet.sock"]
+    go 0 = defaultR2SocketPath
+    go n = concat ["/run/user/", show n, "/r2.sock"]
 
-pnetSocket :: IO Socket
-pnetSocket = do
+r2Socket :: IO Socket
+r2Socket = do
   s <- socket AF_UNIX Stream defaultProtocol
   setSocketOption s RecvTimeOut timeout
   setSocketOption s SendTimeOut timeout
   pure s
 
-pnetSocketAddr :: Maybe FilePath -> IO SockAddr
-pnetSocketAddr customPath = do
-  defaultPath <- defaultUserPnetSocketPath
+r2SocketAddr :: Maybe FilePath -> IO SockAddr
+r2SocketAddr customPath = do
+  defaultPath <- defaultUserR2SocketPath
   extraCustomPath <- lookupEnv "PNET_SOCKET_PATH"
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
   traceM ("comunicating over \"" <> path <> "\"")
   pure $ SockAddrUnix path
 
-withPnetSocket :: (Socket -> IO a) -> IO a
-withPnetSocket = bracket pnetSocket close
+withR2Socket :: (Socket -> IO a) -> IO a
+withR2Socket = bracket r2Socket close
 
 instance Serialize Transport
 
