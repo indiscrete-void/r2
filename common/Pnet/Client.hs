@@ -47,7 +47,7 @@ streamIO ::
     Member Trace r
   ) =>
   Sem r ()
-streamIO = async_ nodeToIO >> ioToNode
+streamIO = sequenceConcurrently_ [nodeToIO, ioToNode]
   where
     ioToNode = handle $ output . RoutedFrom defaultAddr
     nodeToIO = handle $ r2Sem (const $ output . routedFromData) defaultAddr

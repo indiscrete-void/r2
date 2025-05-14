@@ -314,7 +314,6 @@ pnetd ::
     Member (SocketsAny cs s) r,
     Member Resource r,
     Member Async r,
-    Member Fail r,
     Member Trace r,
     Eq s,
     Show s,
@@ -334,4 +333,6 @@ pnetd ::
   Address ->
   String ->
   Sem r ()
-pnetd self cmd = foreverAcceptAsync \s -> socketAny s $ pnetcd self cmd s
+pnetd self cmd = foreverAcceptAsync \s -> socketAny s do
+  result <- runFail $ pnetcd self cmd s
+  trace $ show result
