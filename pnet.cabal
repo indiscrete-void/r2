@@ -30,7 +30,7 @@ common default
 
 library
     import: default
-    hs-source-dirs: common
+    hs-source-dirs: src
     exposed-modules:
         Polysemy.Socket,
         Polysemy.Sockets,
