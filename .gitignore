@@ -5,7 +5,7 @@
 !.gitignore
 !LICENSE
 
-!pnet.cabal
+!r2.cabal
 !cabal.project.local
 !default.nix
 
