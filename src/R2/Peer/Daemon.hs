@@ -1,11 +1,9 @@
-module R2.Daemon (State, initialState, r2d) where
+module R2.Peer.Daemon (State, initialState, r2d) where
 
 import Control.Constraint
 import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Data.List qualified as List
-import R2
-import R2.Routing
 import Polysemy
 import Polysemy.Any
 import Polysemy.Async
@@ -20,6 +18,8 @@ import Polysemy.Socket.Accept
 import Polysemy.Sockets.Any
 import Polysemy.Trace
 import Polysemy.Transport
+import R2
+import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 

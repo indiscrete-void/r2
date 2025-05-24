@@ -24,9 +24,7 @@ common default
         -Wno-missing-local-signatures -Wno-monomorphism-restriction
         -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures
         -fplugin=Polysemy.Plugin -Wno-orphans -threaded
-        -Wno-name-shadowing
-    if flag(pedantic)
-        ghc-options: -Werror
+        -Wno-name-shadowing 
 
 library
     import: default
@@ -37,11 +35,9 @@ library
         Polysemy.Sockets.Any,
         Polysemy.Socket.Accept,
         R2,
-        Polysemy.R2,
-        R2.Options.Parse,
-        R2.Routing,
-        R2.Daemon,
-        R2.Client
+        R2.Peer,
+        R2.Peer.Client,
+        R2.Peer.Daemon,
 
 executable r2d
     import: default

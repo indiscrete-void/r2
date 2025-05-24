@@ -1,8 +1,8 @@
 import Network.Socket hiding (close)
 import R2
-import R2.Client
+import R2.Peer
+import R2.Peer.Client
 import R2.Options
-import R2.Routing
 import Polysemy hiding (run)
 import Polysemy.Async
 import Polysemy.Extra.Trace

@@ -1,11 +1,8 @@
 module R2.Options (Options (..), Transport (..), parse) where
 
-import Data.List.Extra
 import Options.Applicative
-import R2
-import R2.Client
-import R2.Options.Parse
-import R2.Routing
+import R2.Peer
+import R2.Peer.Client
 
 data Options = Options Command (Maybe FilePath)
 

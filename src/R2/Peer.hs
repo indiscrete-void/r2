@@ -1,36 +1,41 @@
-module R2.Routing
-  ( Address (..),
-    RouteTo (..),
-    RoutedFrom (..),
-    Connection,
-    Raw,
-    r2,
+module R2.Peer
+  ( Handshake (..),
+    Self (..),
+    Response (..),
+    r2SocketAddr,
+    r2Socket,
+    withR2Socket,
+    timeout,
+    bufferSize,
+    queueSize,
+    Transport (..),
     r2Sem,
-    runR2,
+    inputBefore,
     runR2Input,
-    runR2Output,
+    outputRouteTo,
     runR2Close,
-    defaultAddr,
+    runR2Output,
     connectR2,
+    runR2,
     acceptR2,
     Stream (..),
     ioToR2,
-    parseAddressBase58,
+    transport,
+    address,
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Constraint
-import Control.Monad
-import Data.ByteString
-import Data.ByteString qualified as BS
-import Data.ByteString.Base58
-import Data.ByteString.Base58.Internal
-import Data.ByteString.Char8 qualified as BC
-import Data.DoubleWord
+import Control.Exception
 import Data.Functor
-import Data.Serialize
-import Data.Word
+import Data.Maybe
+import Data.Serialize (Serialize)
+import Debug.Trace qualified as Debug
 import GHC.Generics
+import Network.Socket (Family (..), SockAddr (..), Socket, setSocketOption, socket)
+import Network.Socket qualified as Socket
+import Options.Applicative
 import Polysemy
 import Polysemy.Any
 import Polysemy.Async
@@ -39,34 +44,77 @@ import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Trace
 import Polysemy.Transport
-import System.Random.Stateful
+import R2
+import System.Environment
+import System.Posix
 import Text.Printf qualified as Text
+import Transport.Maybe
 
-newtype Address = Addr {unAddr :: Word256}
-  deriving stock (Eq, Generic)
-  deriving Num via Word256
+newtype Self = Self {unSelf :: Address}
+  deriving stock (Show, Generic)
 
-parseAddressBase58 :: String -> Maybe Address
-parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
+data Transport
+  = Stdio
+  | Process String
+  deriving stock (Eq, Show, Generic)
 
-data RouteTo msg = RouteTo
-  { routeToNode :: Address,
-    routeToData :: msg
-  }
-  deriving stock (Show, Eq, Generic)
+data Handshake where
+  ConnectNode :: Transport -> Maybe Address -> Handshake
+  ListNodes :: Handshake
+  Route :: Handshake
+  TunnelProcess :: Handshake
+  deriving stock (Show, Generic)
 
-data RoutedFrom msg = RoutedFrom
-  { routedFromNode :: Address,
-    routedFromData :: msg
-  }
-  deriving stock (Show, Eq, Generic)
+data Response where
+  NodeList :: [Address] -> Response
+  deriving stock (Show, Generic)
 
-type Raw = ByteString
+timeout :: Int
+timeout = 16384
 
-type Connection = ()
+bufferSize :: Int
+bufferSize = 8192
 
-r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
-r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
+queueSize :: Int
+queueSize = 16
+
+defaultR2SocketPath :: FilePath
+defaultR2SocketPath = "/run/r2.sock"
+
+defaultUserR2SocketPath :: IO FilePath
+defaultUserR2SocketPath = go <$> getEffectiveUserID
+  where
+    go 0 = defaultR2SocketPath
+    go n = concat ["/run/user/", show n, "/r2.sock"]
+
+r2Socket :: IO Socket
+r2Socket = do
+  s <- socket AF_UNIX Socket.Stream Socket.defaultProtocol
+  setSocketOption s Socket.RecvTimeOut timeout
+  setSocketOption s Socket.SendTimeOut timeout
+  pure s
+
+r2SocketAddr :: Maybe FilePath -> IO SockAddr
+r2SocketAddr customPath = do
+  defaultPath <- defaultUserR2SocketPath
+  extraCustomPath <- lookupEnv "PNET_SOCKET_PATH"
+  let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
+  Debug.traceM ("comunicating over \"" <> path <> "\"")
+  pure $ SockAddrUnix path
+
+withR2Socket :: (Socket -> IO a) -> IO a
+withR2Socket = bracket r2Socket Socket.close
+
+transport :: ReadM Transport
+transport = do
+  arg <- str
+  pure
+    if arg == "-"
+      then Stdio
+      else Process arg
+
+address :: ReadM Address
+address = str >>= maybeFail "invalid node ID" . parseAddressBase58
 
 r2Sem :: (Member Trace r, Show msg) => (Address -> RoutedFrom msg -> Sem r ()) -> (Address -> RouteTo msg -> Sem r ())
 r2Sem f node i = traceTagged "handleR2" (trace $ Text.printf "handling %s from %s" (show i) (show node)) >> r2 f node i
@@ -153,8 +201,8 @@ ioToR2 ::
     Member Close r,
     Member Trace r,
     Member Async r,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
+    forall x. (cs x) => cs (RouteTo (Maybe x)),
+    forall x. (cs x) => cs (RoutedFrom (Maybe x)),
     c (),
     cs msg,
     cs ~ Show :&: c
@@ -167,52 +215,10 @@ ioToR2 addr =
       runR2Output @cs addr (outputToAny $ inputToOutput @msg) >> runR2Close addr close
     ]
 
-defaultAddr :: Address
-defaultAddr = Addr 0
+instance Serialize Transport
 
-instance Serialize Address
+instance Serialize Self
 
-instance Serialize Word128
+instance Serialize Handshake
 
-instance Serialize Word256
-
-instance Uniform Address
-
-instance Uniform Word128 where
-  uniformM g = do
-    l <- uniformM @Word64 g
-    r <- uniformM @Word64 g
-    pure $ Word128 l r
-
-instance Uniform Word256 where
-  uniformM g = do
-    l <- uniformM @Word128 g
-    r <- uniformM @Word128 g
-    pure $ Word256 l r
-
-instance Show Address where
-  show (Addr addr)
-    | addr == unAddr defaultAddr = "<default>"
-    | otherwise = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
-
-instance (Serialize msg) => Serialize (RouteTo msg) where
-  put (RouteTo addr msg) = put (RouteTo addr (encode msg))
-  get = do
-    addr <- get
-    _ <- get @Int
-    RouteTo addr <$> get
-
-instance {-# OVERLAPPING #-} Serialize (RouteTo Raw) where
-  put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RouteTo get (get >>= getByteString)
-
-instance (Serialize msg) => Serialize (RoutedFrom msg) where
-  put (RoutedFrom addr msg) = put (RoutedFrom addr (encode msg))
-  get = do
-    addr <- get
-    _ <- get @Int
-    RoutedFrom addr <$> get
-
-instance {-# OVERLAPPING #-} Serialize (RoutedFrom Raw) where
-  put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RoutedFrom get (get >>= getByteString)
+instance Serialize Response

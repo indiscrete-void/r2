@@ -1,8 +1,8 @@
 module R2.Options (Options (..), parse) where
 
 import Options.Applicative
-import R2.Options.Parse
-import R2.Routing
+import R2
+import R2.Peer
 
 data Options = Options (Maybe FilePath) Bool Address String
 
