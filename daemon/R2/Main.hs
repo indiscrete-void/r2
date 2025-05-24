@@ -3,8 +3,8 @@ import Control.Monad
 import Data.Serialize
 import Data.Typeable
 import Network.Socket (bind, listen)
-import R2
-import R2.Daemon
+import R2.Peer
+import R2.Peer.Daemon
 import R2.Options
 import Polysemy hiding (run, send)
 import Polysemy.Any

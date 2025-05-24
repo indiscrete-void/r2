@@ -1,9 +1,7 @@
-module R2.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
+module R2.Peer.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
 
 import Control.Constraint
 import Data.ByteString (ByteString)
-import R2
-import R2.Routing
 import Polysemy
 import Polysemy.Any
 import Polysemy.Async
@@ -16,6 +14,8 @@ import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Wait
+import R2
+import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
