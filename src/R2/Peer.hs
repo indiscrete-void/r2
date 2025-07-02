@@ -22,14 +22,17 @@ module R2.Peer
     ioToR2,
     transport,
     address,
+    Raw,
+    inputBsToRaw,
+    outputBsToRaw,
   )
 where
 
-import Control.Applicative ((<|>))
 import Control.Constraint
 import Control.Exception
 import Data.Aeson
 import Data.Aeson.TH
+import Data.ByteString.Lazy qualified as LBS
 import Data.Functor
 import Data.Maybe
 import Debug.Trace qualified as Debug
@@ -50,6 +53,19 @@ import System.Environment
 import System.Posix
 import Text.Printf qualified as Text
 import Transport.Maybe
+
+type Raw = Value
+
+inputBsToRaw :: (Member ByteInputWithEOF r, Member Fail r) => InterpreterFor (InputWithEOF Raw) r
+inputBsToRaw = interpret \case
+  Input -> do
+    input >>= \case
+      Just bs -> maybe (fail "failed to decode Raw") pure . decode . LBS.fromStrict $ bs
+      Nothing -> pure Nothing
+
+outputBsToRaw :: (Member ByteOutput r) => InterpreterFor (Output Raw) r
+outputBsToRaw = interpret \case
+  Output o -> output . LBS.toStrict $ encode o
 
 newtype Self = Self {unSelf :: Address}
   deriving stock (Show, Generic)
