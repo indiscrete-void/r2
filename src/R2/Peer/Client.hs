@@ -44,13 +44,14 @@ streamIO ::
     Members (TransportEffects ByteString ByteString) r,
     Member (InputWithEOF (RouteTo Raw)) r,
     Member (Output (RoutedFrom Raw)) r,
-    Member Trace r
+    Member Trace r,
+    Member Fail r
   ) =>
   Sem r ()
 streamIO = sequenceConcurrently_ [nodeToIO, ioToNode]
   where
-    ioToNode = handle $ output . RoutedFrom defaultAddr
-    nodeToIO = handle $ r2Sem (const $ output . routedFromData) defaultAddr
+    ioToNode = inputBsToRaw . handle $ output . RoutedFrom defaultAddr
+    nodeToIO = outputBsToRaw . handle $ r2Sem (const $ output . routedFromData) defaultAddr
 
 runTransport ::
   ( Members (TransportEffects ByteString ByteString) r,
@@ -69,7 +70,8 @@ connectNode ::
     cs (RoutedFrom Raw),
     Members (TransportEffects ByteString ByteString) r,
     Member Trace r,
-    Member (Scoped CreateProcess Process) r
+    Member (Scoped CreateProcess Process) r,
+    Member Fail r
   ) =>
   Transport ->
   Maybe Address ->
@@ -87,16 +89,17 @@ transportToR2 ::
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     c (),
-    c ByteString,
     cs ~ Show :&: c,
+    c Raw,
     Member Trace r,
-    Member Async r
+    Member Async r,
+    Member Fail r
   ) =>
   Address ->
   Transport ->
   Sem r ()
-transportToR2 address Stdio = ioToR2 @ByteString address
-transportToR2 address (Process cmd) = execIO (ioShell cmd) $ ioToR2 address
+transportToR2 address Stdio = inputBsToRaw . outputBsToRaw $ ioToR2 @Raw address
+transportToR2 address (Process cmd) = execIO (ioShell cmd) . inputBsToRaw . outputBsToRaw $ ioToR2 address
 
 procToTransport ::
   ( Member (Input (Maybe ByteString)) r,
@@ -107,10 +110,11 @@ procToTransport ::
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     cs ~ Show :&: c,
-    cs ByteString,
     cs Connection,
     Member Trace r,
-    Member Async r
+    Member Async r,
+    c Raw,
+    Member Fail r
   ) =>
   Transport ->
   Sem r ()
@@ -168,7 +172,7 @@ handleAction ::
     cs Handshake,
     cs Connection,
     cs Response,
-    cs ByteString
+    c Raw
   ) =>
   Action ->
   Sem r ()
@@ -195,7 +199,7 @@ r2c ::
     cs (RouteTo Connection),
     cs Connection,
     cs Response,
-    cs ByteString
+    c Raw
   ) =>
   Address ->
   Command ->

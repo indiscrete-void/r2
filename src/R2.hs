@@ -7,24 +7,33 @@ module R2
     r2,
     defaultAddr,
     parseAddressBase58,
+    inputBsToRaw,
+    outputBsToRaw,
   )
 where
 
-import Control.Monad
-import Data.ByteString
-import Data.ByteString qualified as BS
+import Data.Aeson
+import Data.Aeson.TH
+import Data.Aeson.Types
 import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
+import Data.ByteString.Lazy qualified as LBS
 import Data.DoubleWord
-import Data.Serialize
+import Data.Text qualified as Text
 import Data.Word
 import GHC.Generics
+import Polysemy
+import Polysemy.Fail
+import Polysemy.Transport
 import System.Random.Stateful
 
 newtype Address = Addr {unAddr :: Word256}
   deriving stock (Eq, Generic)
   deriving (Num) via Word256
+
+showAddressBase58 :: Address -> String
+showAddressBase58 = BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger . unAddr
 
 parseAddressBase58 :: String -> Maybe Address
 parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
@@ -41,7 +50,18 @@ data RoutedFrom msg = RoutedFrom
   }
   deriving stock (Show, Eq, Generic)
 
-type Raw = ByteString
+type Raw = Value
+
+inputBsToRaw :: (Member ByteInputWithEOF r, Member Fail r) => InterpreterFor (InputWithEOF Raw) r
+inputBsToRaw = interpret \case
+  Input -> do
+    input >>= \case
+      Just bs -> maybe (fail "failed to decode Raw") pure . decode . LBS.fromStrict $ bs
+      Nothing -> pure Nothing
+
+outputBsToRaw :: (Member ByteOutput r) => InterpreterFor (Output Raw) r
+outputBsToRaw = interpret \case
+  Output o -> output . LBS.toStrict $ encode o
 
 type Connection = ()
 
@@ -50,12 +70,6 @@ r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
 
 defaultAddr :: Address
 defaultAddr = Addr 0
-
-instance Serialize Address
-
-instance Serialize Word128
-
-instance Serialize Word256
 
 instance Uniform Address
 
@@ -76,24 +90,15 @@ instance Show Address where
     | addr == unAddr defaultAddr = "<default>"
     | otherwise = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
 
-instance (Serialize msg) => Serialize (RouteTo msg) where
-  put (RouteTo addr msg) = put (RouteTo addr (encode msg))
-  get = do
-    addr <- get
-    _ <- get @Int
-    RouteTo addr <$> get
+instance ToJSON Address where
+  toJSON addr = String (Text.pack $ showAddressBase58 addr)
 
-instance {-# OVERLAPPING #-} Serialize (RouteTo Raw) where
-  put (RouteTo addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RouteTo get (get >>= getByteString)
+instance FromJSON Address where
+  parseJSON =
+    withText "Address" $
+      maybe (parseFail "non-base58 string") pure
+        . parseAddressBase58
+        . Text.unpack
 
-instance (Serialize msg) => Serialize (RoutedFrom msg) where
-  put (RoutedFrom addr msg) = put (RoutedFrom addr (encode msg))
-  get = do
-    addr <- get
-    _ <- get @Int
-    RoutedFrom addr <$> get
-
-instance {-# OVERLAPPING #-} Serialize (RoutedFrom Raw) where
-  put (RoutedFrom addr bs) = put addr >> put (BS.length bs) >> putByteString bs
-  get = liftM2 RoutedFrom get (get >>= getByteString)
+$(deriveJSON defaultOptions ''RouteTo)
+$(deriveJSON defaultOptions ''RoutedFrom)

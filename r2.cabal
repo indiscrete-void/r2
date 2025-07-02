@@ -8,7 +8,7 @@ license: AGPL-3.0-only
 flag pedantic
 
 common default
-    build-depends: base >=4.17.2.1 && <5, polysemy-transport, bytestring, cereal, unix, network, polysemy, polysemy-plugin, polysemy-scoped-process, optparse-applicative, extra, random, data-dword, base58-bytestring, polysemy-conc, stm-chans
+    build-depends: base >=4.17.2.1 && <5, polysemy-transport, bytestring, unix, network, polysemy, polysemy-plugin, polysemy-scoped-process, optparse-applicative, extra, random, data-dword, base58-bytestring, polysemy-conc, stm-chans, aeson, base64-bytestring, text
     default-language: Haskell2010
     default-extensions:
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes

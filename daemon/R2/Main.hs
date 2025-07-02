@@ -1,6 +1,6 @@
 import Control.Constraint
 import Control.Monad
-import Data.Serialize
+import Data.Aeson
 import Data.Typeable
 import Network.Socket (bind, listen)
 import R2.Peer
@@ -28,7 +28,7 @@ main =
   let runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s =
         acceptToIO s
-          . runScopedBundle @(Any (Show :&: (Serialize :&: Typeable))) (runTransport $ serializeAnyOutput . deserializeAnyInput)
+          . runScopedBundle @(Any (Show :&: (FromJSON :&: (ToJSON :&: Typeable)))) (runTransport $ serializeAnyOutput . deserializeAnyInput)
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =
@@ -36,7 +36,6 @@ main =
           . ignoreTrace
           . asyncToIOFinal
           . resourceToIOFinal
-          . runDecoder
           . embedToFinal @IO
           . failToEmbed @IO
           . runProcess
