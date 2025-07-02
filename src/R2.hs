@@ -3,12 +3,9 @@ module R2
     RouteTo (..),
     RoutedFrom (..),
     Connection,
-    Raw,
     r2,
     defaultAddr,
-    parseAddressBase58,
-    inputBsToRaw,
-    outputBsToRaw,
+    parseAddressBase58
   )
 where
 
@@ -49,19 +46,6 @@ data RoutedFrom msg = RoutedFrom
     routedFromData :: msg
   }
   deriving stock (Show, Eq, Generic)
-
-type Raw = Value
-
-inputBsToRaw :: (Member ByteInputWithEOF r, Member Fail r) => InterpreterFor (InputWithEOF Raw) r
-inputBsToRaw = interpret \case
-  Input -> do
-    input >>= \case
-      Just bs -> maybe (fail "failed to decode Raw") pure . decode . LBS.fromStrict $ bs
-      Nothing -> pure Nothing
-
-outputBsToRaw :: (Member ByteOutput r) => InterpreterFor (Output Raw) r
-outputBsToRaw = interpret \case
-  Output o -> output . LBS.toStrict $ encode o
 
 type Connection = ()
 
