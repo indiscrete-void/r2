@@ -63,4 +63,3 @@ test-suite tests
         r2,
         tasty,
         tasty-hunit,
-    other-modules: Polysemy.Transport.Chan
