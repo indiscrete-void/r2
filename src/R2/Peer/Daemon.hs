@@ -209,7 +209,7 @@ route ::
   Sem r ()
 route sender = traceTagged "route" $ raise @Trace do
   trace ("routing for " ++ show sender)
-  let sendTo :: Address -> RoutedFrom Raw -> Sem r ()
+  let sendTo :: cs a => Address -> a -> Sem r ()
       sendTo addr msg = do
         (Just nodeData) <- stateLookupNode addr
         runNodeOutput nodeData $ outputAny msg
