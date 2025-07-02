@@ -65,14 +65,15 @@ procToR2 ::
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     cs ~ Show :&: c,
     c (),
-    c ByteString,
+    c Raw,
     Member Trace r,
-    Member Async r
+    Member Async r,
+    Member Fail r
   ) =>
   String ->
   Address ->
   Sem r ()
-procToR2 cmd = execIO (ioShell cmd) . ioToR2 @ByteString
+procToR2 cmd = execIO (ioShell cmd) . outputBsToRaw . inputBsToRaw . ioToR2 @Raw
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -80,10 +81,11 @@ tunnelProcess ::
     forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
     forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
     cs ~ Show :&: c,
-    c ByteString,
+    c Raw,
     c (),
     Member Trace r,
-    Member Async r
+    Member Async r,
+    Member Fail r
   ) =>
   String ->
   Address ->
@@ -133,7 +135,7 @@ connectNode ::
     cs Handshake,
     cs Response,
     c (),
-    c ByteString,
+    c Raw,
     c (RouteTo Connection)
   ) =>
   Address ->
@@ -235,8 +237,8 @@ handleHandshake ::
     cs Self,
     cs (RoutedFrom Connection),
     c (),
-    c ByteString,
-    c (RouteTo Connection)
+    c (RouteTo Connection),
+    c Raw
   ) =>
   Address ->
   String ->
@@ -251,7 +253,7 @@ handleHandshake self cmd (NodeData _ addr) = \case
   Route ->
     inputToAny @(RouteTo Raw) $ route addr
   TunnelProcess ->
-    ioToAny @(RoutedFrom (Maybe ByteString)) @(RouteTo (Maybe ByteString)) $ tunnelProcess cmd addr
+    ioToAny @(RoutedFrom (Maybe Raw)) @(RouteTo (Maybe Raw)) $ tunnelProcess cmd addr
 
 runNodeHandler ::
   forall c s r cs.
@@ -293,9 +295,9 @@ r2cd ::
     cs Response,
     cs Self,
     c (),
-    c ByteString,
     Member Async r,
-    c (RouteTo Connection)
+    c (RouteTo Connection),
+    c Raw
   ) =>
   Address ->
   String ->
@@ -327,8 +329,8 @@ r2d ::
     cs Response,
     cs Self,
     c (),
-    c ByteString,
-    c (RouteTo Connection)
+    c (RouteTo Connection),
+    c Raw
   ) =>
   Address ->
   String ->

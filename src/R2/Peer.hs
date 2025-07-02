@@ -28,9 +28,10 @@ where
 import Control.Applicative ((<|>))
 import Control.Constraint
 import Control.Exception
+import Data.Aeson
+import Data.Aeson.TH
 import Data.Functor
 import Data.Maybe
-import Data.Serialize (Serialize)
 import Debug.Trace qualified as Debug
 import GHC.Generics
 import Network.Socket (Family (..), SockAddr (..), Socket, setSocketOption, socket)
@@ -215,10 +216,7 @@ ioToR2 addr =
       runR2Output @cs addr (outputToAny $ inputToOutput @msg) >> runR2Close addr close
     ]
 
-instance Serialize Transport
-
-instance Serialize Self
-
-instance Serialize Handshake
-
-instance Serialize Response
+$(deriveJSON defaultOptions ''Transport)
+$(deriveJSON defaultOptions ''Self)
+$(deriveJSON defaultOptions ''Handshake)
+$(deriveJSON defaultOptions ''Response)

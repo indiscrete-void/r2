@@ -18,7 +18,7 @@ import Text.Printf (hPrintf)
 
 main :: IO ()
 main =
-  let runUnserialized = runDecoder . deserializeAnyInput . serializeAnyOutput
+  let runUnserialized = deserializeAnyInput . serializeAnyOutput
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . ignoreTrace . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . runTransport s . runStdio . scopedProcToIOFinal bufferSize . traceToStderrBuffered
