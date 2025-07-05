@@ -35,6 +35,7 @@ library
         Polysemy.Sockets.Any,
         Polysemy.Socket.Accept,
         Polysemy.Transport.Queue,
+        Polysemy.Transport.Bus,
         R2,
         R2.Peer,
         R2.Peer.Client,
