@@ -5,7 +5,7 @@ module R2
     Connection,
     r2,
     defaultAddr,
-    parseAddressBase58
+    parseAddressBase58,
   )
 where
 
@@ -15,14 +15,10 @@ import Data.Aeson.Types
 import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
-import Data.ByteString.Lazy qualified as LBS
 import Data.DoubleWord
 import Data.Text qualified as Text
 import Data.Word
 import GHC.Generics
-import Polysemy
-import Polysemy.Fail
-import Polysemy.Transport
 import System.Random.Stateful
 
 newtype Address = Addr {unAddr :: Word256}
