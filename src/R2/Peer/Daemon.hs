@@ -2,7 +2,6 @@ module R2.Peer.Daemon (State, initialState, r2d) where
 
 import Control.Constraint
 import Control.Monad.Extra
-import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Polysemy
 import Polysemy.Any
@@ -18,6 +17,7 @@ import Polysemy.Socket.Accept
 import Polysemy.Sockets.Any
 import Polysemy.Trace
 import Polysemy.Transport
+import Polysemy.Transport.Bus
 import R2
 import R2.Peer
 import System.Process.Extra
@@ -57,6 +57,43 @@ stateReflectNode nodeData = bracket_ addNode delNode
   where
     addNode = trace (Text.printf "storing %s" $ show nodeData) >> stateAddNode nodeData
     delNode = trace (Text.printf "forgetting %s" $ show nodeData) >> stateDeleteNode nodeData
+
+runNodeOutput ::
+  ( Member (AtomicState (State s)) r,
+    Member (SocketsAny cs s) r,
+    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
+    Member Trace r,
+    Member Fail r,
+    cs ~ Show :&: c
+  ) =>
+  NodeData s ->
+  InterpreterFor (OutputAny cs) r
+runNodeOutput (NodeData transport addr) = case transport of
+  Sock s -> socketAny s . raise @(InputAnyWithEOF _) . raiseUnder @Close
+  Router _ router -> \m -> do
+    (Just routerData) <- stateLookupNode router
+    runNodeOutput routerData
+      . runR2Output addr
+      . raiseUnder @(OutputAny _)
+      $ m
+
+interpretSendToState ::
+  ( Member (SocketsAny cs s) r,
+    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
+    cs (RoutedFrom Raw),
+    cs (RouteTo Raw),
+    Member (AtomicState (State s)) r,
+    cs ~ Show :&: c,
+    Member Fail r,
+    Member Trace r,
+    cs o
+  ) =>
+  InterpreterFor (SendTo Address o) r
+interpretSendToState = runScopedNew \addr m -> do
+  (Just nodeData) <- stateLookupNode addr
+  runNodeOutput nodeData . outputToAny . raiseUnder @(OutputAny _) $ m
 
 procToR2 ::
   ( Member (Scoped CreateProcess Process) r,
@@ -170,28 +207,6 @@ connectNode self cmd router transport maybeNewNodeID = do
       let nodeData = NodeData (Router transport parent) addr
        in runR2Input addr $ runNodeHandler (handleHandshakeR2 nodeData) nodeData
 
-runNodeOutput ::
-  ( Member (AtomicState (State s)) r,
-    Member (SocketsAny cs s) r,
-    Member (OutputAny cs) r,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
-    Member Trace r,
-    Member Fail r,
-    cs ~ Show :&: c
-  ) =>
-  NodeData s ->
-  InterpreterFor (OutputAny cs) r
-runNodeOutput (NodeData transport addr) = case transport of
-  Sock s -> socketAny s . raise @(InputAnyWithEOF _) . raiseUnder @Close
-  Router _ router -> \m -> do
-    (Just routerData) <- stateLookupNode router
-    runNodeOutput routerData
-      . runR2Output addr
-      . raiseUnder @(OutputAny _)
-      $ m
-
 route ::
   forall c s r cs.
   ( Member (AtomicState (State s)) r,
@@ -209,7 +224,7 @@ route ::
   Sem r ()
 route sender = traceTagged "route" $ raise @Trace do
   trace ("routing for " ++ show sender)
-  let sendTo :: cs a => Address -> a -> Sem r ()
+  let sendTo :: (cs a) => Address -> a -> Sem r ()
       sendTo addr msg = do
         (Just nodeData) <- stateLookupNode addr
         runNodeOutput nodeData $ outputAny msg
@@ -301,12 +316,16 @@ r2cd ::
   ) =>
   Address ->
   String ->
-  s ->
+  NodeTransport s ->
   Sem r ()
-r2cd self cmd s = do
+r2cd self cmd transport = do
   addr <- exchangeSelves self Nothing
-  let nodeData = NodeData (Sock s) addr
+  let nodeData = NodeData transport addr
   runNodeHandler (handleHandshake self cmd nodeData) nodeData
+
+r2nd self cmd transport =
+  acceptR2 >>= \addr ->
+    runR2 addr $ r2cd self cmd transport
 
 r2d ::
   forall c cs s r.
@@ -336,5 +355,5 @@ r2d ::
   String ->
   Sem r ()
 r2d self cmd = foreverAcceptAsync \s -> socketAny s do
-  result <- runFail $ r2cd self cmd s
+  result <- runFail $ r2cd self cmd (Sock s)
   trace $ show result
