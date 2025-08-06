@@ -1,4 +1,4 @@
-module Polysemy.Transport.Bus (RecvFrom, SendTo, sendTo, recvdFrom, recvFrom, interpretRecvFromTBMQueue, inputToQueue) where
+module Polysemy.Transport.Bus (RecvFrom, SendTo, sendTo, recvdFrom, recvFrom, interpretRecvFromTBMQueue, inputToQueue, closeToQueue) where
 
 import Control.Concurrent.STM.TBMQueue
 import Data.List qualified as List
@@ -68,3 +68,6 @@ interpretRecvFromTBMQueue = fmap snd . stateToIO [] . runScopedNew go . raiseUnd
 
 inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
 inputToQueue = interpret \case Input -> Queue.readMaybe
+
+closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
+closeToQueue = interpret \case Close -> Queue.close
