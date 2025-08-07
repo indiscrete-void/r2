@@ -287,7 +287,7 @@ runNodeHandler ::
   Sem r ()
 runNodeHandler f nodeData@(NodeData _ addr) =
   traceTagged ("r2nd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $
-    inputOrFail @Handshake >>= raise @(InputWithEOF Handshake) . raise @Trace . f
+    handle @Handshake (raise @(InputWithEOF Handshake) . raise @Trace . f)
 
 r2cd ::
   forall c s r cs.
