@@ -14,7 +14,6 @@ import R2.Peer
 import R2.Peer.Client
 import System.IO
 import System.Random.Stateful
-import Text.Printf (hPrintf)
 
 main :: IO ()
 main =
@@ -26,6 +25,5 @@ main =
         (Options command maybeSocketPath) <- parse
         gen <- initStdGen >>= newIOGenM
         self <- uniformM @Address gen
-        hPrintf stderr "me: %s\n" (show self)
         connect s =<< r2SocketAddr maybeSocketPath
         run s $ r2c self command

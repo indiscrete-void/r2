@@ -113,6 +113,7 @@ r2c ::
   Command ->
   Sem r ()
 r2c me (Command targetChain action) = do
+  trace $ Text.printf "me: %s" (show me)
   output (MsgSelf $ Self me)
   (Just server) <- fmap unSelf <$> contramapInput (>>= msgSelf) (input @(Maybe Self))
   trace $ Text.printf "communicating with %s" (show server)
