@@ -6,8 +6,6 @@ import Data.Maybe
 import Polysemy
 import Polysemy.Async
 import Polysemy.AtomicState
-import Polysemy.Conc.Effect.Queue
-import Polysemy.Conc.Queue qualified as Queue
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
