@@ -1,4 +1,4 @@
-cabal-version: 3.0
+cabal-version: 3.4
 name: r2
 version: 0.1.0.0
 author: indiscrete_void
@@ -8,7 +8,16 @@ license: AGPL-3.0-only
 flag pedantic
 
 common default
-    build-depends: base >=4.17.2.1 && <5, polysemy-transport, bytestring, unix, network, polysemy, polysemy-plugin, polysemy-scoped-process, optparse-applicative, extra, random, data-dword, base58-bytestring, polysemy-conc, stm-chans, aeson, base64-bytestring, text
+    build-depends: 
+      base >=4.17.2.1 && <5,
+      bytestring, text,
+      optparse-applicative,
+      unix, network,
+      polysemy, polysemy-plugin,
+      polysemy-scoped-process, polysemy-transport,
+      polysemy-conc, stm-chans,
+      extra, random, 
+      aeson, base64-bytestring, base58-bytestring, data-dword,
     default-language: Haskell2010
     default-extensions:
         DataKinds FlexibleContexts GADTs LambdaCase PolyKinds RankNTypes
@@ -16,7 +25,7 @@ common default
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
         DeriveGeneric DerivingStrategies EmptyDataDeriving OverloadedStrings
         FlexibleInstances QuantifiedConstraints IncoherentInstances StandaloneKindSignatures
-        DerivingVia
+        DerivingVia RecordWildCards
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
@@ -31,9 +40,8 @@ library
     hs-source-dirs: src
     exposed-modules:
         Polysemy.Socket,
-        Polysemy.Sockets,
-        Polysemy.Sockets.Any,
         Polysemy.Socket.Accept,
+        Polysemy.Sockets,
         Polysemy.Transport.Queue,
         Polysemy.Transport.Bus,
         R2,

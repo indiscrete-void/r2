@@ -1,7 +1,9 @@
 module R2.Peer
-  ( Handshake (..),
+  ( Raw,
+    inputBsToRaw,
+    outputBsToRaw,
     Self (..),
-    Response (..),
+    Message (..),
     r2SocketAddr,
     r2Socket,
     withR2Socket,
@@ -10,28 +12,28 @@ module R2.Peer
     queueSize,
     Transport (..),
     r2Sem,
-    inputBefore,
     runR2Input,
     outputRouteTo,
     runR2Close,
     runR2Output,
-    connectR2,
     runR2,
-    acceptR2,
-    Stream (..),
+    ioToMsg,
     ioToR2,
     transport,
     address,
-    Raw,
-    inputBsToRaw,
-    outputBsToRaw,
+    msgSelf,
+    msgRoutedFrom,
+    runMsgInput,
+    runMsgOutput,
+    runMsgClose,
+    msgToIO,
   )
 where
 
-import Control.Constraint
 import Control.Exception
 import Data.Aeson
 import Data.Aeson.TH
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Functor
 import Data.Maybe
@@ -41,13 +43,13 @@ import Network.Socket (Family (..), SockAddr (..), Socket, setSocketOption, sock
 import Network.Socket qualified as Socket
 import Options.Applicative
 import Polysemy
-import Polysemy.Any
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Trace
 import Polysemy.Transport
+import Polysemy.Transport.Extra
 import R2
 import System.Environment
 import System.Posix
@@ -70,21 +72,42 @@ outputBsToRaw = interpret \case
 newtype Self = Self {unSelf :: Address}
   deriving stock (Show, Generic)
 
+$(deriveJSON defaultOptions ''Self)
+
 data Transport
   = Stdio
   | Process String
   deriving stock (Eq, Show, Generic)
 
-data Handshake where
-  ConnectNode :: Transport -> Maybe Address -> Handshake
-  ListNodes :: Handshake
-  Route :: Handshake
-  TunnelProcess :: Handshake
+$(deriveJSON defaultOptions ''Transport)
+
+data Message where
+  MsgSelf :: Self -> Message
+  MsgRouteTo :: RouteTo Message -> Message
+  MsgRoutedFrom :: RoutedFrom Message -> Message
+  MsgData :: Maybe Raw -> Message -- TODO: represent conn state in raw
+  ReqConnectNode :: Transport -> Maybe Address -> Message
+  ReqTunnelProcess :: Message
+  ReqListNodes :: Message
+  ResNodeList :: [Address] -> Message
   deriving stock (Show, Generic)
 
-data Response where
-  NodeList :: [Address] -> Response
-  deriving stock (Show, Generic)
+$(deriveJSON defaultOptions ''Message)
+
+msgSelf :: Message -> Maybe Self
+msgSelf = \case
+  MsgSelf self -> Just self
+  _ -> Nothing
+
+msgData :: Message -> Maybe Raw
+msgData = \case
+  MsgData raw -> raw
+  _ -> Nothing
+
+msgRoutedFrom :: Message -> Maybe (RoutedFrom Message)
+msgRoutedFrom = \case
+  MsgRoutedFrom routedFrom -> Just routedFrom
+  _ -> Nothing
 
 timeout :: Int
 timeout = 16384
@@ -136,103 +159,130 @@ address = str >>= maybeFail "invalid node ID" . parseAddressBase58
 r2Sem :: (Member Trace r, Show msg) => (Address -> RoutedFrom msg -> Sem r ()) -> (Address -> RouteTo msg -> Sem r ())
 r2Sem f node i = traceTagged "handleR2" (trace $ Text.printf "handling %s from %s" (show i) (show node)) >> r2 f node i
 
-inputBefore :: (Member (InputAnyWithEOF c) r, c i) => (i -> Bool) -> Sem r (Maybe i)
-inputBefore f = do
-  maybeX <- inputAny
-  case maybeX of
-    Just x ->
-      if f x
-        then pure $ Just x
-        else inputBefore f
-    Nothing -> pure Nothing
-
 runR2Input ::
-  ( Member (InputAnyWithEOF cs) r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    cs ~ Show :&: c,
+  ( Member (InputWithEOF Message) r,
+    Member Fail r,
     Member Trace r
   ) =>
   Address ->
-  InterpreterFor (InputAnyWithEOF cs) r
+  InterpreterFor (InputWithEOF Message) r
 runR2Input node = traceTagged ("runR2Input " <> show node) . go . raiseUnder @Trace
   where
-    go = interpret \case InputAny -> inputBefore ((== node) . routedFromNode) >>= \msg -> let msgData = msg >>= routedFromData in trace (show msgData) $> msgData
+    go = interpret \case
+      Input ->
+        input >>= \case
+          Just (MsgRoutedFrom (RoutedFrom {..})) ->
+            if routedFromNode == node
+              then trace (show routedFromData) $> Just routedFromData
+              else fail $ "unexpected node: " <> show routedFromNode
+          Just msg -> fail $ "unexected message: " <> show msg
+          Nothing -> pure Nothing
 
-outputRouteTo :: forall msg c r. (Member (OutputAny c) r, c (RouteTo msg)) => Address -> msg -> Sem r ()
-outputRouteTo node = outputAny . RouteTo node
+outputRouteTo :: (Member (Output Message) r) => Address -> Message -> Sem r ()
+outputRouteTo node = output . MsgRouteTo . RouteTo node
 
 runR2Close ::
-  forall c r msg.
-  ( Member (OutputAny c) r,
-    msg ~ Maybe (),
-    c (RouteTo msg),
+  forall r.
+  ( Member (Output Message) r,
     Member Trace r
   ) =>
   Address ->
   InterpreterFor Close r
 runR2Close node = traceTagged ("runR2Close " <> show node) . go . raiseUnder @Trace
   where
-    go = interpret \case Close -> trace "closing" >> outputRouteTo @msg node Nothing
+    go = interpret \case Close -> trace "closing" >> outputRouteTo node (MsgData Nothing)
 
 runR2Output ::
-  ( Member (OutputAny cs) r,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    Member Trace r,
-    cs ~ Show :&: c
-  ) =>
-  Address ->
-  InterpreterFor (OutputAny cs) r
-runR2Output node = traceTagged ("runR2Output " <> show node) . go . raiseUnder @Trace
-  where
-    go = interpret \case OutputAny msg -> trace (show msg) >> outputRouteTo node (Just msg)
-
-runR2 ::
-  ( Members (Any cs) r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    c (),
-    cs ~ Show :&: c,
+  ( Member (Output Message) r,
     Member Trace r
   ) =>
   Address ->
-  InterpretersFor (Any (Show :&: c)) r
+  InterpreterFor (Output Message) r
+runR2Output node = traceTagged ("runR2Output " <> show node) . go . raiseUnder @Trace
+  where
+    go = interpret \case Output msg -> trace (show msg) >> outputRouteTo node msg
+
+runR2 ::
+  ( Members (TransportEffects Message Message) r,
+    Member Fail r,
+    Member Trace r
+  ) =>
+  Address ->
+  InterpretersFor (TransportEffects Message Message) r
 runR2 node =
   runR2Close node
     . runR2Output node
     . runR2Input node
 
-connectR2 :: (Member (Output (RouteTo Connection)) r, Member Trace r) => Address -> Sem r ()
-connectR2 addr = traceTagged "connectR2" (trace $ "connecting to " <> show addr) >> output (RouteTo addr ())
+runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r, Member Trace r) => InterpreterFor (InputWithEOF Message) r
+runMsgInput = traceTagged "runMsgInput" . go . raiseUnder @Trace
+  where
+    go :: (Member (InputWithEOF Message) r, Member Fail r, Member Trace r) => InterpreterFor (InputWithEOF Message) r
+    go = interpret \case
+      Input ->
+        input >>= \case
+          Just (MsgData (Just raw)) -> do
+            let msg = decode @Message (encode raw)
+            trace (show msg)
+            pure msg
+          Just (MsgData Nothing) -> pure Nothing
+          Just msg -> fail $ "unexected message: " <> show msg
+          Nothing -> pure Nothing
 
-acceptR2 :: (Member (InputWithEOF (RoutedFrom Connection)) r, Member Fail r) => Sem r Address
-acceptR2 = routedFromNode <$> inputOrFail
+runMsgOutput :: (Member (Output Message) r, Member Trace r) => InterpreterFor (Output Message) r
+runMsgOutput = traceTagged "runMsgOutput" . go . raiseUnder @Trace
+  where
+    go :: (Member (Output Message) r, Member Trace r) => InterpreterFor (Output Message) r
+    go = interpret \case
+      Output msg -> trace (show msg) >> (output . MsgData . decode @Raw . encode $ msg)
 
-data Stream = R2Stream | IOStream
+runMsgClose :: (Member (Output Message) r, Member Trace r) => InterpreterFor Close r
+runMsgClose = traceTagged "runMsgClose" . go . raiseUnder @Trace
+  where
+    go :: (Member (Output Message) r, Member Trace r) => InterpreterFor Close r
+    go = interpret \case
+      Close -> trace "close" >> output (MsgData Nothing)
+
+msgToIO ::
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
+    Member Fail r,
+    Member Trace r
+  ) =>
+  InterpretersFor (TransportEffects Message Message) r
+msgToIO =
+  runMsgClose
+    . runMsgOutput
+    . runMsgInput
+
+ioToMsg ::
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
+    Member (InputWithEOF ByteString) r,
+    Member (Output ByteString) r,
+    Member Close r,
+    Member Async r,
+    Member Fail r,
+    Member Trace r
+  ) =>
+  Sem r ()
+ioToMsg =
+  inputBsToRaw . outputBsToRaw $
+    sequenceConcurrently_
+      [ traceTagged "msgToIn" $ contramapInput (>>= msgData) inputToOutput >> close,
+        traceTagged "outToMsg" $ mapOutput (MsgData . Just) inputToOutput >> output (MsgData Nothing)
+      ]
 
 ioToR2 ::
-  forall msg c r cs.
-  ( Member (InputAnyWithEOF cs) r,
-    Member (OutputAny cs) r,
-    Member (InputWithEOF msg) r,
-    Member (Output msg) r,
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
+    Member (InputWithEOF ByteString) r,
+    Member (Output ByteString) r,
+    Member Fail r,
     Member Close r,
     Member Trace r,
-    Member Async r,
-    forall x. (cs x) => cs (RouteTo (Maybe x)),
-    forall x. (cs x) => cs (RoutedFrom (Maybe x)),
-    c (),
-    cs msg,
-    cs ~ Show :&: c
+    Member Async r
   ) =>
   Address ->
   Sem r ()
-ioToR2 addr =
-  sequenceConcurrently_
-    [ runR2Input @cs addr (inputToAny $ inputToOutput @msg) >> close,
-      runR2Output @cs addr (outputToAny $ inputToOutput @msg) >> runR2Close addr close
-    ]
-
-$(deriveJSON defaultOptions ''Transport)
-$(deriveJSON defaultOptions ''Self)
-$(deriveJSON defaultOptions ''Handshake)
-$(deriveJSON defaultOptions ''Response)
+ioToR2 addr = runR2 addr ioToMsg

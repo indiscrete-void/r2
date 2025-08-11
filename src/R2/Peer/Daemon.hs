@@ -1,12 +1,14 @@
 module R2.Peer.Daemon (State, initialState, r2d) where
 
-import Control.Constraint
 import Control.Monad.Extra
 import Data.List qualified as List
+import Data.Maybe
 import Polysemy
-import Polysemy.Any
 import Polysemy.Async
 import Polysemy.AtomicState
+import Polysemy.Conc.Effect.Queue
+import Polysemy.Conc.Queue qualified as Queue
+import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
@@ -14,7 +16,7 @@ import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
 import Polysemy.Socket.Accept
-import Polysemy.Sockets.Any
+import Polysemy.Sockets
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Bus
@@ -32,7 +34,7 @@ data NodeData s = NodeData
   }
   deriving stock (Eq, Show)
 
-data NodeTransport s = Sock s | Router Transport Address
+data NodeTransport s = Sock s | Pipe Transport Address | R2 Address
   deriving stock (Eq, Show)
 
 type State s = [NodeData s]
@@ -60,66 +62,41 @@ stateReflectNode nodeData = bracket_ addNode delNode
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
-    Member (SocketsAny cs s) r,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
+    Member (Sockets Message Message s) r,
     Member Trace r,
-    Member Fail r,
-    cs ~ Show :&: c
+    Member Fail r
   ) =>
   NodeData s ->
-  InterpreterFor (OutputAny cs) r
+  InterpreterFor (Output Message) r
 runNodeOutput (NodeData transport addr) = case transport of
-  Sock s -> socketAny s . raise @(InputAnyWithEOF _) . raiseUnder @Close
-  Router _ router -> \m -> do
+  Sock s -> socketOutput s
+  Pipe _ router -> \m -> do
+    (Just routerData) <- stateLookupNode router
+    runNodeOutput routerData
+      . runMsgOutput
+      . raiseUnder @(Output Message)
+      $ m
+  R2 router -> \m -> do
     (Just routerData) <- stateLookupNode router
     runNodeOutput routerData
       . runR2Output addr
-      . raiseUnder @(OutputAny _)
+      . raiseUnder @(Output Message)
       $ m
 
 interpretSendToState ::
-  ( Member (SocketsAny cs s) r,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
+  ( Member (Sockets Message Message s) r,
     Member (AtomicState (State s)) r,
-    cs ~ Show :&: c,
     Member Fail r,
-    Member Trace r,
-    cs o
+    Member Trace r
   ) =>
-  InterpreterFor (SendTo Address o) r
+  InterpreterFor (SendTo Address Message) r
 interpretSendToState = runScopedNew \addr m -> do
   (Just nodeData) <- stateLookupNode addr
-  runNodeOutput nodeData . outputToAny . raiseUnder @(OutputAny _) $ m
-
-procToR2 ::
-  ( Member (Scoped CreateProcess Process) r,
-    Members (Any cs) r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs ~ Show :&: c,
-    c (),
-    c Raw,
-    Member Trace r,
-    Member Async r,
-    Member Fail r
-  ) =>
-  String ->
-  Address ->
-  Sem r ()
-procToR2 cmd = execIO (ioShell cmd) . outputBsToRaw . inputBsToRaw . ioToR2 @Raw
+  runNodeOutput nodeData m
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
-    Members (Any cs) r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs ~ Show :&: c,
-    c Raw,
-    c (),
+    Members (TransportEffects Message Message) r,
     Member Trace r,
     Member Async r,
     Member Fail r
@@ -127,53 +104,41 @@ tunnelProcess ::
   String ->
   Address ->
   Sem r ()
-tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) $ procToR2 cmd defaultAddr
+tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) $ execIO (ioShell cmd) ioToMsg
 
-listNodes :: (Member (AtomicState (State s)) r, Member (Output Response) r, Member Trace r) => Sem r ()
+listNodes :: (Member (AtomicState (State s)) r, Member (Output Message) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
   nodeList <- map nodeDataAddr <$> atomicGet
   trace (Text.printf "responding with `%s`" (show nodeList))
-  output (NodeList nodeList)
+  output (ResNodeList nodeList)
 
 exchangeSelves ::
-  ( Member (InputAny Maybe c) r,
-    Member (OutputAny c) r,
-    c Self,
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
     Member Fail r
   ) =>
   Address ->
   Maybe Address ->
   Sem r Address
 exchangeSelves self maybeKnownAddr = do
-  outputAny (Self self)
-  addr <- unSelf <$> inputAnyOrFail
+  output (MsgSelf $ Self self)
+  (Just (Self addr)) <- msgSelf <$> inputOrFail
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
   pure addr
 
 connectNode ::
-  ( Member (AtomicState (State s)) r,
+  ( Members (TransportEffects Message Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (SocketsAny cs s) r,
-    Members (Any cs) r,
-    Member Async r,
-    Member Resource r,
-    Member Fail r,
+    Member (AtomicState (State s)) r,
+    Member (SendTo Address Message) r,
+    Member (RecvFrom Address Message) r,
     Member Trace r,
-    Eq s,
+    Member Fail r,
+    Member Resource r,
+    Member Async r,
     Show s,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs Self,
-    cs (RoutedFrom Connection),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
-    cs Handshake,
-    cs Response,
-    c (),
-    c Raw,
-    c (RouteTo Connection)
+    Eq s
   ) =>
   Address ->
   String ->
@@ -181,138 +146,89 @@ connectNode ::
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode self cmd router transport maybeNewNodeID = do
-  addr <- runR2 defaultAddr $ exchangeSelves self maybeNewNodeID
-  traceTagged ("connection " <> show addr) do
-    let nodeData = NodeData (Router transport router) addr
-    stateReflectNode nodeData $
-      trace . show @(Either String ())
-        =<< runFail
-          ( runR2 defaultAddr
-              . outputToAny @(RouteTo Connection)
-              . inputToAny @(RoutedFrom Connection)
-              $ forever
-                ( acceptR2 >>= go addr
-                )
-          )
-  where
-    runR2OutputSession addr m = bracket_ (connectR2 self) (runR2Close self close) do
-      runR2Output self $ do
-        outputAny Route
-        runR2Output addr m
-    runOutputSession _ Route = subsume_
-    runOutputSession (NodeData _ addr) _ = runR2OutputSession addr
-    handleHandshakeR2 nodeData handshake = runOutputSession nodeData handshake $ handleHandshake self cmd nodeData handshake
-    go parent addr =
-      let nodeData = NodeData (Router transport parent) addr
-       in runR2Input addr $ runNodeHandler (handleHandshakeR2 nodeData) nodeData
+connectNode self cmd router transport maybeNewNodeID = msgToIO do
+  addr <- exchangeSelves self maybeNewNodeID
+  let nodeData = NodeData (Pipe transport router) addr
+  runDefaultNodeHandler self cmd nodeData
 
-route ::
-  forall c s r cs.
-  ( Member (AtomicState (State s)) r,
-    Member (InputWithEOF (RouteTo Raw)) r,
-    Member (SocketsAny cs s) r,
-    Member (OutputAny cs) r,
-    Member Trace r,
-    Member Fail r,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw)
-  ) =>
-  Address ->
-  Sem r ()
-route sender = traceTagged "route" $ raise @Trace do
-  trace ("routing for " ++ show sender)
-  let sendTo :: (cs a) => Address -> a -> Sem r ()
-      sendTo addr msg = do
-        (Just nodeData) <- stateLookupNode addr
-        runNodeOutput nodeData $ outputAny msg
-  handle (r2Sem sendTo sender)
-
-handleHandshake ::
-  forall c s r cs.
+handleMsg ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (SocketsAny cs s) r,
-    Members (Any cs) r,
+    Members (TransportEffects Message Message) r,
+    Member (SendTo Address Message) r,
+    Member (RecvFrom Address Message) r,
     Member Resource r,
     Member Fail r,
     Member Async r,
     Member Trace r,
     Show s,
-    Eq s,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
-    cs Handshake,
-    cs Response,
-    cs Self,
-    cs (RoutedFrom Connection),
-    c (),
-    c (RouteTo Connection),
-    c Raw
+    Eq s
   ) =>
   Address ->
   String ->
   NodeData s ->
-  Handshake ->
+  Message ->
   Sem r ()
-handleHandshake self cmd (NodeData _ addr) = \case
-  (ConnectNode transport maybeNodeID) ->
-    connectNode self cmd addr transport maybeNodeID
-  ListNodes ->
-    outputToAny @Response $ listNodes
-  Route ->
-    inputToAny @(RouteTo Raw) $ route addr
-  TunnelProcess ->
-    ioToAny @(RoutedFrom (Maybe Raw)) @(RouteTo (Maybe Raw)) $ tunnelProcess cmd addr
+handleMsg self cmd (NodeData _ addr) = \case
+  ReqListNodes -> listNodes
+  (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
+  ReqTunnelProcess -> tunnelProcess cmd addr
+  MsgRouteTo routeTo -> r2Sem (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom) addr routeTo
+  MsgRoutedFrom (RoutedFrom routedFromNode routedFromData) -> do
+    recvdFrom routedFromNode routedFromData
+    maybeNodeData <- stateLookupNode routedFromNode
+    when (isNothing maybeNodeData) $ async_ do
+      (recvFrom routedFromNode . closeToQueue . inputToQueue) do
+        let r2NodeData = NodeData (R2 addr) routedFromNode
+        runNodeHandler (sendTo routedFromNode . handleMsg self cmd r2NodeData) r2NodeData
+  msg -> fail $ "unexpected message: " <> show msg
 
 runNodeHandler ::
-  forall c s r cs.
   ( Member (AtomicState (State s)) r,
-    Members (Any cs) r,
+    Members (TransportEffects Message Message) r,
     Member Resource r,
     Member Trace r,
     Show s,
-    Eq s,
-    cs ~ Show :&: c,
-    cs Handshake,
-    Member Fail r
+    Eq s
   ) =>
-  (Handshake -> Sem r ()) ->
+  (Message -> Sem r ()) ->
   NodeData s ->
   Sem r ()
 runNodeHandler f nodeData@(NodeData _ addr) =
-  traceTagged ("r2nd " <> show addr) . inputToAny @Handshake . stateReflectNode nodeData $
-    handle @Handshake (raise @(InputWithEOF Handshake) . raise @Trace . f)
+  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData $
+    handle @Message (raise @Trace . f)
 
-r2cd ::
-  forall c s r cs.
+runDefaultNodeHandler ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (SocketsAny cs s) r,
-    Members (Any cs) r,
+    Members (TransportEffects Message Message) r,
+    Member (RecvFrom Address Message) r,
+    Member (SendTo Address Message) r,
+    Member Async r,
+    Member Resource r,
+    Member Trace r,
+    Member Fail r,
+    Eq s,
+    Show s
+  ) =>
+  Address ->
+  String ->
+  NodeData s ->
+  Sem r ()
+runDefaultNodeHandler self cmd nodeData = runNodeHandler (handleMsg self cmd nodeData) nodeData
+
+r2cd ::
+  ( Member (AtomicState (State s)) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Members (TransportEffects Message Message) r,
+    Member (RecvFrom Address Message) r,
+    Member (SendTo Address Message) r,
     Member Resource r,
     Member Trace r,
     Member Fail r,
     Eq s,
     Show s,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    cs (RoutedFrom Connection),
-    cs (RoutedFrom Raw),
-    cs (RouteTo Raw),
-    cs Handshake,
-    cs Response,
-    cs Self,
-    c (),
-    Member Async r,
-    c (RouteTo Connection),
-    c Raw
+    Member Async r
   ) =>
   Address ->
   String ->
@@ -321,39 +237,24 @@ r2cd ::
 r2cd self cmd transport = do
   addr <- exchangeSelves self Nothing
   let nodeData = NodeData transport addr
-  runNodeHandler (handleHandshake self cmd nodeData) nodeData
-
-r2nd self cmd transport =
-  acceptR2 >>= \addr ->
-    runR2 addr $ r2cd self cmd transport
+  runDefaultNodeHandler self cmd nodeData
 
 r2d ::
-  forall c cs s r.
+  forall s r.
   ( Member (Accept s) r,
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (SocketsAny cs s) r,
+    Member (Sockets Message Message s) r,
+    Member (RecvFrom Address Message) r,
     Member Resource r,
     Member Async r,
     Member Trace r,
     Eq s,
-    Show s,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    cs (RoutedFrom Connection),
-    cs (RouteTo Raw),
-    cs (RoutedFrom Raw),
-    cs Handshake,
-    cs Response,
-    cs Self,
-    c (),
-    c (RouteTo Connection),
-    c Raw
+    Show s
   ) =>
   Address ->
   String ->
   Sem r ()
-r2d self cmd = foreverAcceptAsync \s -> socketAny s do
-  result <- runFail $ r2cd self cmd (Sock s)
+r2d self cmd = foreverAcceptAsync \s -> socket s do
+  result <- runFail . interpretSendToState $ r2cd self cmd (Sock s)
   trace $ show result

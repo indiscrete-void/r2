@@ -1,18 +1,15 @@
 module R2.Peer.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
 
-import Control.Constraint
 import Data.ByteString (ByteString)
 import Polysemy
-import Polysemy.Any
 import Polysemy.Async
-import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
-import Polysemy.Internal.Kind
 import Polysemy.Process
 import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
+import Polysemy.Transport.Extra
 import Polysemy.Wait
 import R2
 import R2.Peer
@@ -30,44 +27,31 @@ data Command = Command
   }
 
 listNodes ::
-  ( Members (Any cs) r,
-    cs Handshake,
-    cs Response,
+  ( Members (TransportEffects Message Message) r,
     Member Fail r,
     Member Trace r
   ) =>
   Sem r ()
-listNodes = ioToAny $ traceTagged "Ls" $ output ListNodes >> (inputOrFail @Response >>= trace . show)
+listNodes = traceTagged "Ls" $ output ReqListNodes >> (inputOrFail @Message >>= trace . show)
 
-streamIO ::
-  ( Member Async r,
-    Members (TransportEffects ByteString ByteString) r,
-    Member (InputWithEOF (RouteTo Raw)) r,
-    Member (Output (RoutedFrom Raw)) r,
+connectTransport ::
+  ( Member ByteInputWithEOF r,
+    Member ByteOutput r,
+    Member Close r,
+    Member (Scoped CreateProcess Process) r,
+    Members (TransportEffects Message Message) r,
     Member Trace r,
+    Member Async r,
     Member Fail r
   ) =>
-  Sem r ()
-streamIO = sequenceConcurrently_ [nodeToIO, ioToNode]
-  where
-    ioToNode = inputBsToRaw . handle $ output . RoutedFrom defaultAddr
-    nodeToIO = outputBsToRaw . handle $ r2Sem (const $ output . routedFromData) defaultAddr
-
-runTransport ::
-  ( Members (TransportEffects ByteString ByteString) r,
-    Member (Scoped CreateProcess Process) r
-  ) =>
   Transport ->
-  InterpretersFor (TransportEffects ByteString ByteString) r
-runTransport Stdio = subsume_
-runTransport (Process cmd) = execIO (ioShell cmd) . raise3Under @Wait
+  Sem r ()
+connectTransport Stdio = ioToMsg
+connectTransport (Process cmd) = execIO (ioShell cmd) ioToMsg
 
 connectNode ::
   ( Member Async r,
-    Members (Any cs) r,
-    cs Handshake,
-    cs (RouteTo Raw),
-    cs (RoutedFrom Raw),
+    Members (TransportEffects Message Message) r,
     Members (TransportEffects ByteString ByteString) r,
     Member Trace r,
     Member (Scoped CreateProcess Process) r,
@@ -76,103 +60,40 @@ connectNode ::
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode transport maybeAddress =
-  outputAny (ConnectNode transport maybeAddress)
-    >> runTransport transport (ioToAny @(RouteTo Raw) @(RoutedFrom Raw) $ streamIO)
-
-transportToR2 ::
-  ( Member ByteInputWithEOF r,
-    Member ByteOutput r,
-    Member Close r,
-    Member (Scoped CreateProcess Process) r,
-    Members (Any cs) r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    c (),
-    cs ~ Show :&: c,
-    c Raw,
-    Member Trace r,
-    Member Async r,
-    Member Fail r
-  ) =>
-  Address ->
-  Transport ->
-  Sem r ()
-transportToR2 address Stdio = inputBsToRaw . outputBsToRaw $ ioToR2 @Raw address
-transportToR2 address (Process cmd) = execIO (ioShell cmd) . inputBsToRaw . outputBsToRaw $ ioToR2 address
+connectNode transport maybeAddress = output (ReqConnectNode transport maybeAddress) >> connectTransport transport
 
 procToTransport ::
   ( Member (Input (Maybe ByteString)) r,
     Member (Output ByteString) r,
     Member (Scoped CreateProcess Process) r,
-    Members (Any cs) r,
-    cs Handshake,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs ~ Show :&: c,
-    cs Connection,
+    Members (TransportEffects Message Message) r,
     Member Trace r,
     Member Async r,
-    c Raw,
     Member Fail r
   ) =>
   Transport ->
   Sem r ()
-procToTransport transport = outputAny TunnelProcess >> transportToR2 defaultAddr transport
-
-runR2Session ::
-  ( Members (Any cs) r,
-    Member Trace r,
-    cs Handshake,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs ~ Show :&: c,
-    cs (RouteTo Connection),
-    cs Connection
-  ) =>
-  Address ->
-  InterpretersFor (Any cs) r
-runR2Session target m = do
-  outputAny Route
-  outputToAny @(RouteTo Connection) $
-    connectR2 target
-  runR2 target m
+procToTransport transport = output ReqTunnelProcess >> connectTransport transport
 
 runChainSession ::
-  forall c cs r.
-  ( Members (Any cs) r,
+  ( Members (TransportEffects Message Message) r,
     Member Trace r,
-    forall msg. (cs msg) => cs (RoutedFrom (Maybe msg)),
-    forall msg. (cs msg) => cs (RouteTo (Maybe msg)),
-    cs ~ Show :&: c,
-    cs (RouteTo Connection),
-    cs Connection,
-    cs Handshake
+    Member Fail r
   ) =>
   [Address] ->
-  InterpretersFor (Any cs) r
+  InterpretersFor (TransportEffects Message Message) r
 runChainSession [] m = subsume_ m
 runChainSession (addr : rest) m =
-  let mdup = insertAt @3 @(Any cs) m
-   in runR2Session addr $ runChainSession rest mdup
+  let mdup = insertAt @3 @(TransportEffects Message Message) m
+   in runR2 addr $ runChainSession rest mdup
 
 handleAction ::
-  ( Members (Any cs) r,
+  ( Members (TransportEffects Message Message) r,
     Members (TransportEffects ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Member Fail r,
     Member Trace r,
-    Member Async r,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RoutedFrom msg),
-    forall msg. (cs msg) => cs (RouteTo msg),
-    forall msg. (cs msg) => cs (Maybe msg),
-    cs (RouteTo Raw),
-    cs (RoutedFrom Raw),
-    cs Handshake,
-    cs Connection,
-    cs Response,
-    c Raw
+    Member Async r
   ) =>
   Action ->
   Sem r ()
@@ -181,33 +102,19 @@ handleAction (Connect transport maybeAddress) = connectNode transport maybeAddre
 handleAction (Tunnel transport) = procToTransport transport
 
 r2c ::
-  forall c cs r.
-  ( Members (Any cs) r,
+  ( Members (TransportEffects Message Message) r,
     Members (TransportEffects ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Member Fail r,
     Member Trace r,
-    Member Async r,
-    cs ~ Show :&: c,
-    forall msg. (cs msg) => cs (RoutedFrom msg),
-    forall msg. (cs msg) => cs (RouteTo msg),
-    forall msg. (cs msg) => cs (Maybe msg),
-    cs (RouteTo Raw),
-    cs (RoutedFrom Raw),
-    cs Self,
-    cs Handshake,
-    cs (RouteTo Connection),
-    cs Connection,
-    cs Response,
-    c Raw
+    Member Async r
   ) =>
   Address ->
   Command ->
   Sem r ()
 r2c me (Command targetChain action) = do
-  outputAny (Self me)
-  server <- unSelf <$> inputToAny (inputOrFail @Self)
+  output (MsgSelf $ Self me)
+  (Just server) <- fmap unSelf <$> contramapInput (>>= msgSelf) (input @(Maybe Self))
   trace $ Text.printf "communicating with %s" (show server)
-  subsume_ @(Append (Any cs) r) @r $
-    runChainSession targetChain $
-      handleAction action
+  runChainSession targetChain $
+    handleAction action

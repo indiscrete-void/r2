@@ -1,15 +1,9 @@
-import Control.Constraint
 import Control.Monad
-import Data.Aeson
-import Data.Typeable
 import Network.Socket (bind, listen)
-import R2.Peer
-import R2.Peer.Daemon
-import R2.Options
 import Polysemy hiding (run, send)
-import Polysemy.Any
 import Polysemy.Async
 import Polysemy.AtomicState
+import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
@@ -20,6 +14,10 @@ import Polysemy.Socket
 import Polysemy.Socket.Accept
 import Polysemy.Trace
 import Polysemy.Transport
+import Polysemy.Transport.Bus
+import R2.Options
+import R2.Peer
+import R2.Peer.Daemon
 import System.Exit
 import System.Posix
 
@@ -28,7 +26,7 @@ main =
   let runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s =
         acceptToIO s
-          . runScopedBundle @(Any (Show :&: (FromJSON :&: (ToJSON :&: Typeable)))) (runTransport $ serializeAnyOutput . deserializeAnyInput)
+          . runScopedBundle @(TransportEffects Message Message) (runTransport $ serializeOutput . deserializeInput)
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =
@@ -41,7 +39,9 @@ main =
           . runProcess
           . runSocket s
           . runAtomicState
+          . interpretRace
           . traceToStdoutBuffered
+          . interpretRecvFromTBMQueue
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
    in withR2Socket \s -> do
