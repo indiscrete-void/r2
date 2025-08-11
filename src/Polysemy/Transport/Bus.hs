@@ -26,7 +26,7 @@ recvFrom :: (Member (RecvFrom addr i) r) => addr -> InterpreterFor (Queue i) r
 recvFrom = scoped
 
 recvdFrom :: (Member (RecvFrom addr i) r) => addr -> i -> Sem r ()
-recvdFrom addr = recvFrom addr . Queue.write
+recvdFrom addr i = recvFrom addr $ Queue.write i
 
 type RecvFromTBMQueues addr i = [(addr, TBMQueue i)]
 
@@ -67,7 +67,7 @@ interpretRecvFromTBMQueue = fmap snd . stateToIO [] . runScopedNew go . raiseUnd
       interpretQueueTBMWith queue . stateInterceptTBMQueueClose addr $ m
 
 inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
-inputToQueue = interpret \case Input -> Queue.readMaybe
+inputToQueue = interpret \case Input -> Queue.tryReadMaybe
 
 closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
 closeToQueue = interpret \case Close -> Queue.close
