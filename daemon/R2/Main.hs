@@ -40,8 +40,8 @@ main =
           . runSocket s
           . runAtomicState
           . interpretRace
-          . traceToStdoutBuffered
           . interpretRecvFromTBMQueue
+          . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
    in withR2Socket \s -> do
