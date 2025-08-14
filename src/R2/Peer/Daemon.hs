@@ -1,4 +1,4 @@
-module R2.Peer.Daemon (State, initialState, r2d) where
+module R2.Peer.Daemon (State, initialState, tunnelProcess, r2d) where
 
 import Control.Monad.Extra
 import Data.List qualified as List
@@ -99,9 +99,8 @@ tunnelProcess ::
     Member Async r
   ) =>
   String ->
-  Address ->
   Sem r ()
-tunnelProcess cmd addr = traceTagged ("tunnel " <> show addr) $ execIO (ioShell cmd) ioToMsg
+tunnelProcess cmd = traceTagged "tunnel" $ execIO (ioShell cmd) ioToMsg
 
 listNodes :: (Member (AtomicState (State s)) r, Member (Output Message) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
@@ -169,7 +168,7 @@ handleMsg ::
 handleMsg self cmd (NodeData _ addr) = \case
   ReqListNodes -> listNodes
   (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
-  ReqTunnelProcess -> tunnelProcess cmd addr
+  ReqTunnelProcess -> tunnelProcess cmd
   MsgRouteTo routeTo -> r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom) addr routeTo
   MsgRoutedFrom (RoutedFrom routedFromNode routedFromData) -> do
     recvdFrom routedFromNode routedFromData
