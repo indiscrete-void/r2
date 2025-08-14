@@ -10,7 +10,6 @@ import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
-import Polysemy.Wait
 import R2
 import R2.Peer
 import System.Process.Extra
@@ -41,8 +40,7 @@ connectTransport ::
     Member (Scoped CreateProcess Process) r,
     Members (TransportEffects Message Message) r,
     Member Trace r,
-    Member Async r,
-    Member Fail r
+    Member Async r
   ) =>
   Transport ->
   Sem r ()
@@ -54,8 +52,7 @@ connectNode ::
     Members (TransportEffects Message Message) r,
     Members (TransportEffects ByteString ByteString) r,
     Member Trace r,
-    Member (Scoped CreateProcess Process) r,
-    Member Fail r
+    Member (Scoped CreateProcess Process) r
   ) =>
   Transport ->
   Maybe Address ->
@@ -68,8 +65,7 @@ procToTransport ::
     Member (Scoped CreateProcess Process) r,
     Members (TransportEffects Message Message) r,
     Member Trace r,
-    Member Async r,
-    Member Fail r
+    Member Async r
   ) =>
   Transport ->
   Sem r ()
