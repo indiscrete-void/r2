@@ -9,7 +9,6 @@ module R2.Peer
     bufferSize,
     queueSize,
     Transport (..),
-    r2Sem,
     runR2Input,
     outputRouteTo,
     runR2Close,
@@ -153,9 +152,6 @@ transport = do
 
 address :: ReadM Address
 address = str >>= maybeFail "invalid node ID" . parseAddressBase58
-
-r2Sem :: (Member Trace r, Show msg) => (Address -> RoutedFrom msg -> Sem r ()) -> (Address -> RouteTo msg -> Sem r ())
-r2Sem f node i = traceTagged "handleR2" (trace $ Text.printf "handling %s from %s" (show i) (show node)) >> r2 f node i
 
 runR2Input ::
   ( Member (InputWithEOF Message) r,
