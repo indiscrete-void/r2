@@ -170,7 +170,7 @@ handleMsg self cmd (NodeData _ addr) = \case
   ReqListNodes -> listNodes
   (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
   ReqTunnelProcess -> tunnelProcess cmd addr
-  MsgRouteTo routeTo -> r2Sem (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom) addr routeTo
+  MsgRouteTo routeTo -> r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom) addr routeTo
   MsgRoutedFrom (RoutedFrom routedFromNode routedFromData) -> do
     recvdFrom routedFromNode routedFromData
     maybeNodeData <- stateLookupNode routedFromNode
