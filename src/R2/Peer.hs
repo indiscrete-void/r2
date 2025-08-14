@@ -1,7 +1,5 @@
 module R2.Peer
-  ( Raw,
-    inputBsToRaw,
-    outputBsToRaw,
+  ( Raw (..),
     Self (..),
     Message (..),
     r2SocketAddr,
@@ -32,11 +30,14 @@ where
 
 import Control.Exception
 import Data.Aeson
+import Data.Aeson qualified as Value
 import Data.Aeson.TH
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as LBS
 import Data.Functor
 import Data.Maybe
+import Data.Text qualified as Text
 import Debug.Trace qualified as Debug
 import GHC.Generics
 import Network.Socket (Family (..), SockAddr (..), Socket, setSocketOption, socket)
@@ -56,18 +57,15 @@ import System.Posix
 import Text.Printf qualified as Text
 import Transport.Maybe
 
-type Raw = Value
+newtype Raw = Raw {unRaw :: ByteString}
+  deriving stock (Show, Generic)
 
-inputBsToRaw :: (Member ByteInputWithEOF r, Member Fail r) => InterpreterFor (InputWithEOF Raw) r
-inputBsToRaw = interpret \case
-  Input -> do
-    input >>= \case
-      Just bs -> maybe (fail "failed to decode Raw") pure . decode . LBS.fromStrict $ bs
-      Nothing -> pure Nothing
+instance ToJSON Raw where
+  toJSON (Raw bs) = Value.String $ Text.pack $ BC.unpack bs
 
-outputBsToRaw :: (Member ByteOutput r) => InterpreterFor (Output Raw) r
-outputBsToRaw = interpret \case
-  Output o -> output . LBS.toStrict $ encode o
+instance FromJSON Raw where
+  parseJSON (Value.String txt) = return $ Raw $ BC.pack $ Text.unpack txt
+  parseJSON _ = fail "Expected a string value"
 
 newtype Self = Self {unSelf :: Address}
   deriving stock (Show, Generic)
@@ -222,7 +220,7 @@ runMsgInput = traceTagged "runMsgInput" . go . raiseUnder @Trace
       Input ->
         input >>= \case
           Just (MsgData (Just raw)) -> do
-            let msg = decode @Message (encode raw)
+            let msg = decode @Message (LBS.fromStrict $ unRaw raw)
             trace (show msg)
             pure msg
           Just (MsgData Nothing) -> pure Nothing
@@ -234,7 +232,7 @@ runMsgOutput = traceTagged "runMsgOutput" . go . raiseUnder @Trace
   where
     go :: (Member (Output Message) r, Member Trace r) => InterpreterFor (Output Message) r
     go = interpret \case
-      Output msg -> trace (show msg) >> (output . MsgData . decode @Raw . encode $ msg)
+      Output msg -> trace (show msg) >> (output . MsgData . Just . Raw . LBS.toStrict . encode $ msg)
 
 runMsgClose :: (Member (Output Message) r, Member Trace r) => InterpreterFor Close r
 runMsgClose = traceTagged "runMsgClose" . go . raiseUnder @Trace
@@ -262,16 +260,14 @@ ioToMsg ::
     Member (Output ByteString) r,
     Member Close r,
     Member Async r,
-    Member Fail r,
     Member Trace r
   ) =>
   Sem r ()
 ioToMsg =
-  inputBsToRaw . outputBsToRaw $
-    sequenceConcurrently_
-      [ traceTagged "msgToIn" $ contramapInput (>>= msgData) inputToOutput >> close,
-        traceTagged "outToMsg" $ mapOutput (MsgData . Just) inputToOutput >> output (MsgData Nothing)
-      ]
+  sequenceConcurrently_
+    [ traceTagged "msgToIn" $ contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close,
+      traceTagged "outToMsg" $ mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
+    ]
 
 ioToR2 ::
   ( Member (InputWithEOF Message) r,

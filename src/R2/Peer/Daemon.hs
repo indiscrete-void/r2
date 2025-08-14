@@ -96,8 +96,7 @@ tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
     Members (TransportEffects Message Message) r,
     Member Trace r,
-    Member Async r,
-    Member Fail r
+    Member Async r
   ) =>
   String ->
   Address ->
