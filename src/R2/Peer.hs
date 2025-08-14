@@ -57,7 +57,7 @@ import Text.Printf qualified as Text
 import Transport.Maybe
 
 newtype Raw = Raw {unRaw :: ByteString}
-  deriving stock (Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 instance ToJSON Raw where
   toJSON (Raw bs) = Value.String $ Text.pack $ BC.unpack bs
@@ -67,7 +67,7 @@ instance FromJSON Raw where
   parseJSON _ = fail "Expected a string value"
 
 newtype Self = Self {unSelf :: Address}
-  deriving stock (Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 $(deriveJSON defaultOptions ''Self)
 
@@ -87,7 +87,7 @@ data Message where
   ReqTunnelProcess :: Message
   ReqListNodes :: Message
   ResNodeList :: [Address] -> Message
-  deriving stock (Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 $(deriveJSON defaultOptions ''Message)
 
