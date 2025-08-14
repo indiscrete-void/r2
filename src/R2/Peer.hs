@@ -82,7 +82,7 @@ data Message where
   MsgSelf :: Self -> Message
   MsgRouteTo :: RouteTo Message -> Message
   MsgRoutedFrom :: RoutedFrom Message -> Message
-  MsgData :: Maybe Raw -> Message -- TODO: represent conn state in raw
+  MsgData :: Maybe Raw -> Message
   ReqConnectNode :: Transport -> Maybe Address -> Message
   ReqTunnelProcess :: Message
   ReqListNodes :: Message
