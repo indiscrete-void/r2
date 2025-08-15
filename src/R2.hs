@@ -19,6 +19,7 @@ import Data.DoubleWord
 import Data.Text qualified as Text
 import Data.Word
 import GHC.Generics
+import Serial.Aeson.Options
 import System.Random.Stateful
 
 newtype Address = Addr {unAddr :: Word256}
@@ -80,5 +81,5 @@ instance FromJSON Address where
         . parseAddressBase58
         . Text.unpack
 
-$(deriveJSON defaultOptions ''RouteTo)
-$(deriveJSON defaultOptions ''RoutedFrom)
+$(deriveJSON (aesonOptions $ Just "routeTo") ''RouteTo)
+$(deriveJSON (aesonOptions $ Just "routedFrom") ''RoutedFrom)

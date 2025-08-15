@@ -51,6 +51,7 @@ import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
 import R2
+import Serial.Aeson.Options
 import System.Environment
 import System.Posix
 import Text.Printf qualified as Text
@@ -69,14 +70,14 @@ instance FromJSON Raw where
 newtype Self = Self {unSelf :: Address}
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON defaultOptions ''Self)
+$(deriveJSON (aesonOptions $ Just "un") ''Self)
 
 data Transport
   = Stdio
   | Process String
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON defaultOptions ''Transport)
+$(deriveJSON (aesonOptions Nothing) ''Transport)
 
 data Message where
   MsgSelf :: Self -> Message
@@ -89,7 +90,7 @@ data Message where
   ResNodeList :: [Address] -> Message
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON defaultOptions ''Message)
+$(deriveJSON (aesonOptions Nothing) ''Message)
 
 msgSelf :: Message -> Maybe Self
 msgSelf = \case

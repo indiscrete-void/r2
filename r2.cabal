@@ -48,6 +48,7 @@ library
         R2.Peer,
         R2.Peer.Client,
         R2.Peer.Daemon,
+        Serial.Aeson.Options,
 
 executable r2d
     import: default
