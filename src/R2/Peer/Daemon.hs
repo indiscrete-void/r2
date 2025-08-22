@@ -189,7 +189,7 @@ handleMsg self cmd (NodeData _ addr) = \case
     maybeNodeData <- stateLookupNode routedFromNode
     when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
       let r2NodeData = NodeData (R2 addr) routedFromNode
-      runNodeHandler (handleMsg self cmd r2NodeData) r2NodeData
+      runDefaultNodeHandler self cmd r2NodeData
   msg -> fail $ "unexpected message: " <> show msg
 
 runNodeHandler ::
