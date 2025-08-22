@@ -6,6 +6,7 @@ import Data.Maybe
 import Polysemy
 import Polysemy.Async
 import Polysemy.AtomicState
+import Polysemy.Conc (Queue)
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
@@ -152,6 +153,14 @@ connectNode self cmd router transport maybeNewNodeID = msgToIO do
   let nodeData = NodeData (Pipe transport router) addr
   runDefaultNodeHandler self cmd nodeData
 
+ioToBus ::
+  ( Member (RecvFrom Address i) r,
+    Member (SendTo Address o) r
+  ) =>
+  Address ->
+  InterpretersFor (TransportEffects i o) r
+ioToBus addr = recvFrom addr . closeToQueue . sendTo addr . inputToQueue . raise3Under @(Queue _)
+
 handleMsg ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -178,10 +187,9 @@ handleMsg self cmd (NodeData _ addr) = \case
   MsgRoutedFrom (RoutedFrom routedFromNode routedFromData) -> do
     recvdFrom routedFromNode routedFromData
     maybeNodeData <- stateLookupNode routedFromNode
-    when (isNothing maybeNodeData) $ async_ do
-      (recvFrom routedFromNode . closeToQueue . inputToQueue) do
-        let r2NodeData = NodeData (R2 addr) routedFromNode
-        runNodeHandler (sendTo routedFromNode . handleMsg self cmd r2NodeData) r2NodeData
+    when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
+      let r2NodeData = NodeData (R2 addr) routedFromNode
+      runNodeHandler (handleMsg self cmd r2NodeData) r2NodeData
   msg -> fail $ "unexpected message: " <> show msg
 
 runNodeHandler ::
