@@ -88,9 +88,14 @@ interpretSendToState ::
     Member Trace r
   ) =>
   InterpreterFor (SendTo Address Message) r
-interpretSendToState = runScopedNew \addr m -> do
-  (Just nodeData) <- stateLookupNode addr
-  runNodeOutput nodeData m
+interpretSendToState = runScopedNew \addr m ->
+  interpret
+    ( \case
+        Output o -> do
+          (Just nodeData) <- stateLookupNode addr
+          runNodeOutput nodeData $ output o
+    )
+    m
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
