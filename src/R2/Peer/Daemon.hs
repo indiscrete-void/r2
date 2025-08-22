@@ -226,28 +226,6 @@ runDefaultNodeHandler ::
   Sem r ()
 runDefaultNodeHandler self cmd nodeData = runNodeHandler (handleMsg self cmd nodeData) nodeData
 
-r2cd ::
-  ( Member (AtomicState (State s)) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Members (TransportEffects Message Message) r,
-    Member (RecvFrom Address Message) r,
-    Member (SendTo Address Message) r,
-    Member Resource r,
-    Member Trace r,
-    Member Fail r,
-    Eq s,
-    Show s,
-    Member Async r
-  ) =>
-  Address ->
-  String ->
-  NodeTransport s ->
-  Sem r ()
-r2cd self cmd transport = do
-  addr <- exchangeSelves self Nothing
-  let nodeData = NodeData transport addr
-  runDefaultNodeHandler self cmd nodeData
-
 r2d ::
   forall s r.
   ( Member (Accept s) r,
@@ -265,5 +243,8 @@ r2d ::
   String ->
   Sem r ()
 r2d self cmd = foreverAcceptAsync \s -> socket s do
-  result <- runFail . interpretSendToState $ r2cd self cmd (Sock s)
+  result <- runFail . interpretSendToState $ do
+    addr <- exchangeSelves self Nothing
+    let nodeData = NodeData (Sock s) addr
+    runDefaultNodeHandler self cmd nodeData
   trace $ show result
