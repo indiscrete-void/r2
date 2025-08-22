@@ -181,7 +181,7 @@ handleMsg self cmd (NodeData _ addr) = \case
 
 runNodeHandler ::
   ( Member (AtomicState (State s)) r,
-    Members (TransportEffects Message Message) r,
+    Member (InputWithEOF Message) r,
     Member Resource r,
     Member Trace r,
     Show s,
