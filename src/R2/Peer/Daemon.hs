@@ -150,8 +150,7 @@ connectNode ::
   Sem r ()
 connectNode self cmd router transport maybeNewNodeID = msgToIO do
   addr <- exchangeSelves self maybeNewNodeID
-  let nodeData = NodeData (Pipe transport router) addr
-  runDefaultNodeHandler self cmd nodeData
+  r2nd self cmd $ NodeData (Pipe transport router) addr
 
 ioToBus ::
   ( Member (RecvFrom Address i) r,
@@ -188,26 +187,10 @@ handleMsg self cmd (NodeData _ addr) = \case
     recvdFrom routedFromNode routedFromData
     maybeNodeData <- stateLookupNode routedFromNode
     when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
-      let r2NodeData = NodeData (R2 addr) routedFromNode
-      runDefaultNodeHandler self cmd r2NodeData
+      r2nd self cmd $ NodeData (R2 addr) routedFromNode
   msg -> fail $ "unexpected message: " <> show msg
 
-runNodeHandler ::
-  ( Member (AtomicState (State s)) r,
-    Member (InputWithEOF Message) r,
-    Member Resource r,
-    Member Trace r,
-    Show s,
-    Eq s
-  ) =>
-  (Message -> Sem r ()) ->
-  NodeData s ->
-  Sem r ()
-runNodeHandler f nodeData@(NodeData _ addr) =
-  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData $
-    handle @Message (raise @Trace . f)
-
-runDefaultNodeHandler ::
+r2nd ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (TransportEffects Message Message) r,
@@ -224,7 +207,10 @@ runDefaultNodeHandler ::
   String ->
   NodeData s ->
   Sem r ()
-runDefaultNodeHandler self cmd nodeData = runNodeHandler (handleMsg self cmd nodeData) nodeData
+r2nd self cmd nodeData@(NodeData _ addr) =
+  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData $
+    handle @Message $
+      handleMsg self cmd nodeData
 
 r2d ::
   forall s r.
@@ -245,6 +231,5 @@ r2d ::
 r2d self cmd = foreverAcceptAsync \s -> socket s do
   result <- runFail . interpretSendToState $ do
     addr <- exchangeSelves self Nothing
-    let nodeData = NodeData (Sock s) addr
-    runDefaultNodeHandler self cmd nodeData
+    r2nd self cmd $ NodeData (Sock s) addr
   trace $ show result
