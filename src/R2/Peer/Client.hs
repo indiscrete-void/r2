@@ -15,6 +15,7 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
+-- action handling
 data Action
   = Ls
   | Connect !Transport !(Maybe Address)
@@ -71,18 +72,6 @@ procToTransport ::
   Sem r ()
 procToTransport transport = output ReqTunnelProcess >> connectTransport transport
 
-runChainSession ::
-  ( Members (TransportEffects Message Message) r,
-    Member Trace r,
-    Member Fail r
-  ) =>
-  [Address] ->
-  InterpretersFor (TransportEffects Message Message) r
-runChainSession [] m = subsume_ m
-runChainSession (addr : rest) m =
-  let mdup = insertAt @3 @(TransportEffects Message Message) m
-   in runR2 addr $ runChainSession rest mdup
-
 handleAction ::
   ( Members (TransportEffects Message Message) r,
     Members (TransportEffects ByteString ByteString) r,
@@ -96,6 +85,19 @@ handleAction ::
 handleAction Ls = listNodes
 handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
 handleAction (Tunnel transport) = procToTransport transport
+
+-- networking
+runChainSession ::
+  ( Members (TransportEffects Message Message) r,
+    Member Trace r,
+    Member Fail r
+  ) =>
+  [Address] ->
+  InterpretersFor (TransportEffects Message Message) r
+runChainSession [] m = subsume_ m
+runChainSession (addr : rest) m =
+  let mdup = insertAt @3 @(TransportEffects Message Message) m
+   in runR2 addr $ runChainSession rest mdup
 
 r2c ::
   ( Members (TransportEffects Message Message) r,

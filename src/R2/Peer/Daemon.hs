@@ -24,6 +24,7 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
+-- node data
 data NodeIdentity = Partial Address | Full Address
   deriving stock (Eq, Show)
 
@@ -36,6 +37,7 @@ data NodeData s = NodeData
 data NodeTransport s = Sock s | Pipe Transport Address | R2 Address
   deriving stock (Eq, Show)
 
+-- state
 type State s = [NodeData s]
 
 initialState :: State s
@@ -58,6 +60,15 @@ stateReflectNode nodeData = bracket_ addNode delNode
   where
     addNode = trace (Text.printf "storing %s" $ show nodeData) >> stateAddNode nodeData
     delNode = trace (Text.printf "forgetting %s" $ show nodeData) >> stateDeleteNode nodeData
+
+-- i/o
+ioToBus ::
+  ( Member (RecvFrom Address i) r,
+    Member (SendTo Address o) r
+  ) =>
+  Address ->
+  InterpretersFor (TransportEffects i o) r
+ioToBus addr = recvFrom addr . closeToQueue . sendTo addr . inputToQueue . raise3Under @(Queue _)
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
@@ -98,6 +109,7 @@ interpretSendToState = runScopedNew \addr m ->
     )
     m
 
+-- messages
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
     Members (TransportEffects Message Message) r,
@@ -113,21 +125,6 @@ listNodes = traceTagged "ListNodes" do
   nodeList <- map nodeDataAddr <$> atomicGet
   trace (Text.printf "responding with `%s`" (show nodeList))
   output (ResNodeList nodeList)
-
-exchangeSelves ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member Fail r
-  ) =>
-  Address ->
-  Maybe Address ->
-  Sem r Address
-exchangeSelves self maybeKnownAddr = do
-  output (MsgSelf $ Self self)
-  (Just (Self addr)) <- msgSelf <$> inputOrFail
-  whenJust maybeKnownAddr \knownNodeAddr ->
-    when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
-  pure addr
 
 connectNode ::
   ( Members (TransportEffects Message Message) r,
@@ -151,14 +148,6 @@ connectNode ::
 connectNode self cmd router transport maybeNewNodeID = msgToIO do
   addr <- exchangeSelves self maybeNewNodeID
   r2nd self cmd $ NodeData (Pipe transport router) addr
-
-ioToBus ::
-  ( Member (RecvFrom Address i) r,
-    Member (SendTo Address o) r
-  ) =>
-  Address ->
-  InterpretersFor (TransportEffects i o) r
-ioToBus addr = recvFrom addr . closeToQueue . sendTo addr . inputToQueue . raise3Under @(Queue _)
 
 handleMsg ::
   ( Member (AtomicState (State s)) r,
@@ -190,6 +179,22 @@ handleMsg self cmd (NodeData _ addr) = \case
       r2nd self cmd $ NodeData (R2 addr) routedFromNode
   msg -> fail $ "unexpected message: " <> show msg
 
+exchangeSelves ::
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
+    Member Fail r
+  ) =>
+  Address ->
+  Maybe Address ->
+  Sem r Address
+exchangeSelves self maybeKnownAddr = do
+  output (MsgSelf $ Self self)
+  (Just (Self addr)) <- msgSelf <$> inputOrFail
+  whenJust maybeKnownAddr \knownNodeAddr ->
+    when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
+  pure addr
+
+-- networking
 r2nd ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
