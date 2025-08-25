@@ -1,13 +1,19 @@
+import Control.Arrow
+import Polysemy
 import Polysemy.Async
+import Polysemy.AtomicState
 import Polysemy.Close
-import Polysemy.Final
+import Polysemy.Conc
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.Process (scopedProcToIOFinal)
+import Polysemy.Process (Process, scopedProcToIOFinal)
+import Polysemy.Scoped
 import Polysemy.Trace
+import Polysemy.Transport.Bus
 import R2
 import R2.Peer
 import R2.Peer.Daemon
+import System.Process.Extra (CreateProcess)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -23,20 +29,39 @@ testR2 =
   where
     msg = Just ()
 
-testTunnel :: TestTree
-testTunnel =
+sendToToState :: (Member (Embed IO) r) => Sem (Polysemy.Transport.Bus.SendTo Address Message ': r) a -> Sem r ([Message], a)
+sendToToState =
+  fmap (first reverse)
+    . atomicStateToIO []
+    . ( runScopedNew \_ -> runOutputSem (\o -> atomicModify' (o :))
+      )
+    . raiseUnder @(AtomicState [Message])
+
+runTunnelTest :: Sem '[Scoped CreateProcess Process, Race, Trace, Embed IO, Async, Final IO] ([Message], a) -> IO [Message]
+runTunnelTest = fmap fst . runFinal . asyncToIOFinal . embedToFinal @IO . ignoreTrace . interpretRace . scopedProcToIOFinal 8192
+
+catTestCase :: String -> ([Message] -> IO [Message]) -> TestTree
+catTestCase name m = testCase name do
+  let input = [MsgData $ Just $ Raw "a\n"]
+  output <- m input
+  output @?= input <> [MsgData Nothing]
+
+testR2D :: TestTree
+testR2D =
   testGroup
-    "tunnel"
-    [ testCase "r2d: tunnelProcess" do
-        let input = [MsgData $ Just $ Raw "a\n"]
-        (output, _) <-
-          runFinal . asyncToIOFinal . embedToFinal . ignoreTrace . scopedProcToIOFinal 8192 . runClose . runInputList input . outputToIOMonoidAssocR pure $
+    "r2d"
+    [ catTestCase "tunnelProcess" \input ->
+        runTunnelTest . runClose . runInputList input . outputToIOMonoidAssocR pure $ do
+          tunnelProcess "cat",
+      catTestCase "routed tunnelProcess" \input ->
+        runTunnelTest . sendToToState . interpretRecvFromTBMQueue $ do
+          mapM_ (recvdFrom defaultAddr) input
+          ioToBus defaultAddr $ do
             tunnelProcess "cat"
-        output @?= input <> [MsgData Nothing]
     ]
 
 tests :: TestTree
-tests = testGroup "Unit Tests" [testR2, testTunnel]
+tests = testGroup "Unit Tests" [testR2, testR2D]
 
 main :: IO ()
 main = defaultMain tests
