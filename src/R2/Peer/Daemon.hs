@@ -1,4 +1,4 @@
-module R2.Peer.Daemon (State, initialState, tunnelProcess, r2d) where
+module R2.Peer.Daemon (State, initialState, ioToBus, tunnelProcess, r2d) where
 
 import Control.Monad.Extra
 import Data.List qualified as List
