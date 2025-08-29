@@ -149,6 +149,12 @@ connectNode self cmd router transport maybeNewNodeID = msgToIO do
   addr <- exchangeSelves self maybeNewNodeID
   r2nd self cmd $ NodeData (Pipe transport router) addr
 
+handleRouteTo :: (Member (SendTo Address Message) r) => Address -> RouteTo Message -> Sem r ()
+handleRouteTo = r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom)
+
+handleRoutedFrom :: (Member (RecvFrom Address i) r) => RoutedFrom i -> Sem r ()
+handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = recvdFrom routedFromNode routedFromData
+
 handleMsg ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -171,12 +177,12 @@ handleMsg self cmd (NodeData _ addr) = \case
   ReqListNodes -> listNodes
   (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
   ReqTunnelProcess -> tunnelProcess cmd
-  MsgRouteTo routeTo -> r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom) addr routeTo
-  MsgRoutedFrom (RoutedFrom routedFromNode routedFromData) -> do
-    recvdFrom routedFromNode routedFromData
-    maybeNodeData <- stateLookupNode routedFromNode
-    when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
-      r2nd self cmd $ NodeData (R2 addr) routedFromNode
+  MsgRouteTo routeTo -> handleRouteTo addr routeTo
+  MsgRoutedFrom routedFrom@(RoutedFrom routedFromNode _) ->
+    handleRoutedFrom routedFrom >> do
+      maybeNodeData <- stateLookupNode routedFromNode
+      when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
+        r2nd self cmd $ NodeData (R2 addr) routedFromNode
   msg -> fail $ "unexpected message: " <> show msg
 
 exchangeSelves ::
