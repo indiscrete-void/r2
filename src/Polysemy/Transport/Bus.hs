@@ -25,7 +25,7 @@ recvdFrom :: (Member (RecvFrom addr i) r) => addr -> i -> Sem r ()
 recvdFrom addr i = recvFrom addr $ Queue.write i
 
 inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
-inputToQueue = interpret \case Input -> Queue.tryReadMaybe
+inputToQueue = interpret \case Input -> Queue.readMaybe
 
 closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
 closeToQueue = interpret \case Close -> Queue.close
