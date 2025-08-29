@@ -2,14 +2,16 @@ module R2.Peer.Daemon (State, initialState, ioToBus, tunnelProcess, r2d) where
 
 import Control.Monad.Extra
 import Data.List qualified as List
-import Data.Maybe
 import Polysemy
 import Polysemy.Async
 import Polysemy.AtomicState
-import Polysemy.Conc (Queue)
+import Polysemy.Conc (Queue, QueueResult)
+import Polysemy.Conc.Data.QueueResult qualified as QueueResult
+import Polysemy.Conc.Effect.Queue qualified as Queue
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Opaque (Opaque)
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
@@ -109,6 +111,58 @@ interpretSendToState = runScopedNew \addr m ->
     )
     m
 
+interceptRecvFromWrites ::
+  forall r a.
+  ( Member (RecvFrom Address Message) r
+  ) =>
+  (Address -> Message -> Sem r ()) ->
+  Sem (RecvFrom Address Message ': r) a ->
+  Sem (RecvFrom Address Message ': r) a
+interceptRecvFromWrites f =
+  raise_ . runScopedNew \addr m ->
+    recvFrom addr $
+      intercept @(Queue _)
+        ( \case
+            Queue.Read -> Queue.read
+            Queue.TryRead -> Queue.tryRead
+            Queue.ReadTimeout t -> Queue.readTimeout t
+            Queue.Peek -> Queue.peek
+            Queue.TryPeek -> Queue.tryPeek
+            Queue.Write x -> do
+              writeQueueResult addr (QueueResult.Success x)
+              Queue.write x
+            Queue.TryWrite x -> do
+              result <- Queue.tryWrite x
+              writeQueueResult addr (x <$ result)
+              pure result
+            Queue.WriteTimeout t x -> do
+              result <- Queue.writeTimeout t x
+              writeQueueResult addr (x <$ result)
+              pure result
+            Queue.Closed -> Queue.closed
+            Queue.Close -> Queue.close
+        )
+        m
+  where
+    writeQueueResult :: Address -> QueueResult Message -> Sem (Queue Message ': Opaque q ': r) ()
+    writeQueueResult addr (QueueResult.Success x) = raise_ $ f addr x
+    writeQueueResult _ _ = pure ()
+
+interceptRecvFromNewcomers ::
+  ( Member (RecvFrom Address Message) r,
+    Member (AtomicState (State s)) r
+  ) =>
+  Address ->
+  (NodeData s -> Sem r ()) ->
+  Sem (RecvFrom Address Message ': r) a ->
+  Sem (RecvFrom Address Message ': r) a
+interceptRecvFromNewcomers router f = interceptRecvFromWrites go
+  where
+    go addr _ =
+      stateLookupNode addr >>= \case
+        Nothing -> f $ NodeData (R2 router) addr
+        Just _ -> pure ()
+
 -- messages
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -147,7 +201,8 @@ connectNode ::
   Sem r ()
 connectNode self cmd router transport maybeNewNodeID = msgToIO do
   addr <- exchangeSelves self maybeNewNodeID
-  r2nd self cmd $ NodeData (Pipe transport router) addr
+  r2nd self cmd $
+    NodeData (Pipe transport router) addr
 
 handleRouteTo :: (Member (SendTo Address Message) r) => Address -> RouteTo Message -> Sem r ()
 handleRouteTo = r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom)
@@ -178,11 +233,7 @@ handleMsg self cmd (NodeData _ addr) = \case
   (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
   ReqTunnelProcess -> tunnelProcess cmd
   MsgRouteTo routeTo -> handleRouteTo addr routeTo
-  MsgRoutedFrom routedFrom@(RoutedFrom routedFromNode _) ->
-    handleRoutedFrom routedFrom >> do
-      maybeNodeData <- stateLookupNode routedFromNode
-      when (isNothing maybeNodeData) $ async_ $ ioToBus routedFromNode do
-        r2nd self cmd $ NodeData (R2 addr) routedFromNode
+  MsgRoutedFrom routedFrom -> handleRoutedFrom routedFrom
   msg -> fail $ "unexpected message: " <> show msg
 
 exchangeSelves ::
@@ -201,6 +252,25 @@ exchangeSelves self maybeKnownAddr = do
   pure addr
 
 -- networking
+r2nbd ::
+  ( Member (AtomicState (State s)) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Members (TransportEffects Message Message) r,
+    Member (SendTo Address Message) r,
+    Member (RecvFrom Address Message) r,
+    Member Resource r,
+    Member Fail r,
+    Member Async r,
+    Member Trace r,
+    Show s,
+    Eq s
+  ) =>
+  Address ->
+  String ->
+  NodeData s ->
+  Sem r ()
+r2nbd self cmd nodeData@(NodeData _ addr) = ioToBus addr $ r2nd self cmd nodeData
+
 r2nd ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -219,9 +289,9 @@ r2nd ::
   NodeData s ->
   Sem r ()
 r2nd self cmd nodeData@(NodeData _ addr) =
-  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData $
-    handle @Message $
-      handleMsg self cmd nodeData
+  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData . subsume $
+    interceptRecvFromNewcomers addr (async_ . r2nbd self cmd) $
+      handle (handleMsg self cmd nodeData)
 
 r2d ::
   forall s r.
