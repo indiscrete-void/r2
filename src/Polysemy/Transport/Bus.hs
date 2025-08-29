@@ -18,14 +18,23 @@ type RecvFrom addr i = Scoped addr (Queue i)
 
 type SendTo addr o = Scoped addr (Output o)
 
-sendTo :: (Member (SendTo addr o) r) => addr -> InterpreterFor (Output o) r
-sendTo = scoped
-
 recvFrom :: (Member (RecvFrom addr i) r) => addr -> InterpreterFor (Queue i) r
 recvFrom = scoped
 
 recvdFrom :: (Member (RecvFrom addr i) r) => addr -> i -> Sem r ()
 recvdFrom addr i = recvFrom addr $ Queue.write i
+
+inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
+inputToQueue = interpret \case Input -> Queue.tryReadMaybe
+
+closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
+closeToQueue = interpret \case Close -> Queue.close
+
+sendTo :: (Member (SendTo addr o) r) => addr -> InterpreterFor (Output o) r
+sendTo addr =
+  scoped addr . reinterpret \case
+    Output o -> do
+      output o
 
 type RecvFromTBMQueues addr i = [(addr, TBMQueue i)]
 
@@ -64,9 +73,3 @@ interpretRecvFromTBMQueue = fmap snd . atomicStateToIO [] . runScopedNew go . ra
     go addr m = do
       queue <- stateGetTBMQueue addr
       interpretQueueTBMWith queue . stateInterceptTBMQueueClose addr $ m
-
-inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
-inputToQueue = interpret \case Input -> Queue.tryReadMaybe
-
-closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
-closeToQueue = interpret \case Close -> Queue.close
