@@ -1,4 +1,4 @@
-module Polysemy.Transport.Bus (RecvFrom, RecvdFrom, SendTo, sendTo, recvFrom, outputToRecvdFrom, closeToRecvdFrom, interpretRecvFromTBMQueue) where
+module Polysemy.Transport.Bus (RecvFrom, RecvdFrom, SendTo, sendTo, recvFrom, outputToRecvdFrom, closeToRecvdFrom, ioToBus, interpretRecvFromTBMQueue) where
 
 import Control.Concurrent.STM.TBMQueue
 import Data.List qualified as List
@@ -34,6 +34,16 @@ sendTo addr =
   scoped addr . reinterpret \case
     Output o -> do
       output o
+
+ioToBus ::
+  forall i o addr r.
+  ( Member (RecvFrom addr i) r,
+    Member (RecvdFrom addr i) r,
+    Member (SendTo addr o) r
+  ) =>
+  addr ->
+  InterpretersFor (TransportEffects i o) r
+ioToBus addr = closeToRecvdFrom addr . sendTo addr . recvFrom addr
 
 type RecvFromTBMQueues addr i = [(addr, TBMQueue i)]
 
