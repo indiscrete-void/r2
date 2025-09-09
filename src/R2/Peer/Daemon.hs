@@ -1,4 +1,4 @@
-module R2.Peer.Daemon (State, initialState, ioToBus, tunnelProcess, r2d) where
+module R2.Peer.Daemon (State, initialState, tunnelProcess, r2d) where
 
 import Control.Monad.Extra
 import Data.List qualified as List
@@ -60,16 +60,6 @@ stateReflectNode nodeData = bracket_ addNode delNode
     delNode = trace (Text.printf "forgetting %s" $ show nodeData) >> stateDeleteNode nodeData
 
 -- i/o
-ioToBus ::
-  forall i o r.
-  ( Member (RecvFrom Address i) r,
-    Member (RecvdFrom Address i) r,
-    Member (SendTo Address o) r
-  ) =>
-  Address ->
-  InterpretersFor (TransportEffects i o) r
-ioToBus addr = closeToRecvdFrom addr . sendTo addr . recvFrom addr
-
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
     Member (Sockets Message Message s) r,
