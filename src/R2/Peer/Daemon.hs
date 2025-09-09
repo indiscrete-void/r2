@@ -5,13 +5,9 @@ import Data.List qualified as List
 import Polysemy
 import Polysemy.Async
 import Polysemy.AtomicState
-import Polysemy.Conc (Queue, QueueResult)
-import Polysemy.Conc.Data.QueueResult qualified as QueueResult
-import Polysemy.Conc.Effect.Queue qualified as Queue
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
-import Polysemy.Opaque (Opaque)
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
@@ -65,12 +61,14 @@ stateReflectNode nodeData = bracket_ addNode delNode
 
 -- i/o
 ioToBus ::
+  forall i o r.
   ( Member (RecvFrom Address i) r,
+    Member (RecvdFrom Address i) r,
     Member (SendTo Address o) r
   ) =>
   Address ->
   InterpretersFor (TransportEffects i o) r
-ioToBus addr = recvFrom addr . closeToQueue . sendTo addr . inputToQueue . raise3Under @(Queue _)
+ioToBus addr = closeToRecvdFrom addr . sendTo addr . recvFrom addr
 
 runNodeOutput ::
   ( Member (AtomicState (State s)) r,
@@ -111,52 +109,25 @@ interpretSendToState = runScopedNew \addr m ->
     )
     m
 
-interceptRecvFromWrites ::
-  forall r a.
-  ( Member (RecvFrom Address Message) r
-  ) =>
+interceptRecvdFromWrites ::
+  (Member (RecvdFrom Address Message) r) =>
   (Address -> Message -> Sem r ()) ->
-  Sem (RecvFrom Address Message ': r) a ->
-  Sem (RecvFrom Address Message ': r) a
-interceptRecvFromWrites f =
-  raise_ . runScopedNew \addr m ->
-    recvFrom addr $
-      intercept @(Queue _)
-        ( \case
-            Queue.Read -> Queue.read
-            Queue.TryRead -> Queue.tryRead
-            Queue.ReadTimeout t -> Queue.readTimeout t
-            Queue.Peek -> Queue.peek
-            Queue.TryPeek -> Queue.tryPeek
-            Queue.Write x -> do
-              writeQueueResult addr (QueueResult.Success x)
-              Queue.write x
-            Queue.TryWrite x -> do
-              result <- Queue.tryWrite x
-              writeQueueResult addr (x <$ result)
-              pure result
-            Queue.WriteTimeout t x -> do
-              result <- Queue.writeTimeout t x
-              writeQueueResult addr (x <$ result)
-              pure result
-            Queue.Closed -> Queue.closed
-            Queue.Close -> Queue.close
-        )
-        m
-  where
-    writeQueueResult :: Address -> QueueResult Message -> Sem (Queue Message ': Opaque q ': r) ()
-    writeQueueResult addr (QueueResult.Success x) = raise_ $ f addr x
-    writeQueueResult _ _ = pure ()
+  Sem r a ->
+  Sem r a
+interceptRecvdFromWrites f =
+  intercept \case
+    Output (addr, Just o) -> raise_ (f addr o) >> output (addr, Just o)
+    Output (addr, Nothing) -> output (addr, Nothing)
 
-interceptRecvFromNewcomers ::
-  ( Member (RecvFrom Address Message) r,
+interceptRecvdFromNewcomers ::
+  ( Member (RecvdFrom Address Message) r,
     Member (AtomicState (State s)) r
   ) =>
   Address ->
   (NodeData s -> Sem r ()) ->
-  Sem (RecvFrom Address Message ': r) a ->
-  Sem (RecvFrom Address Message ': r) a
-interceptRecvFromNewcomers router f = interceptRecvFromWrites go
+  Sem r a ->
+  Sem r a
+interceptRecvdFromNewcomers router f = interceptRecvdFromWrites go
   where
     go addr _ =
       stateLookupNode addr >>= \case
@@ -185,6 +156,7 @@ connectNode ::
     Member (Scoped CreateProcess Sem.Process) r,
     Member (AtomicState (State s)) r,
     Member (SendTo Address Message) r,
+    Member (RecvdFrom Address Message) r,
     Member (RecvFrom Address Message) r,
     Member Trace r,
     Member Fail r,
@@ -207,8 +179,8 @@ connectNode self cmd router transport maybeNewNodeID = msgToIO do
 handleRouteTo :: (Member (SendTo Address Message) r) => Address -> RouteTo Message -> Sem r ()
 handleRouteTo = r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom)
 
-handleRoutedFrom :: (Member (RecvFrom Address i) r) => RoutedFrom i -> Sem r ()
-handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = recvdFrom routedFromNode routedFromData
+handleRoutedFrom :: (Member (RecvdFrom Address i) r) => RoutedFrom i -> Sem r ()
+handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = outputToRecvdFrom routedFromNode $ output routedFromData
 
 handleMsg ::
   ( Member (AtomicState (State s)) r,
@@ -216,6 +188,7 @@ handleMsg ::
     Members (TransportEffects Message Message) r,
     Member (SendTo Address Message) r,
     Member (RecvFrom Address Message) r,
+    Member (RecvdFrom Address Message) r,
     Member Resource r,
     Member Fail r,
     Member Async r,
@@ -257,6 +230,7 @@ r2nbd ::
     Member (Scoped CreateProcess Sem.Process) r,
     Members (TransportEffects Message Message) r,
     Member (SendTo Address Message) r,
+    Member (RecvdFrom Address Message) r,
     Member (RecvFrom Address Message) r,
     Member Resource r,
     Member Fail r,
@@ -269,11 +243,12 @@ r2nbd ::
   String ->
   NodeData s ->
   Sem r ()
-r2nbd self cmd nodeData@(NodeData _ addr) = ioToBus addr $ r2nd self cmd nodeData
+r2nbd self cmd nodeData@(NodeData _ addr) = ioToBus @Message @Message addr $ r2nd self cmd nodeData
 
 r2nd ::
   ( Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
+    Member (RecvdFrom Address Message) r,
     Members (TransportEffects Message Message) r,
     Member (RecvFrom Address Message) r,
     Member (SendTo Address Message) r,
@@ -290,7 +265,7 @@ r2nd ::
   Sem r ()
 r2nd self cmd nodeData@(NodeData _ addr) =
   traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData . subsume $
-    interceptRecvFromNewcomers addr (async_ . r2nbd self cmd) $
+    interceptRecvdFromNewcomers addr (async_ . r2nbd self cmd) $
       handle (handleMsg self cmd nodeData)
 
 r2d ::
@@ -299,6 +274,7 @@ r2d ::
     Member (AtomicState (State s)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (Sockets Message Message s) r,
+    Member (RecvdFrom Address Message) r,
     Member (RecvFrom Address Message) r,
     Member Resource r,
     Member Async r,
@@ -309,7 +285,7 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = foreverAcceptAsync \s -> socket s do
+r2d self cmd = foreverAcceptAsync \s -> socket @Message @Message s do
   result <- runFail . interpretSendToState $ do
     addr <- exchangeSelves self Nothing
     r2nd self cmd $ NodeData (Sock s) addr

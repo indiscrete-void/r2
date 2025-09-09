@@ -1,4 +1,4 @@
-module Polysemy.Transport.Bus (RecvFrom, SendTo, sendTo, recvdFrom, recvFrom, interpretRecvFromTBMQueue, inputToQueue, closeToQueue) where
+module Polysemy.Transport.Bus (RecvFrom, RecvdFrom, SendTo, sendTo, recvFrom, outputToRecvdFrom, closeToRecvdFrom, interpretRecvFromTBMQueue) where
 
 import Control.Concurrent.STM.TBMQueue
 import Data.List qualified as List
@@ -14,21 +14,20 @@ import Polysemy.Output
 import Polysemy.Scoped
 import Polysemy.Transport
 
-type RecvFrom addr i = Scoped addr (Queue i)
+type RecvFrom addr i = Scoped addr (InputWithEOF i)
 
-type SendTo addr o = Scoped addr (Output o)
-
-recvFrom :: (Member (RecvFrom addr i) r) => addr -> InterpreterFor (Queue i) r
+recvFrom :: (Member (RecvFrom addr i) r) => addr -> InterpreterFor (InputWithEOF i) r
 recvFrom = scoped
 
-recvdFrom :: (Member (RecvFrom addr i) r) => addr -> i -> Sem r ()
-recvdFrom addr i = recvFrom addr $ Queue.write i
+type RecvdFrom addr i = (Output (addr, Maybe i))
 
-inputToQueue :: (Member (Queue i) r) => InterpreterFor (InputWithEOF i) r
-inputToQueue = interpret \case Input -> Queue.readMaybe
+outputToRecvdFrom :: (Member (RecvdFrom addr i) r) => addr -> InterpreterFor (Output i) r
+outputToRecvdFrom addr = interpret \(Output i) -> output (addr, Just i)
 
-closeToQueue :: (Member (Queue i) r) => InterpreterFor Close r
-closeToQueue = interpret \case Close -> Queue.close
+closeToRecvdFrom :: (Member (RecvdFrom addr i) r) => addr -> InterpreterFor Close r
+closeToRecvdFrom addr = interpret \Close -> output (addr, Nothing)
+
+type SendTo addr o = Scoped addr (Output o)
 
 sendTo :: (Member (SendTo addr o) r) => addr -> InterpreterFor (Output o) r
 sendTo addr =
@@ -67,9 +66,19 @@ stateInterceptTBMQueueClose addr m = do
     )
     m
 
-interpretRecvFromTBMQueue :: (Member (Embed IO) r, Member Race r, Eq addr) => InterpreterFor (RecvFrom addr i) r
-interpretRecvFromTBMQueue = fmap snd . atomicStateToIO [] . runScopedNew go . raiseUnder @(AtomicState _)
+recvFromToQueue :: (Member (Scoped addr (Queue i)) r) => InterpreterFor (RecvFrom addr i) r
+recvFromToQueue = runScopedNew \addr -> scoped addr . runInputSem Queue.readMaybe . raiseUnder
+
+recvdFromToQueue :: (Member (Scoped addr (Queue i)) r) => InterpreterFor (RecvdFrom addr i) r
+recvdFromToQueue = runOutputSem \(addr, o) -> scoped addr $ maybe Queue.close Queue.write o
+
+runScopedQueueTBM :: (Member (Embed IO) r, Member Race r, Eq addr) => InterpreterFor (Scoped addr (Queue i)) r
+runScopedQueueTBM = fmap snd . atomicStateToIO [] . go . raiseUnder @(AtomicState _)
   where
-    go addr m = do
+    go = runScopedNew \addr m -> do
       queue <- stateGetTBMQueue addr
-      interpretQueueTBMWith queue . stateInterceptTBMQueueClose addr $ m
+      interpretQueueTBMWith queue $
+        stateInterceptTBMQueueClose addr m
+
+interpretRecvFromTBMQueue :: (Member (Embed IO) r, Member Race r, Eq addr) => InterpretersFor '[RecvFrom addr i, RecvdFrom addr i] r
+interpretRecvFromTBMQueue = runScopedQueueTBM . recvdFromToQueue . recvFromToQueue . raise2Under
