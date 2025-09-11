@@ -1,17 +1,10 @@
 module Polysemy.Transport.Queue (runInputQueue, runOutputQueue, runCloseQueue, runTBMQueue) where
 
 import Control.Concurrent.STM.TBMQueue
-import Control.Constraint
-import Data.Aeson
-import Data.ByteString (ByteString)
-import Data.Typeable
 import Polysemy
 import Polysemy.Conc.Effect.Race
 import Polysemy.Conc.Interpreter.Queue.TBM
 import Polysemy.Conc.Queue as Queue
-import Polysemy.Fail
-import Polysemy.Serialize
-import Polysemy.Trace
 import Polysemy.Transport
 
 runInputQueue :: (Member (Queue i) r) => InterpreterFor (Input (Maybe i)) r
