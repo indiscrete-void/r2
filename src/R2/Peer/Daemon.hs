@@ -65,7 +65,7 @@ stateReflectNode node = bracket_ addNode delNode
 -- messages
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member Trace r,
     Member Async r
   ) =>
@@ -80,7 +80,7 @@ listNodes = traceTagged "ListNodes" do
   output (ResNodeList nodeList)
 
 connectNode ::
-  ( Members (TransportEffects Message Message) r,
+  ( Members (Transport Message Message) r,
     Member (NodeBus NewConnection q Message) r,
     Member (Bus q Message) r,
     Member Trace r,
@@ -103,7 +103,7 @@ handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan Fro
 handleMsg ::
   ( Member (AtomicState (State chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member (NodeBus NewConnection chan Message) r,
     Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
@@ -145,7 +145,7 @@ r2nd ::
     Member (NodeBus Address chan Message) r,
     Member (NodeBus NewConnection chan Message) r,
     Member (Bus chan Message) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member Async r,
     Member Trace r,
     Member Fail r,
@@ -206,7 +206,7 @@ makeNode ::
   ( Member (AtomicState (State chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (Bus chan Message) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member Async r,
     Member Trace r,
     Member Fail r,

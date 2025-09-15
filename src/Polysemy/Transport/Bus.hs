@@ -66,7 +66,7 @@ data NodeBusChan chan = NodeBusChan
 ioToNodeBusChan ::
   (Member (Bus chan d) r) =>
   NodeBusChan chan ->
-  InterpretersFor (TransportEffects d d) r
+  InterpretersFor (Transport d d) r
 ioToNodeBusChan NodeBusChan {..} =
   (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
     . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
@@ -91,7 +91,7 @@ nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
 nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
 
 nodeBusToIO ::
-  ( Members (TransportEffects d d) r,
+  ( Members (Transport d d) r,
     Member (NodeBus addr chan d) r,
     Member (Bus chan d) r,
     Member Async r
@@ -114,7 +114,7 @@ ioToNodeBus ::
     Member (Bus chan d) r
   ) =>
   addr ->
-  InterpretersFor (TransportEffects d d) r
+  InterpretersFor (Transport d d) r
 ioToNodeBus addr m = do
   NodeBusChan {..} <- nodeBusGetChan addr
   (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))

@@ -197,12 +197,12 @@ runR2Output node = traceTagged ("runR2Output " <> show node) . go . raiseUnder @
     go = interpret \case Output msg -> trace (show msg) >> outputRouteTo node msg
 
 runR2 ::
-  ( Members (TransportEffects Message Message) r,
+  ( Members (Transport Message Message) r,
     Member Fail r,
     Member Trace r
   ) =>
   Address ->
-  InterpretersFor (TransportEffects Message Message) r
+  InterpretersFor (Transport Message Message) r
 runR2 node =
   runR2Close node
     . runR2Output node
@@ -243,7 +243,7 @@ msgToIO ::
     Member Fail r,
     Member Trace r
   ) =>
-  InterpretersFor (TransportEffects Message Message) r
+  InterpretersFor (Transport Message Message) r
 msgToIO =
   runMsgClose
     . runMsgOutput

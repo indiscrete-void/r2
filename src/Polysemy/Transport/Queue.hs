@@ -16,7 +16,7 @@ runOutputQueue = interpret \case Output o -> Queue.write o
 runCloseQueue :: (Member (Queue d) r) => InterpreterFor Close r
 runCloseQueue = interpret \case Close -> Queue.close
 
-runTBMQueue :: forall i o r. (Member (Embed IO) r, Member Race r) => TBMQueue i -> TBMQueue o -> InterpretersFor (TransportEffects i o) r
+runTBMQueue :: forall i o r. (Member (Embed IO) r, Member Race r) => TBMQueue i -> TBMQueue o -> InterpretersFor (Transport i o) r
 runTBMQueue i o =
   (interpretQueueTBMWith o . runCloseQueue . runOutputQueue . raise2Under @(Queue o))
     . (interpretQueueTBMWith i . runInputQueue . raiseUnder @(Queue i))

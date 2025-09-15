@@ -26,7 +26,7 @@ main =
   let runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s =
         acceptToIO s
-          . runScopedBundle @(TransportEffects Message Message) (runTransport $ serializeOutput . deserializeInput)
+          . runScopedBundle @(Transport Message Message) (runTransport $ serializeOutput . deserializeInput)
       runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =
