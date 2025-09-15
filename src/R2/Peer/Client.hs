@@ -27,7 +27,7 @@ data Command = Command
   }
 
 listNodes ::
-  ( Members (TransportEffects Message Message) r,
+  ( Members (Transport Message Message) r,
     Member Fail r,
     Member Trace r
   ) =>
@@ -39,7 +39,7 @@ connectTransport ::
     Member ByteOutput r,
     Member Close r,
     Member (Scoped CreateProcess Process) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member Trace r,
     Member Async r
   ) =>
@@ -50,8 +50,8 @@ connectTransport (Process cmd) = execIO (ioShell cmd) ioToMsg
 
 connectNode ::
   ( Member Async r,
-    Members (TransportEffects Message Message) r,
-    Members (TransportEffects ByteString ByteString) r,
+    Members (Transport Message Message) r,
+    Members (Transport ByteString ByteString) r,
     Member Trace r,
     Member (Scoped CreateProcess Process) r
   ) =>
@@ -64,7 +64,7 @@ procToTransport ::
   ( Member (Input (Maybe ByteString)) r,
     Member (Output ByteString) r,
     Member (Scoped CreateProcess Process) r,
-    Members (TransportEffects Message Message) r,
+    Members (Transport Message Message) r,
     Member Trace r,
     Member Async r
   ) =>
@@ -73,8 +73,8 @@ procToTransport ::
 procToTransport transport = output ReqTunnelProcess >> connectTransport transport
 
 handleAction ::
-  ( Members (TransportEffects Message Message) r,
-    Members (TransportEffects ByteString ByteString) r,
+  ( Members (Transport Message Message) r,
+    Members (Transport ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Member Fail r,
     Member Trace r,
@@ -88,20 +88,20 @@ handleAction (Tunnel transport) = procToTransport transport
 
 -- networking
 runChainSession ::
-  ( Members (TransportEffects Message Message) r,
+  ( Members (Transport Message Message) r,
     Member Trace r,
     Member Fail r
   ) =>
   [Address] ->
-  InterpretersFor (TransportEffects Message Message) r
+  InterpretersFor (Transport Message Message) r
 runChainSession [] m = subsume_ m
 runChainSession (addr : rest) m =
-  let mdup = insertAt @3 @(TransportEffects Message Message) m
+  let mdup = insertAt @3 @(Transport Message Message) m
    in runR2 addr $ runChainSession rest mdup
 
 r2c ::
-  ( Members (TransportEffects Message Message) r,
-    Members (TransportEffects ByteString ByteString) r,
+  ( Members (Transport Message Message) r,
+    Members (Transport ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Member Fail r,
     Member Trace r,
