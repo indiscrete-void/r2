@@ -10,14 +10,14 @@ import Polysemy.Process
 import Polysemy.Resource
 import Polysemy.ScopedBundle
 import Polysemy.Serialize
-import Polysemy.Socket
-import Polysemy.Socket.Accept
 import Polysemy.Trace
 import Polysemy.Transport
-import Polysemy.Transport.Bus
 import R2.Options
 import R2.Peer
 import R2.Peer.Daemon
+import R2.Peer.Daemon.Sockets.Accept
+import R2.Peer.Daemon.Transport.Bus
+import R2.Socket
 import System.Exit
 import System.Posix
 

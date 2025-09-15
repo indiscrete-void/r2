@@ -1,4 +1,4 @@
-module Polysemy.Socket (inputToSocket, outputToSocket, closeToSocket) where
+module R2.Socket (inputToSocket, outputToSocket, closeToSocket) where
 
 import Control.Monad
 import Network.Socket qualified as IO
