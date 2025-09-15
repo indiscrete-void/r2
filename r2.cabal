@@ -46,7 +46,6 @@ library
         R2.Peer.Daemon,
         R2.Peer.Daemon.Sockets,
         R2.Peer.Daemon.Sockets.Accept,
-        R2.Peer.Daemon.Transport.Queue,
         R2.Peer.Daemon.Transport.Bus,
         Serial.Aeson.Options,
 
