@@ -40,7 +40,7 @@ main =
           . runSocket s
           . runAtomicState
           . interpretRace
-          . interpretRecvFromTBMQueue
+          . interpretBusTBM bufferSize timeout
           . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m

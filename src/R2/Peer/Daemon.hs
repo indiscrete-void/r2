@@ -22,21 +22,24 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
--- node data
-data NodeIdentity = Partial Address | Full Address
+-- data
+data NodeTransport = R2 Address | Pipe Address Transport | Socket
   deriving stock (Eq, Show)
 
-data NodeData s = NodeData
-  { nodeDataTransport :: NodeTransport s,
-    nodeDataAddr :: Address
+data NewConnection = NewConnection
+  { newConnAddr :: Maybe Address,
+    newConnTransport :: NodeTransport
+  }
+
+data Connection chan = Connection
+  { connAddr :: Address,
+    connTransport :: NodeTransport,
+    connChan :: NodeBusChan chan
   }
   deriving stock (Eq, Show)
 
-data NodeTransport s = Sock s | Pipe Transport Address | R2 Address
-  deriving stock (Eq, Show)
-
 -- state
-type State s = [NodeData s]
+type State chan = [Connection chan]
 
 initialState :: State s
 initialState = []
@@ -44,85 +47,20 @@ initialState = []
 withReverse :: ([a] -> [b]) -> [a] -> [b]
 withReverse f = reverse . f . reverse
 
-stateAddNode :: (Member (AtomicState (State s)) r) => NodeData s -> Sem r ()
+stateAddNode :: (Member (AtomicState (State q)) r) => Connection q -> Sem r ()
 stateAddNode nodeData = atomicModify' $ withReverse (nodeData :)
 
-stateDeleteNode :: (Member (AtomicState (State s)) r, Eq s) => NodeData s -> Sem r ()
-stateDeleteNode nodeData = atomicModify' $ withReverse (List.delete nodeData)
+stateDeleteNode :: (Member (AtomicState (State q)) r) => Connection q -> Sem r ()
+stateDeleteNode node = atomicModify' $ withReverse (List.filter (\xNode -> connAddr xNode == connAddr node))
 
-stateLookupNode :: (Member (AtomicState (State s)) r) => Address -> Sem r (Maybe (NodeData s))
-stateLookupNode addr = List.find ((== addr) . nodeDataAddr) <$> atomicGet
+stateLookupNode :: (Member (AtomicState (State q)) r) => Address -> Sem r (Maybe (Connection q))
+stateLookupNode addr = List.find ((addr ==) . connAddr) <$> atomicGet
 
-stateReflectNode :: (Show s, Eq s, Member (AtomicState (State s)) r, Member Trace r, Member Resource r) => NodeData s -> Sem r c -> Sem r c
-stateReflectNode nodeData = bracket_ addNode delNode
+stateReflectNode :: (Member (AtomicState (State q)) r, Member Trace r, Member Resource r) => Connection q -> Sem r c -> Sem r c
+stateReflectNode node = bracket_ addNode delNode
   where
-    addNode = trace (Text.printf "storing %s" $ show nodeData) >> stateAddNode nodeData
-    delNode = trace (Text.printf "forgetting %s" $ show nodeData) >> stateDeleteNode nodeData
-
--- i/o
-runNodeOutput ::
-  ( Member (AtomicState (State s)) r,
-    Member (Sockets Message Message s) r,
-    Member Trace r,
-    Member Fail r
-  ) =>
-  NodeData s ->
-  InterpreterFor (Output Message) r
-runNodeOutput (NodeData transport addr) = case transport of
-  Sock s -> socketOutput s
-  Pipe _ router -> \m -> do
-    (Just routerData) <- stateLookupNode router
-    runNodeOutput routerData
-      . runMsgOutput
-      . raiseUnder @(Output Message)
-      $ m
-  R2 router -> \m -> do
-    (Just routerData) <- stateLookupNode router
-    runNodeOutput routerData
-      . runR2Output addr
-      . raiseUnder @(Output Message)
-      $ m
-
-interpretSendToState ::
-  ( Member (Sockets Message Message s) r,
-    Member (AtomicState (State s)) r,
-    Member Fail r,
-    Member Trace r
-  ) =>
-  InterpreterFor (SendTo Address Message) r
-interpretSendToState = runScopedNew \addr m ->
-  interpret
-    ( \case
-        Output o -> do
-          (Just nodeData) <- stateLookupNode addr
-          runNodeOutput nodeData $ output o
-    )
-    m
-
-interceptRecvdFromWrites ::
-  (Member (RecvdFrom Address Message) r) =>
-  (Address -> Message -> Sem r ()) ->
-  Sem r a ->
-  Sem r a
-interceptRecvdFromWrites f =
-  intercept \case
-    Output (addr, Just o) -> raise_ (f addr o) >> output (addr, Just o)
-    Output (addr, Nothing) -> output (addr, Nothing)
-
-interceptRecvdFromNewcomers ::
-  ( Member (RecvdFrom Address Message) r,
-    Member (AtomicState (State s)) r
-  ) =>
-  Address ->
-  (NodeData s -> Sem r ()) ->
-  Sem r a ->
-  Sem r a
-interceptRecvdFromNewcomers router f = interceptRecvdFromWrites go
-  where
-    go addr _ =
-      stateLookupNode addr >>= \case
-        Nothing -> f $ NodeData (R2 router) addr
-        Just _ -> pure ()
+    addNode = trace (Text.printf "storing %s" $ show $ connAddr node) >> stateAddNode node
+    delNode = trace (Text.printf "forgetting %s" $ show $ connAddr node) >> stateDeleteNode node
 
 -- messages
 tunnelProcess ::
@@ -137,68 +75,55 @@ tunnelProcess cmd = traceTagged "tunnel" $ execIO (ioShell cmd) ioToMsg
 
 listNodes :: (Member (AtomicState (State s)) r, Member (Output Message) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
-  nodeList <- map nodeDataAddr <$> atomicGet
+  nodeList <- map connAddr <$> atomicGet
   trace (Text.printf "responding with `%s`" (show nodeList))
   output (ResNodeList nodeList)
 
 connectNode ::
   ( Members (TransportEffects Message Message) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Member (AtomicState (State s)) r,
-    Member (SendTo Address Message) r,
-    Member (RecvdFrom Address Message) r,
-    Member (RecvFrom Address Message) r,
+    Member (NodeBus NewConnection q Message) r,
+    Member (Bus q Message) r,
     Member Trace r,
     Member Fail r,
-    Member Resource r,
-    Member Async r,
-    Show s,
-    Eq s
+    Member Async r
   ) =>
-  Address ->
-  String ->
   Address ->
   Transport ->
   Maybe Address ->
   Sem r ()
-connectNode self cmd router transport maybeNewNodeID = msgToIO do
-  addr <- exchangeSelves self maybeNewNodeID
-  r2nd self cmd $
-    NodeData (Pipe transport router) addr
+connectNode router transport maybeNewNodeID =
+  msgToIO $ nodeBusToIO (NewConnection maybeNewNodeID (Pipe router transport))
 
-handleRouteTo :: (Member (SendTo Address Message) r) => Address -> RouteTo Message -> Sem r ()
-handleRouteTo = r2 (\reqAddr -> sendTo reqAddr . output . MsgRoutedFrom)
+handleRouteTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => Address -> RouteTo Message -> Sem r ()
+handleRouteTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
-handleRoutedFrom :: (Member (RecvdFrom Address i) r) => RoutedFrom i -> Sem r ()
-handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = outputToRecvdFrom routedFromNode $ output routedFromData
+handleRoutedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
+handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
 
 handleMsg ::
-  ( Member (AtomicState (State s)) r,
+  ( Member (AtomicState (State chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (TransportEffects Message Message) r,
-    Member (SendTo Address Message) r,
-    Member (RecvFrom Address Message) r,
-    Member (RecvdFrom Address Message) r,
-    Member Resource r,
+    Member (NodeBus NewConnection chan Message) r,
+    Member (NodeBus Address chan Message) r,
+    Member (Bus chan Message) r,
     Member Fail r,
     Member Async r,
-    Member Trace r,
-    Show s,
-    Eq s
+    Member Trace r
   ) =>
-  Address ->
   String ->
-  NodeData s ->
+  Connection q ->
   Message ->
   Sem r ()
-handleMsg self cmd (NodeData _ addr) = \case
+handleMsg cmd Connection {..} = \case
   ReqListNodes -> listNodes
-  (ReqConnectNode transport maybeNodeID) -> connectNode self cmd addr transport maybeNodeID
+  (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
   ReqTunnelProcess -> tunnelProcess cmd
-  MsgRouteTo routeTo -> handleRouteTo addr routeTo
+  MsgRouteTo routeTo -> handleRouteTo connAddr routeTo
   MsgRoutedFrom routedFrom -> handleRoutedFrom routedFrom
   msg -> fail $ "unexpected message: " <> show msg
 
+-- networking
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
     Member (Output Message) r,
@@ -214,69 +139,135 @@ exchangeSelves self maybeKnownAddr = do
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
   pure addr
 
--- networking
-r2nbd ::
-  ( Member (AtomicState (State s)) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Members (TransportEffects Message Message) r,
-    Member (SendTo Address Message) r,
-    Member (RecvdFrom Address Message) r,
-    Member (RecvFrom Address Message) r,
-    Member Resource r,
-    Member Fail r,
-    Member Async r,
-    Member Trace r,
-    Show s,
-    Eq s
-  ) =>
-  Address ->
-  String ->
-  NodeData s ->
-  Sem r ()
-r2nbd self cmd nodeData@(NodeData _ addr) = ioToBus @Message @Message addr $ r2nd self cmd nodeData
-
 r2nd ::
-  ( Member (AtomicState (State s)) r,
+  ( Member (AtomicState (State chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (RecvdFrom Address Message) r,
+    Member (NodeBus Address chan Message) r,
+    Member (NodeBus NewConnection chan Message) r,
+    Member (Bus chan Message) r,
     Members (TransportEffects Message Message) r,
-    Member (RecvFrom Address Message) r,
-    Member (SendTo Address Message) r,
     Member Async r,
-    Member Resource r,
     Member Trace r,
     Member Fail r,
-    Eq s,
-    Show s
+    Member Resource r
+  ) =>
+  String ->
+  Connection chan ->
+  Sem r ()
+r2nd cmd conn@(Connection {..}) =
+  stateReflectNode conn $
+    traceTagged ("r2nd " <> show connAddr) $
+      handle (handleMsg cmd conn)
+
+runR2NodeBus ::
+  ( Member (AtomicState (State chan)) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member (Bus chan Message) r,
+    Member Fail r,
+    Member Trace r,
+    Member Async r,
+    Member Resource r
   ) =>
   Address ->
   String ->
-  NodeData s ->
+  Address ->
+  InterpreterFor (NodeBus Address chan Message) r
+runR2NodeBus self cmd router = interpret \case
+  NodeBusGetChan addr -> do
+    storedNode <- stateLookupNode addr
+    case storedNode of
+      Just node -> pure $ connChan node
+      Nothing -> do
+        chan <- nodeBusMakeChan
+        async_ $ routeToChan (nodeBusChan ToWorld chan) addr
+        let conn = Connection addr (R2 router) chan
+        ioToNodeBusChan chan $ makeNode self cmd conn
+        pure chan
+  where
+    routeToChan ::
+      ( Member (AtomicState (State chan)) r,
+        Member (Bus chan Message) r,
+        Member Fail r
+      ) =>
+      chan ->
+      Address ->
+      Sem r ()
+    routeToChan chan addr =
+      busChan chan $ do
+        (Just routerNode) <- stateLookupNode router
+        let routerChan = nodeBusChan ToWorld (connChan routerNode)
+        takeChan >>= \case
+          Just i -> do
+            busChan routerChan (putChan $ Just $ MsgRouteTo $ RouteTo addr i)
+              >> routeToChan chan addr
+          Nothing -> mempty
+
+makeNode ::
+  ( Member (AtomicState (State chan)) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member (Bus chan Message) r,
+    Members (TransportEffects Message Message) r,
+    Member Async r,
+    Member Trace r,
+    Member Fail r,
+    Member Resource r
+  ) =>
+  Address ->
+  String ->
+  Connection chan ->
   Sem r ()
-r2nd self cmd nodeData@(NodeData _ addr) =
-  traceTagged ("r2nd " <> show addr) . stateReflectNode nodeData . subsume $
-    interceptRecvdFromNewcomers addr (async_ . r2nbd self cmd) $
-      handle (handleMsg self cmd nodeData)
+makeNode self cmd conn@(Connection {..}) = do
+  async_ $
+    runNewNodeBus self cmd $
+      runR2NodeBus self cmd connAddr $
+        r2nd cmd conn
+
+runNewNodeBus ::
+  ( Member (Bus chan Message) r,
+    Member (AtomicState (State chan)) r,
+    Member (Scoped CreateProcess Process) r,
+    Member Fail r,
+    Member Async r,
+    Member Trace r,
+    Member Resource r
+  ) =>
+  Address ->
+  String ->
+  InterpreterFor (NodeBus NewConnection chan Message) r
+runNewNodeBus self cmd = interpret \case
+  NodeBusGetChan NewConnection {..} -> do
+    chan <- nodeBusMakeChan
+    async_ $ ioToNodeBusChan chan $ do
+      addr <- exchangeSelves self newConnAddr
+      let conn = Connection addr newConnTransport chan
+      makeNode self cmd conn
+    pure chan
+
+r2sd ::
+  ( Member (Accept sock) r,
+    Member (Sockets Message Message sock) r,
+    Member (Bus chan Message) r,
+    Member (NodeBus NewConnection chan Message) r,
+    Member Async r
+  ) =>
+  Sem r ()
+r2sd =
+  foreverAcceptAsync \s -> do
+    socket @Message @Message s $ nodeBusToIO (NewConnection Nothing Socket)
 
 r2d ::
-  forall s r.
-  ( Member (Accept s) r,
-    Member (AtomicState (State s)) r,
+  forall sock chan r.
+  ( Member (Accept sock) r,
+    Member (AtomicState (State chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
-    Member (Sockets Message Message s) r,
-    Member (RecvdFrom Address Message) r,
-    Member (RecvFrom Address Message) r,
+    Member (Sockets Message Message sock) r,
+    Member (Bus chan Message) r,
     Member Resource r,
     Member Async r,
     Member Trace r,
-    Eq s,
-    Show s
+    Member Fail r
   ) =>
   Address ->
   String ->
   Sem r ()
-r2d self cmd = foreverAcceptAsync \s -> socket @Message @Message s do
-  result <- runFail . interpretSendToState $ do
-    addr <- exchangeSelves self Nothing
-    r2nd self cmd $ NodeData (Sock s) addr
-  trace $ show result
+r2d self cmd = runNewNodeBus self cmd r2sd
