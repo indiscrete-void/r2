@@ -46,7 +46,7 @@ library
         R2.Peer.Daemon,
         R2.Peer.Daemon.Sockets,
         R2.Peer.Daemon.Sockets.Accept,
-        R2.Peer.Daemon.Transport.Bus,
+        R2.Peer.Daemon.Bus,
         Serial.Aeson.Options,
 
 executable r2d

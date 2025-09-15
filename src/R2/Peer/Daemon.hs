@@ -18,7 +18,7 @@ import R2
 import R2.Peer
 import R2.Peer.Daemon.Sockets
 import R2.Peer.Daemon.Sockets.Accept
-import R2.Peer.Daemon.Transport.Bus
+import R2.Peer.Daemon.Bus
 import System.Process.Extra
 import Text.Printf qualified as Text
 
