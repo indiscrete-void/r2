@@ -1,4 +1,4 @@
-module R2.Peer.Daemon.Sockets.Accept
+module R2.Daemon.Sockets.Accept
   ( Accept,
     accept,
     foreverAcceptAsync,

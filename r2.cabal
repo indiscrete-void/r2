@@ -42,11 +42,11 @@ library
         R2,
         R2.Socket,
         R2.Peer,
-        R2.Peer.Client,
-        R2.Peer.Daemon,
-        R2.Peer.Daemon.Sockets,
-        R2.Peer.Daemon.Sockets.Accept,
-        R2.Peer.Daemon.Bus,
+        R2.Client,
+        R2.Daemon,
+        R2.Daemon.Sockets,
+        R2.Daemon.Sockets.Accept,
+        R2.Daemon.Bus,
         Serial.Aeson.Options,
 
 executable r2d

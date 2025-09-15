@@ -11,7 +11,7 @@ import Polysemy.Transport
 import R2
 import R2.Options
 import R2.Peer
-import R2.Peer.Client
+import R2.Client
 import System.IO
 import System.Random.Stateful
 
