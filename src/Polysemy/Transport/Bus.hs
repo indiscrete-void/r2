@@ -1,94 +1,131 @@
-module Polysemy.Transport.Bus (RecvFrom, RecvdFrom, SendTo, sendTo, recvFrom, outputToRecvdFrom, closeToRecvdFrom, ioToBus, interpretRecvFromTBMQueue) where
+module Polysemy.Transport.Bus
+  ( Chan (..),
+    takeChan,
+    putChan,
+    Bus (..),
+    busMakeChan,
+    busTakeData,
+    busPutData,
+    busChan,
+    NodeBusChan (..),
+    NodeBus (..),
+    NodeBusDir (..),
+    nodeBusChan,
+    useNodeBusChan,
+    nodeBusGetChan,
+    nodeBusToIO,
+    ioToNodeBus,
+    interpretBusTBM,
+    ioToNodeBusChan,
+    nodeBusMakeChan,
+  )
+where
 
 import Control.Concurrent.STM.TBMQueue
-import Data.List qualified as List
+import Control.Monad
+import GHC.Conc.Sync
 import Polysemy
-import Polysemy.AtomicState
-import Polysemy.Conc (Race)
-import Polysemy.Conc.Effect.Queue (Queue)
-import Polysemy.Conc.Effect.Queue qualified as Effect.Queue
-import Polysemy.Conc.Interpreter.Queue.TBM
-import Polysemy.Conc.Queue qualified as Queue
-import Polysemy.Input
-import Polysemy.Output
-import Polysemy.Scoped
+import Polysemy.Async
+import Polysemy.Extra.Async
 import Polysemy.Transport
+import System.Timeout
 
-type RecvFrom addr i = Scoped addr (InputWithEOF i)
+data Chan d m a where
+  TakeChan :: Chan d m (Maybe d)
+  PutChan :: (Maybe d) -> Chan d m ()
 
-recvFrom :: (Member (RecvFrom addr i) r) => addr -> InterpreterFor (InputWithEOF i) r
-recvFrom = scoped
+makeSem ''Chan
 
-type RecvdFrom addr i = (Output (addr, Maybe i))
+inputToChan :: (Member (Chan d) r) => InterpreterFor (InputWithEOF d) r
+inputToChan = runInputSem takeChan
 
-outputToRecvdFrom :: (Member (RecvdFrom addr i) r) => addr -> InterpreterFor (Output i) r
-outputToRecvdFrom addr = interpret \(Output i) -> output (addr, Just i)
+outputToChan :: (Member (Chan d) r) => InterpreterFor (Output d) r
+outputToChan = runOutputSem (putChan . Just)
 
-closeToRecvdFrom :: (Member (RecvdFrom addr i) r) => addr -> InterpreterFor Close r
-closeToRecvdFrom addr = interpret \Close -> output (addr, Nothing)
+closeToChan :: (Member (Chan d) r) => InterpreterFor Close r
+closeToChan = runClose (putChan Nothing)
 
-type SendTo addr o = Scoped addr (Output o)
+data Bus chan d m a where
+  BusMakeChan :: Bus chan d m chan
+  BusTakeData :: chan -> Bus chan d m (Maybe d)
+  BusPutData :: chan -> Maybe d -> Bus chan d m ()
 
-sendTo :: (Member (SendTo addr o) r) => addr -> InterpreterFor (Output o) r
-sendTo addr =
-  scoped addr . reinterpret \case
-    Output o -> do
-      output o
+makeSem ''Bus
 
-ioToBus ::
-  forall i o addr r.
-  ( Member (RecvFrom addr i) r,
-    Member (RecvdFrom addr i) r,
-    Member (SendTo addr o) r
+busChan :: (Member (Bus chan d) r) => chan -> InterpreterFor (Chan d) r
+busChan chan = interpret \case
+  TakeChan -> busTakeData chan
+  PutChan d -> busPutData chan d
+
+data NodeBusChan chan = NodeBusChan
+  { nodeBusIn :: chan,
+    nodeBusOut :: chan
+  }
+  deriving stock (Eq, Show)
+
+ioToNodeBusChan ::
+  (Member (Bus chan d) r) =>
+  NodeBusChan chan ->
+  InterpretersFor (TransportEffects d d) r
+ioToNodeBusChan NodeBusChan {..} =
+  (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
+    . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
+
+data NodeBus addr chan d m a where
+  NodeBusGetChan :: addr -> NodeBus addr chan d m (NodeBusChan chan)
+
+makeSem ''NodeBus
+
+data NodeBusDir = FromWorld | ToWorld
+
+nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
+nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
+nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
+
+useNodeBusChan :: (Member (NodeBus addr chan d) r, Member (Bus chan d) r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
+useNodeBusChan dir addr m = do
+  chan <- nodeBusGetChan addr
+  busChan (nodeBusChan dir chan) m
+
+nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
+nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
+
+nodeBusToIO ::
+  ( Members (TransportEffects d d) r,
+    Member (NodeBus addr chan d) r,
+    Member (Bus chan d) r,
+    Member Async r
   ) =>
   addr ->
-  InterpretersFor (TransportEffects i o) r
-ioToBus addr = closeToRecvdFrom addr . sendTo addr . recvFrom addr
+  Sem r ()
+nodeBusToIO addr = do
+  NodeBusChan {..} <- nodeBusGetChan addr
+  sequenceConcurrently_
+    [ forever $ input >>= busChan nodeBusIn . putChan,
+      forever $
+        busChan nodeBusOut $
+          takeChan >>= \case
+            Just d -> output d
+            Nothing -> close
+    ]
 
-type RecvFromTBMQueues addr i = [(addr, TBMQueue i)]
+ioToNodeBus ::
+  ( Member (NodeBus addr chan d) r,
+    Member (Bus chan d) r
+  ) =>
+  addr ->
+  InterpretersFor (TransportEffects d d) r
+ioToNodeBus addr m = do
+  NodeBusChan {..} <- nodeBusGetChan addr
+  (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
+    . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
+    $ m
 
-stateGetTBMQueue :: (Member (Embed IO) r, Member (AtomicState (RecvFromTBMQueues addr i)) r, Eq addr) => addr -> Sem r (TBMQueue i)
-stateGetTBMQueue addr = do
-  s <- atomicGet
-  case List.find (\(xAddr, _) -> xAddr == addr) s of
-    Just (_, queue) -> pure queue
-    Nothing -> do
-      queue <- embed (newTBMQueueIO 1024)
-      atomicModify' ((addr, queue) :)
-      pure queue
-
-stateInterceptTBMQueueClose :: (Member (Queue i) r, Member (AtomicState (RecvFromTBMQueues addr i)) r, Eq addr) => addr -> Sem r a -> Sem r a
-stateInterceptTBMQueueClose addr m = do
-  intercept @(Queue _)
-    ( \case
-        Effect.Queue.Read -> Queue.read
-        Effect.Queue.TryRead -> Queue.tryRead
-        Effect.Queue.ReadTimeout t -> Queue.readTimeout t
-        Effect.Queue.Peek -> Queue.peek
-        Effect.Queue.TryPeek -> Queue.tryPeek
-        Effect.Queue.Write x -> Queue.write x
-        Effect.Queue.TryWrite x -> Queue.tryWrite x
-        Effect.Queue.WriteTimeout t x -> Queue.writeTimeout t x
-        Effect.Queue.Closed -> Queue.closed
-        Effect.Queue.Close -> do
-          atomicModify' $ List.filter (\(xAddr, _) -> xAddr /= addr)
-          Queue.close
-    )
-    m
-
-recvFromToQueue :: (Member (Scoped addr (Queue i)) r) => InterpreterFor (RecvFrom addr i) r
-recvFromToQueue = runScopedNew \addr -> scoped addr . runInputSem Queue.readMaybe . raiseUnder
-
-recvdFromToQueue :: (Member (Scoped addr (Queue i)) r) => InterpreterFor (RecvdFrom addr i) r
-recvdFromToQueue = runOutputSem \(addr, o) -> scoped addr $ maybe Queue.close Queue.write o
-
-runScopedQueueTBM :: (Member (Embed IO) r, Member Race r, Eq addr) => InterpreterFor (Scoped addr (Queue i)) r
-runScopedQueueTBM = fmap snd . atomicStateToIO [] . go . raiseUnder @(AtomicState _)
-  where
-    go = runScopedNew \addr m -> do
-      queue <- stateGetTBMQueue addr
-      interpretQueueTBMWith queue $
-        stateInterceptTBMQueueClose addr m
-
-interpretRecvFromTBMQueue :: (Member (Embed IO) r, Member Race r, Eq addr) => InterpretersFor '[RecvFrom addr i, RecvdFrom addr i] r
-interpretRecvFromTBMQueue = runScopedQueueTBM . recvdFromToQueue . recvFromToQueue . raise2Under
+interpretBusTBM :: (Member (Embed IO) r) => Int -> Int -> InterpreterFor (Bus (TBMQueue d) d) r
+interpretBusTBM bufferSize timeoutMS = interpret \case
+  BusMakeChan -> embed $ newTBMQueueIO bufferSize
+  BusTakeData chan ->
+    let timeoutMicros = timeoutMS * 1000
+     in join <$> embed (timeout timeoutMicros $ atomically $ readTBMQueue chan)
+  BusPutData chan (Just d) -> embed $ atomically $ writeTBMQueue chan d
+  BusPutData chan Nothing -> embed $ atomically $ closeTBMQueue chan
