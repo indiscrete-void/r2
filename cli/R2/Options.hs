@@ -1,4 +1,4 @@
-module R2.Options (Options (..), Transport (..), parse) where
+module R2.Options (Options (..), ProcessTransport (..), parse) where
 
 import Options.Applicative
 import R2.Peer
@@ -38,7 +38,7 @@ lsOpts :: Parser Action
 lsOpts = pure Ls
 
 connectOpts :: Parser Action
-connectOpts = Connect <$> argument transport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
+connectOpts = Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
 
 tunnelOpts :: Parser Action
-tunnelOpts = Tunnel <$> argument transport (metavar "TRANSPORT")
+tunnelOpts = Tunnel <$> argument processTransport (metavar "TRANSPORT")

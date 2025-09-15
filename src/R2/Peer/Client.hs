@@ -18,8 +18,8 @@ import Text.Printf qualified as Text
 -- action handling
 data Action
   = Ls
-  | Connect !Transport !(Maybe Address)
-  | Tunnel !Transport
+  | Connect !ProcessTransport !(Maybe Address)
+  | Tunnel !ProcessTransport
 
 data Command = Command
   { commandTargetChain :: [Address],
@@ -43,7 +43,7 @@ connectTransport ::
     Member Trace r,
     Member Async r
   ) =>
-  Transport ->
+  ProcessTransport ->
   Sem r ()
 connectTransport Stdio = ioToMsg
 connectTransport (Process cmd) = execIO (ioShell cmd) ioToMsg
@@ -55,7 +55,7 @@ connectNode ::
     Member Trace r,
     Member (Scoped CreateProcess Process) r
   ) =>
-  Transport ->
+  ProcessTransport ->
   Maybe Address ->
   Sem r ()
 connectNode transport maybeAddress = output (ReqConnectNode transport maybeAddress) >> connectTransport transport
@@ -68,7 +68,7 @@ procToTransport ::
     Member Trace r,
     Member Async r
   ) =>
-  Transport ->
+  ProcessTransport ->
   Sem r ()
 procToTransport transport = output ReqTunnelProcess >> connectTransport transport
 

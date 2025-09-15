@@ -8,7 +8,7 @@ module R2.Peer
     timeout,
     bufferSize,
     queueSize,
-    Transport (..),
+    ProcessTransport (..),
     runR2Input,
     outputRouteTo,
     runR2Close,
@@ -16,7 +16,7 @@ module R2.Peer
     runR2,
     ioToMsg,
     ioToR2,
-    transport,
+    processTransport,
     address,
     msgSelf,
     msgRoutedFrom,
@@ -54,7 +54,6 @@ import R2
 import Serial.Aeson.Options
 import System.Environment
 import System.Posix
-import Text.Printf qualified as Text
 import Transport.Maybe
 
 newtype Raw = Raw {unRaw :: ByteString}
@@ -72,19 +71,19 @@ newtype Self = Self {unSelf :: Address}
 
 $(deriveJSON (aesonOptions $ Just "un") ''Self)
 
-data Transport
+data ProcessTransport
   = Stdio
   | Process String
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON (aesonOptions Nothing) ''Transport)
+$(deriveJSON (aesonOptions Nothing) ''ProcessTransport)
 
 data Message where
   MsgSelf :: Self -> Message
   MsgRouteTo :: RouteTo Message -> Message
   MsgRoutedFrom :: RoutedFrom Message -> Message
   MsgData :: Maybe Raw -> Message
-  ReqConnectNode :: Transport -> Maybe Address -> Message
+  ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
   ReqTunnelProcess :: Message
   ReqListNodes :: Message
   ResNodeList :: [Address] -> Message
@@ -143,8 +142,8 @@ r2SocketAddr customPath = do
 withR2Socket :: (Socket -> IO a) -> IO a
 withR2Socket = bracket r2Socket Socket.close
 
-transport :: ReadM Transport
-transport = do
+processTransport :: ReadM ProcessTransport
+processTransport = do
   arg <- str
   pure
     if arg == "-"
