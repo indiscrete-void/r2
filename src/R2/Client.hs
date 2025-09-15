@@ -1,4 +1,4 @@
-module R2.Peer.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
+module R2.Client (Command (..), Action (..), listNodes, connectNode, r2c) where
 
 import Data.ByteString (ByteString)
 import Polysemy

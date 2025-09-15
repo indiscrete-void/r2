@@ -1,4 +1,4 @@
-module R2.Peer.Daemon (State, initialState, tunnelProcess, r2d) where
+module R2.Daemon (State, initialState, tunnelProcess, r2d) where
 
 import Control.Monad.Extra
 import Data.List qualified as List
@@ -16,9 +16,9 @@ import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Peer
-import R2.Peer.Daemon.Sockets
-import R2.Peer.Daemon.Sockets.Accept
-import R2.Peer.Daemon.Bus
+import R2.Daemon.Sockets
+import R2.Daemon.Sockets.Accept
+import R2.Daemon.Bus
 import System.Process.Extra
 import Text.Printf qualified as Text
 

@@ -2,7 +2,7 @@ module R2.Options (Options (..), ProcessTransport (..), parse) where
 
 import Options.Applicative
 import R2.Peer
-import R2.Peer.Client
+import R2.Client
 
 data Options = Options Command (Maybe FilePath)
 
