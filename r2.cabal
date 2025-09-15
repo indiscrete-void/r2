@@ -16,7 +16,7 @@ common default
       polysemy, polysemy-plugin,
       polysemy-scoped-process, polysemy-transport,
       polysemy-conc, stm-chans,
-      extra, random, 
+      extra, random, monad-loops, 
       aeson, base64-bytestring, base58-bytestring, data-dword,
     default-language: Haskell2010
     default-extensions:
