@@ -23,7 +23,7 @@ import System.Process.Extra
 import Text.Printf qualified as Text
 
 -- data
-data NodeTransport = R2 Address | Pipe Address Transport | Socket
+data NodeTransport = R2 Address | Pipe Address ProcessTransport | Socket
   deriving stock (Eq, Show)
 
 data NewConnection = NewConnection
@@ -88,7 +88,7 @@ connectNode ::
     Member Async r
   ) =>
   Address ->
-  Transport ->
+  ProcessTransport ->
   Maybe Address ->
   Sem r ()
 connectNode router transport maybeNewNodeID =
