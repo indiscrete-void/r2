@@ -2,7 +2,6 @@ module R2
   ( Address (..),
     RouteTo (..),
     RoutedFrom (..),
-    Connection,
     r2,
     defaultAddr,
     parseAddressBase58,
@@ -43,8 +42,6 @@ data RoutedFrom msg = RoutedFrom
     routedFromData :: msg
   }
   deriving stock (Show, Eq, Generic)
-
-type Connection = ()
 
 r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
