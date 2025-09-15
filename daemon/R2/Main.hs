@@ -16,7 +16,7 @@ import R2.Options
 import R2.Peer
 import R2.Peer.Daemon
 import R2.Peer.Daemon.Sockets.Accept
-import R2.Peer.Daemon.Transport.Bus
+import R2.Peer.Daemon.Bus
 import R2.Socket
 import System.Exit
 import System.Posix
