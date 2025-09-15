@@ -1,8 +1,6 @@
-import Control.Monad
 import Network.Socket (bind, listen)
 import Polysemy hiding (run, send)
 import Polysemy.Async
-import Polysemy.AtomicState
 import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Trace
 import Polysemy.Fail
@@ -12,14 +10,15 @@ import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
+import R2.Daemon.Bus
+import R2.Daemon.Coordinator
+import R2.Daemon.Sockets.Accept
 import R2.Options
 import R2.Peer
-import R2.Daemon
-import R2.Daemon.Sockets.Accept
-import R2.Daemon.Bus
 import R2.Socket
 import System.Exit
 import System.Posix
+import R2.Daemon.Storage
 
 main :: IO ()
 main =
@@ -27,7 +26,6 @@ main =
       runSocket s =
         acceptToIO s
           . runScopedBundle @(Transport Message Message) (runTransport $ serializeOutput . deserializeInput)
-      runAtomicState = void . atomicStateToIO initialState
       runProcess = scopedProcToIOFinal bufferSize
       run s =
         runFinal @IO
@@ -38,7 +36,7 @@ main =
           . failToEmbed @IO
           . runProcess
           . runSocket s
-          . runAtomicState
+          . runStorage
           . interpretRace
           . interpretBusTBM bufferSize timeout
           . traceToStdoutBuffered
