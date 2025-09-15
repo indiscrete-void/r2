@@ -15,7 +15,7 @@ parserInfo =
     (helper <*> opts)
     ( fullDesc
         <> progDesc "Mananges r2 daemon, creates bidirectional link between it and the outer world"
-        <> header "Pandora Network manager"
+        <> header "Route-to network"
     )
 
 opts :: Parser Options

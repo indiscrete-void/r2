@@ -15,7 +15,7 @@ parserInfo =
     (helper <*> opts)
     ( fullDesc
         <> progDesc "Communicates with the network via managers connected to it"
-        <> header "Pandora Network daemon"
+        <> header "Route-to network daemon"
     )
 
 opts :: Parser Options
