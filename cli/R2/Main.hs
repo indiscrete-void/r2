@@ -5,7 +5,7 @@ import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Serialize
-import Polysemy.Socket
+import R2.Socket
 import Polysemy.Trace
 import Polysemy.Transport
 import R2

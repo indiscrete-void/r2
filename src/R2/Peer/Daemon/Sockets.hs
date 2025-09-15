@@ -1,4 +1,4 @@
-module Polysemy.Sockets (Sockets, bundleSocketEffects, socket, socketOutput) where
+module R2.Peer.Daemon.Sockets (Sockets, bundleSocketEffects, socket, socketOutput) where
 
 import Polysemy
 import Polysemy.Bundle

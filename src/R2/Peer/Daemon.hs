@@ -12,13 +12,13 @@ import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
-import Polysemy.Socket.Accept
-import Polysemy.Sockets
 import Polysemy.Trace
 import Polysemy.Transport
-import Polysemy.Transport.Bus
 import R2
 import R2.Peer
+import R2.Peer.Daemon.Sockets
+import R2.Peer.Daemon.Sockets.Accept
+import R2.Peer.Daemon.Transport.Bus
 import System.Process.Extra
 import Text.Printf qualified as Text
 

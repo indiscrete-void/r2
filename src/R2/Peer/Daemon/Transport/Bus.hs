@@ -1,4 +1,4 @@
-module Polysemy.Transport.Bus
+module R2.Peer.Daemon.Transport.Bus
   ( Chan (..),
     takeChan,
     putChan,

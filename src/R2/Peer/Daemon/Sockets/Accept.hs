@@ -1,4 +1,4 @@
-module Polysemy.Socket.Accept
+module R2.Peer.Daemon.Sockets.Accept
   ( Accept,
     accept,
     foreverAcceptAsync,

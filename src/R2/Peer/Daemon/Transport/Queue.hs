@@ -1,4 +1,4 @@
-module Polysemy.Transport.Queue (runInputQueue, runOutputQueue, runCloseQueue, runTBMQueue) where
+module R2.Peer.Daemon.Transport.Queue (runInputQueue, runOutputQueue, runCloseQueue, runTBMQueue) where
 
 import Control.Concurrent.STM.TBMQueue
 import Polysemy

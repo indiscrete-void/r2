@@ -39,15 +39,15 @@ library
     import: default
     hs-source-dirs: src
     exposed-modules:
-        Polysemy.Socket,
-        Polysemy.Socket.Accept,
-        Polysemy.Sockets,
-        Polysemy.Transport.Queue,
-        Polysemy.Transport.Bus,
         R2,
+        R2.Socket,
         R2.Peer,
         R2.Peer.Client,
         R2.Peer.Daemon,
+        R2.Peer.Daemon.Sockets,
+        R2.Peer.Daemon.Sockets.Accept,
+        R2.Peer.Daemon.Transport.Queue,
+        R2.Peer.Daemon.Transport.Bus,
         Serial.Aeson.Options,
 
 executable r2d
