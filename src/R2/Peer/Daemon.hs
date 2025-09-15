@@ -23,17 +23,17 @@ import System.Process.Extra
 import Text.Printf qualified as Text
 
 -- data
-data NodeTransport = R2 Address | Pipe Address ProcessTransport | Socket
+data ConnTransport = R2 Address | Pipe Address ProcessTransport | Socket
   deriving stock (Eq, Show)
 
 data NewConnection = NewConnection
   { newConnAddr :: Maybe Address,
-    newConnTransport :: NodeTransport
+    newConnTransport :: ConnTransport
   }
 
 data Connection chan = Connection
   { connAddr :: Address,
-    connTransport :: NodeTransport,
+    connTransport :: ConnTransport,
     connChan :: NodeBusChan chan
   }
   deriving stock (Eq, Show)
