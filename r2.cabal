@@ -10,7 +10,7 @@ flag pedantic
 common default
     build-depends: 
       base >=4.17.2.1 && <5,
-      bytestring, text,
+      bytestring, text, containers,
       optparse-applicative,
       unix, network,
       polysemy, polysemy-plugin,
@@ -25,7 +25,7 @@ common default
         ImportQualifiedPost AllowAmbiguousTypes TemplateHaskell BlockArguments
         DeriveGeneric DerivingStrategies EmptyDataDeriving OverloadedStrings
         FlexibleInstances QuantifiedConstraints IncoherentInstances StandaloneKindSignatures
-        DerivingVia RecordWildCards
+        DerivingVia RecordWildCards NamedFieldPuns
     ghc-options:
         -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode
         -Wno-safe -Wno-unsafe -Wno-missing-import-lists
