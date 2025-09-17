@@ -22,7 +22,7 @@ import Serial.Aeson.Options
 import System.Random.Stateful
 
 newtype Address = Addr {unAddr :: Word256}
-  deriving stock (Eq, Generic)
+  deriving stock (Ord, Eq, Generic)
   deriving (Num) via Word256
 
 showAddressBase58 :: Address -> String

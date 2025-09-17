@@ -36,7 +36,7 @@ main =
           . failToEmbed @IO
           . runProcess
           . runSocket s
-          . runStorage
+          . storageToIO
           . interpretRace
           . interpretBusTBM bufferSize timeout
           . traceToStdoutBuffered

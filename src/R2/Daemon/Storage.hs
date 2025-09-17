@@ -1,38 +1,47 @@
-module R2.Daemon.Storage (State, Storage, initialState, stateAddNode, stateDeleteNode, stateLookupNode, stateReflectNode, runStorage) where
+module R2.Daemon.Storage (NodeState, Storage, storageToIO, storageAddNode, storageRmNode, storageLookupNode, storageNodes, storageLockNode, nodesReaderToStorage) where
 
-import Data.List qualified as List
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Polysemy
 import Polysemy.AtomicState
+import Polysemy.Internal.Tactics
+import Polysemy.Reader
 import Polysemy.Resource
 import Polysemy.Trace
 import R2
 import R2.Daemon
 import Text.Printf qualified as Text
 
-type State chan = [Connection chan]
+type NodeState chan = Map Address (Connection chan)
 
-type Storage chan = AtomicState (State chan)
+data Storage chan m a where
+  StorageAddNode :: Connection chan -> Storage chan m ()
+  StorageRmNode :: Connection chan -> Storage chan m ()
+  StorageLookupNode :: Address -> Storage chan m (Maybe (Connection chan))
+  StorageNodes :: Storage chan m (NodeState chan)
 
-initialState :: State s
-initialState = []
+makeSem ''Storage
 
-withReverse :: ([a] -> [b]) -> [a] -> [b]
-withReverse f = reverse . f . reverse
-
-stateAddNode :: (Member (AtomicState (State q)) r) => Connection q -> Sem r ()
-stateAddNode nodeData = atomicModify' $ withReverse (nodeData :)
-
-stateDeleteNode :: (Member (AtomicState (State q)) r) => Connection q -> Sem r ()
-stateDeleteNode node = atomicModify' $ withReverse (List.filter (\xNode -> connAddr xNode == connAddr node))
-
-stateLookupNode :: (Member (AtomicState (State q)) r) => Address -> Sem r (Maybe (Connection q))
-stateLookupNode addr = List.find ((addr ==) . connAddr) <$> atomicGet
-
-stateReflectNode :: (Member (AtomicState (State q)) r, Member Trace r, Member Resource r) => Connection q -> Sem r c -> Sem r c
-stateReflectNode node = bracket_ addNode delNode
+storageLockNode :: (Member (Storage chan) r, Member Trace r, Member Resource r) => Connection chan -> Sem r c -> Sem r c
+storageLockNode node@Connection {..} = bracket_ addNode delNode
   where
-    addNode = trace (Text.printf "storing %s" $ show $ connAddr node) >> stateAddNode node
-    delNode = trace (Text.printf "forgetting %s" $ show $ connAddr node) >> stateDeleteNode node
+    addNode = trace (Text.printf "storing %s" $ show connAddr) >> storageAddNode node
+    delNode = trace (Text.printf "forgetting %s" $ show connAddr) >> storageRmNode node
 
-runStorage :: (Member (Embed IO) r) => InterpreterFor (Storage chan) r
-runStorage = fmap snd . atomicStateToIO initialState
+nodesReaderToStorage :: (Member (Storage chan) r) => InterpreterFor (Reader (NodeState chan)) r
+nodesReaderToStorage = go id
+  where
+    go :: (Member (Storage chan) r) => (NodeState chan -> NodeState chan) -> InterpreterFor (Reader (NodeState chan)) r
+    go f = interpretH \case
+      Ask -> liftT $ f <$> storageNodes
+      Local localF m -> do
+        mm <- runT m
+        raise $ go localF mm
+
+storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
+storageToIO =
+  fmap snd . atomicStateToIO (Map.empty :: NodeState chan) . reinterpret \case
+    StorageAddNode conn@Connection {connAddr} -> atomicModify' $ Map.insert connAddr conn
+    StorageRmNode Connection {connAddr} -> atomicModify' $ Map.delete connAddr
+    StorageLookupNode connAddr -> Map.lookup connAddr <$> atomicGet
+    StorageNodes -> atomicGet @(NodeState _)

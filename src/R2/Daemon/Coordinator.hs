@@ -68,7 +68,7 @@ handleR2OutputChan ::
   Address ->
   Sem r ()
 handleR2OutputChan router chan addr = do
-  (Just routerNode) <- stateLookupNode router
+  (Just routerNode) <- storageLookupNode router
   let routerChan = nodeBusChan ToWorld (connChan routerNode)
   whileJust_
     (busChan chan takeChan)
@@ -89,7 +89,7 @@ runR2NodeBus ::
   InterpreterFor (NodeBus Address chan Message) r
 runR2NodeBus self cmd router = interpret \case
   NodeBusGetChan addr -> do
-    storedNode <- stateLookupNode addr
+    storedNode <- storageLookupNode addr
     case storedNode of
       Just node -> pure $ connChan node
       Nothing -> do
@@ -136,9 +136,9 @@ r2nd ::
   Connection chan ->
   Sem r ()
 r2nd cmd conn@(Connection {..}) =
-  stateReflectNode conn $
+  storageLockNode conn $
     traceTagged ("r2nd " <> show connAddr) $
-      handle (handleMsg cmd conn)
+      handle (nodesReaderToStorage . handleMsg cmd conn)
 
 r2sd ::
   ( Member (Accept sock) r,

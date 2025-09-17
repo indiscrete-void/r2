@@ -1,12 +1,13 @@
 module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, handleMsg) where
 
+import Data.Map qualified as Map
 import Polysemy
 import Polysemy.Async
-import Polysemy.AtomicState
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
+import Polysemy.Reader
 import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
@@ -28,9 +29,9 @@ tunnelProcess ::
   Sem r ()
 tunnelProcess cmd = traceTagged "tunnel" $ execIO (ioShell cmd) ioToMsg
 
-listNodes :: (Member (Storage chan) r, Member (Output Message) r, Member Trace r) => Sem r ()
+listNodes :: (Member (Reader (NodeState chan)) r, Member (Output Message) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
-  nodeList <- map connAddr <$> atomicGet
+  nodeList <- Map.keys <$> ask
   trace (Text.printf "responding with `%s`" (show nodeList))
   output (ResNodeList nodeList)
 
@@ -56,7 +57,7 @@ handleRoutedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan M
 handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
 
 handleMsg ::
-  ( Member (Storage chan) r,
+  ( Member (Reader (NodeState chan)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
     Member (NodeBus NewConnection chan Message) r,
