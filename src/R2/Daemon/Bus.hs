@@ -23,6 +23,7 @@ where
 
 import Control.Concurrent.STM.TBMQueue
 import Control.Monad
+import Control.Monad.Loops
 import GHC.Conc.Sync
 import Polysemy
 import Polysemy.Async
@@ -101,12 +102,8 @@ nodeBusToIO ::
 nodeBusToIO addr = do
   NodeBusChan {..} <- nodeBusGetChan addr
   sequenceConcurrently_
-    [ forever $ input >>= busChan nodeBusIn . putChan,
-      forever $
-        busChan nodeBusOut $
-          takeChan >>= \case
-            Just d -> output d
-            Nothing -> close
+    [ busChan nodeBusIn $ whileJust_ input (busChan nodeBusIn . putChan . Just) >> putChan Nothing,
+      busChan nodeBusOut $ whileJust_ takeChan output >> close
     ]
 
 ioToNodeBus ::
