@@ -38,7 +38,7 @@ main =
           . runSocket s
           . storageToIO
           . interpretRace
-          . interpretBusTBM bufferSize
+          . interpretBusTBM queueSize
           . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m
