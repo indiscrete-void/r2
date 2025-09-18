@@ -41,7 +41,7 @@ msgHandler cmd conn@Connection {..} =
     ioToNodeBusChan connChan $
       nodeBusToStorage $
         nodesReaderToStorage $
-          handle (handleMsg cmd conn)
+          handle (\msg -> trace (Text.printf "handling %s" $ show msg) >> handleMsg cmd conn msg)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
