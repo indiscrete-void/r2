@@ -3,13 +3,11 @@ module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, routeTo, routed
 import Data.Maybe
 import Polysemy
 import Polysemy.Async
-import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Reader
 import Polysemy.Scoped
-import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Daemon
@@ -17,29 +15,23 @@ import R2.Daemon.Bus
 import R2.Daemon.MakeNode
 import R2.Peer
 import System.Process.Extra
-import Text.Printf qualified as Text
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
     Members (Transport Message Message) r,
-    Member Trace r,
     Member Async r
   ) =>
   String ->
   Sem r ()
-tunnelProcess cmd = traceTagged "tunnel" $ execIO (ioShell cmd) ioToMsg
+tunnelProcess cmd = execIO (ioShell cmd) ioToMsg
 
-listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r, Member Trace r) => Sem r ()
-listNodes = traceTagged "ListNodes" do
-  nodeList <- mapMaybe nodeAddr <$> ask
-  trace (Text.printf "responding with `%s`" (show nodeList))
-  output (ResNodeList nodeList)
+listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r) => Sem r ()
+listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 
 connectNode ::
   ( Members (Transport Message Message) r,
     Member (MakeNode q) r,
     Member (Bus q Message) r,
-    Member Trace r,
     Member Fail r,
     Member Async r
   ) =>
@@ -88,8 +80,7 @@ handleMsg ::
     Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
     Member Fail r,
-    Member Async r,
-    Member Trace r
+    Member Async r
   ) =>
   String ->
   Connection q ->
