@@ -1,4 +1,4 @@
-module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, handleMsg) where
+module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Data.Map qualified as Map
 import Polysemy
@@ -50,11 +50,12 @@ connectNode ::
 connectNode router transport maybeNewNodeID =
   msgToIO $ nodeBusToIO (NewConnection maybeNewNodeID (Pipe router transport))
 
-handleRouteTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => Address -> RouteTo Message -> Sem r ()
-handleRouteTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
+routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => Address -> RouteTo Message -> Sem r ()
+routeTo = do
+  r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
-handleRoutedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
-handleRoutedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
+routedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
+routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
 
 handleMsg ::
   ( Member (Reader (NodeState chan)) r,
@@ -75,6 +76,6 @@ handleMsg cmd Connection {..} = \case
   ReqListNodes -> listNodes
   (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
   ReqTunnelProcess -> tunnelProcess cmd
-  MsgRouteTo routeTo -> handleRouteTo connAddr routeTo
-  MsgRoutedFrom routedFrom -> handleRoutedFrom routedFrom
+  MsgRouteTo msg -> routeTo connAddr msg
+  MsgRoutedFrom msg -> routedFrom msg
   msg -> fail $ "unexpected message: " <> show msg
