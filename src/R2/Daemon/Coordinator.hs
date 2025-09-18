@@ -1,4 +1,4 @@
-module R2.Daemon.Coordinator (r2nd, r2sd, r2d) where
+module R2.Daemon.Coordinator (msgHandler, acceptSockets, makeNodes, r2d) where
 
 import Control.Monad.Extra
 import Control.Monad.Loops
@@ -16,12 +16,32 @@ import R2
 import R2.Daemon
 import R2.Daemon.Bus
 import R2.Daemon.Handler
+import R2.Daemon.MakeNode
 import R2.Daemon.Sockets
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
 import R2.Peer
 import System.Process.Extra
 import Text.Printf as Text
+
+msgHandler ::
+  ( Member (NodeBus Address chan Message) r,
+    Member (Bus chan Message) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member (MakeNode chan) r,
+    Member Fail r,
+    Member Trace r,
+    Member Async r,
+    Member (Storage chan) r
+  ) =>
+  String ->
+  Connection chan ->
+  Sem r ()
+msgHandler cmd conn@Connection {..} =
+  traceTagged ("r2d handler " <> show connAddr) $
+    ioToNodeBusChan connChan $
+      nodesReaderToStorage $
+        handle (handleMsg cmd conn)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
@@ -38,26 +58,6 @@ exchangeSelves self maybeKnownAddr = do
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
   pure addr
 
-makeNode ::
-  ( Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Member (Bus chan Message) r,
-    Members (Transport Message Message) r,
-    Member Async r,
-    Member Trace r,
-    Member Fail r,
-    Member Resource r
-  ) =>
-  Address ->
-  String ->
-  Connection chan ->
-  Sem r ()
-makeNode self cmd conn@(Connection {..}) = do
-  async_ $
-    runNewNodeBus self cmd $
-      runR2NodeBus self cmd connAddr $
-        r2nd cmd conn
-
 handleR2OutputChan ::
   ( Member (Storage chan) r,
     Member (Bus chan Message) r,
@@ -69,91 +69,72 @@ handleR2OutputChan ::
   Sem r ()
 handleR2OutputChan router chan addr = do
   (Just routerNode) <- storageLookupNode router
-  let routerChan = nodeBusChan ToWorld (connChan routerNode)
+  let routerChan = nodeBusChan ToWorld (nodeChan routerNode)
   whileJust_
     (busChan chan takeChan)
     (busChan routerChan . putChan . Just . MsgRouteTo . RouteTo addr)
 
 runR2NodeBus ::
   ( Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
     Member (Bus chan Message) r,
     Member Fail r,
-    Member Trace r,
     Member Async r,
-    Member Resource r
+    Member (MakeNode chan) r
   ) =>
   Address ->
-  String ->
-  Address ->
   InterpreterFor (NodeBus Address chan Message) r
-runR2NodeBus self cmd router = interpret \case
+runR2NodeBus router = interpret \case
   NodeBusGetChan addr -> do
     storedNode <- storageLookupNode addr
     case storedNode of
-      Just node -> pure $ connChan node
+      Just node -> pure $ nodeChan node
       Nothing -> do
         chan <- nodeBusMakeChan
         async_ $ handleR2OutputChan router (nodeBusChan ToWorld chan) addr
         let conn = Connection addr (R2 router) chan
-        ioToNodeBusChan chan $ makeNode self cmd conn
+        ioToNodeBusChan chan $ makeNode (ConnectedNode conn)
         pure chan
 
-runNewNodeBus ::
-  ( Member (Bus chan Message) r,
-    Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Member Fail r,
-    Member Async r,
-    Member Trace r,
-    Member Resource r
-  ) =>
-  Address ->
-  String ->
-  InterpreterFor (NodeBus NewConnection chan Message) r
-runNewNodeBus self cmd = interpret \case
-  NodeBusGetChan NewConnection {..} -> do
-    chan <- nodeBusMakeChan
-    async_ $ ioToNodeBusChan chan $ do
-      addr <- exchangeSelves self newConnAddr
-      let conn = Connection addr newConnTransport chan
-      makeNode self cmd conn
-    pure chan
-
-r2nd ::
-  ( Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Member (NodeBus Address chan Message) r,
-    Member (NodeBus NewConnection chan Message) r,
-    Member (Bus chan Message) r,
-    Members (Transport Message Message) r,
-    Member Async r,
-    Member Trace r,
-    Member Fail r,
-    Member Resource r
-  ) =>
-  String ->
-  Connection chan ->
-  Sem r ()
-r2nd cmd conn@(Connection {..}) =
-  storageLockNode conn $
-    traceTagged ("r2nd " <> show connAddr) $
-      handle (nodesReaderToStorage . handleMsg cmd conn)
-
-r2sd ::
+acceptSockets ::
   ( Member (Accept sock) r,
     Member (Sockets Message Message sock) r,
     Member (Bus chan Message) r,
-    Member (NodeBus NewConnection chan Message) r,
-    Member Async r
+    Member Async r,
+    Member (MakeNode chan) r
   ) =>
   Sem r ()
-r2sd =
+acceptSockets =
   foreverAcceptAsync \s -> do
-    socket @Message @Message s $ nodeBusToIO (NewConnection Nothing Socket)
+    chan <- makeAcceptedNode Nothing Socket
+    socket @Message @Message s $ nodeBusChanToIO chan
+
+makeNodes ::
+  forall chan r.
+  ( Member Async r,
+    Member (Bus chan Message) r,
+    Member (Storage chan) r,
+    Member Resource r,
+    Member Fail r,
+    Member Trace r
+  ) =>
+  Address ->
+  (Connection chan -> Sem (MakeNode chan ': r) ()) ->
+  InterpreterFor (MakeNode chan) r
+makeNodes self handler = runMakeNode (async_ . go)
+  where
+    go :: Node chan -> Sem r ()
+    go node@(AcceptedNode (NewConnection {..})) = do
+      trace $ Text.printf "accepted node over %s. exchanging addresses" (show newConnTransport)
+      addr <- storageLockNode node $ ioToNodeBusChan newConnChan (exchangeSelves self newConnAddr)
+      let conn = Connection addr newConnTransport newConnChan
+      go (ConnectedNode conn)
+    go node@(ConnectedNode conn@Connection {connAddr}) = storageLockNode node do
+      trace $ Text.printf "starting %s message handler" (show connAddr)
+      makeNodes self handler $
+        handler conn
+      trace $ Text.printf "forgetting %s" (show connAddr)
 
 r2d ::
-  forall sock chan r.
   ( Member (Accept sock) r,
     Member (Storage chan) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -167,4 +148,6 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = runNewNodeBus self cmd r2sd
+r2d self cmd = (self `makeNodes` r2nd) acceptSockets
+  where
+    r2nd conn@Connection {connAddr} = runR2NodeBus connAddr $ msgHandler cmd conn

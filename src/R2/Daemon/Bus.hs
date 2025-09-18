@@ -13,6 +13,7 @@ module R2.Daemon.Bus
     nodeBusChan,
     useNodeBusChan,
     nodeBusGetChan,
+    nodeBusChanToIO,
     nodeBusToIO,
     ioToNodeBus,
     interpretBusTBM,
@@ -91,6 +92,19 @@ useNodeBusChan dir addr m = do
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
 nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
 
+nodeBusChanToIO ::
+  ( Members (Transport d d) r,
+    Member (Bus chan d) r,
+    Member Async r
+  ) =>
+  NodeBusChan chan ->
+  Sem r ()
+nodeBusChanToIO NodeBusChan {..} =
+  sequenceConcurrently_
+    [ busChan nodeBusIn $ whileJust_ input (busChan nodeBusIn . putChan . Just) >> putChan Nothing,
+      busChan nodeBusOut $ whileJust_ takeChan output >> close
+    ]
+
 nodeBusToIO ::
   ( Members (Transport d d) r,
     Member (NodeBus addr chan d) r,
@@ -99,12 +113,7 @@ nodeBusToIO ::
   ) =>
   addr ->
   Sem r ()
-nodeBusToIO addr = do
-  NodeBusChan {..} <- nodeBusGetChan addr
-  sequenceConcurrently_
-    [ busChan nodeBusIn $ whileJust_ input (busChan nodeBusIn . putChan . Just) >> putChan Nothing,
-      busChan nodeBusOut $ whileJust_ takeChan output >> close
-    ]
+nodeBusToIO addr = nodeBusGetChan addr >>= nodeBusChanToIO
 
 ioToNodeBus ::
   ( Member (NodeBus addr chan d) r,
