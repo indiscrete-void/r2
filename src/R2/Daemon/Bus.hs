@@ -20,14 +20,12 @@ module R2.Daemon.Bus
 where
 
 import Control.Concurrent.STM.TBMQueue
-import Control.Monad
 import Control.Monad.Loops
 import GHC.Conc.Sync
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Transport
-import System.Timeout
 
 data Chan d m a where
   TakeChan :: Chan d m (Maybe d)
@@ -97,11 +95,9 @@ nodeBusChanToIO NodeBusChan {..} =
       busChan nodeBusOut $ whileJust_ takeChan output >> close
     ]
 
-interpretBusTBM :: (Member (Embed IO) r) => Int -> Int -> InterpreterFor (Bus (TBMQueue d) d) r
-interpretBusTBM bufferSize timeoutMS = interpret \case
+interpretBusTBM :: (Member (Embed IO) r) => Int -> InterpreterFor (Bus (TBMQueue d) d) r
+interpretBusTBM bufferSize = interpret \case
   BusMakeChan -> embed $ newTBMQueueIO bufferSize
-  BusTakeData chan ->
-    let timeoutMicros = timeoutMS * 1000
-     in join <$> embed (timeout timeoutMicros $ atomically $ readTBMQueue chan)
+  BusTakeData chan -> embed (atomically $ readTBMQueue chan)
   BusPutData chan (Just d) -> embed $ atomically $ writeTBMQueue chan d
   BusPutData chan Nothing -> embed $ atomically $ closeTBMQueue chan

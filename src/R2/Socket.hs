@@ -22,5 +22,5 @@ outputToSocket s = traceTagged ("outputToSocket " <> show s) . go . raiseUnder @
   where
     go = interpret \(Output str) -> void $ trace (show str) >> embed (IO.send s str)
 
-closeToSocket :: (Member (Embed IO) r) => Int -> IO.Socket -> InterpreterFor Close r
-closeToSocket timeout s = interpret \Close -> embed $ IO.gracefulClose s timeout
+closeToSocket :: (Member (Embed IO) r) => IO.Socket -> InterpreterFor Close r
+closeToSocket s = interpret \Close -> embed $ IO.gracefulClose s 2000
