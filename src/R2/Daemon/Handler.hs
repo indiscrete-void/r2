@@ -45,34 +45,12 @@ connectNode router transport maybeNewNodeID = do
   chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
   msgToIO $ nodeBusChanToIO chan
 
-routeTo ::
-  ( Member (NodeBus Address chan Message) r,
-    Member (Bus chan Message) r,
-    Member Fail r
-  ) =>
-  Address ->
-  RouteTo Message ->
-  Sem r ()
-routeTo = r2 sendTo
-  where
-    sendTo addr msg = do
-      (Just chan) <- nodeBusGetChan addr
-      busChan (nodeBusChan ToWorld chan) $ putChan $ Just $ MsgRoutedFrom msg
+routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
+routeTo = do
+  r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
-routedFrom ::
-  ( Member (NodeBus Address chan Message) r,
-    Member (Bus chan Message) r,
-    Member (MakeNode chan) r
-  ) =>
-  Address ->
-  RoutedFrom Message ->
-  Sem r ()
-routedFrom addr (RoutedFrom routedFromNode routedFromData) = do
-  chan <-
-    nodeBusGetChan routedFromNode >>= \case
-      Just chan -> pure chan
-      Nothing -> makeConnectedNode routedFromNode (R2 addr)
-  busChan (nodeBusChan FromWorld chan) $ putChan (Just routedFromData)
+routedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
+routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
@@ -106,7 +84,7 @@ handleMsg cmd Connection {..} = \case
     routeTo connAddr msg
   MsgRoutedFrom msg@(RoutedFrom {..}) -> do
     trace $ Text.printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
-    routedFrom connAddr msg
+    routedFrom msg
   MsgExit -> do
     trace $ Text.printf "closing input queue"
     busChan (nodeBusChan FromWorld connChan) $ putChan Nothing

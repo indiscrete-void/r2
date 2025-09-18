@@ -11,7 +11,6 @@ import Polysemy
 import R2
 import R2.Daemon.Bus
 import R2.Daemon.Node
-import R2.Daemon.Storage
 
 data MakeNode chan m a where
   MakeNode :: Node chan -> MakeNode chan m ()

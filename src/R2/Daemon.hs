@@ -13,10 +13,10 @@ import Polysemy.Scoped
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
-import R2.Daemon.Node
 import R2.Daemon.Bus
 import R2.Daemon.Handler
 import R2.Daemon.MakeNode
+import R2.Daemon.Node
 import R2.Daemon.Sockets
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
@@ -28,10 +28,11 @@ msgHandler ::
   ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
+    Member (NodeBus Address chan Message) r,
+    Member (Storage chan) r,
     Member Fail r,
     Member Trace r,
-    Member Async r,
-    Member (Storage chan) r
+    Member Async r
   ) =>
   String ->
   Connection chan ->
@@ -39,9 +40,8 @@ msgHandler ::
 msgHandler cmd conn@Connection {..} =
   traceTagged ("r2d handler " <> show connAddr) $
     ioToNodeBusChan connChan $
-      nodeBusToStorage $
-        nodesReaderToStorage $
-          handle (handleMsg cmd conn)
+      nodesReaderToStorage $
+        handle (handleMsg cmd conn)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
@@ -116,6 +116,37 @@ makeNodes self handler = runMakeNode (async_ . go)
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
 
+runNodeBus ::
+  ( Member (Storage chan) r,
+    Member (Bus chan Message) r,
+    Member (MakeNode chan) r
+  ) =>
+  Address ->
+  InterpreterFor (NodeBus Address chan Message) r
+runNodeBus router = interpret \case
+  NodeBusGetChan dir addr -> do
+    storedNode <- storageLookupNode addr
+    chan <- case storedNode of
+      Just node -> pure $ Just $ nodeChan node
+      Nothing -> case dir of
+        FromWorld -> Just <$> makeConnectedNode addr (R2 router)
+        ToWorld -> pure Nothing
+    pure $ nodeBusChan dir <$> chan
+
+r2nd ::
+  ( Member (Bus chan Message) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member (MakeNode chan) r,
+    Member (Storage chan) r,
+    Member Fail r,
+    Member Trace r,
+    Member Async r
+  ) =>
+  String ->
+  Connection chan ->
+  Sem r ()
+r2nd cmd conn = runNodeBus (connAddr conn) $ msgHandler cmd conn
+
 r2d ::
   ( Member (Accept sock) r,
     Member (Storage chan) r,
@@ -130,4 +161,4 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = (self `makeNodes` msgHandler cmd) acceptSockets
+r2d self cmd = (self `makeNodes` r2nd cmd) acceptSockets
