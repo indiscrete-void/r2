@@ -58,7 +58,7 @@ exchangeSelves self maybeKnownAddr = do
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
   pure addr
 
-handleR2OutputChan ::
+sendR2ChanToWorld ::
   ( Member (Storage chan) r,
     Member (Bus chan Message) r,
     Member Fail r
@@ -67,7 +67,7 @@ handleR2OutputChan ::
   chan ->
   Address ->
   Sem r ()
-handleR2OutputChan router chan addr = do
+sendR2ChanToWorld router chan addr = do
   (Just routerNode) <- storageLookupNode router
   let routerChan = nodeBusChan ToWorld (nodeChan routerNode)
   whileJust_
@@ -77,8 +77,6 @@ handleR2OutputChan router chan addr = do
 runR2NodeBus ::
   ( Member (Storage chan) r,
     Member (Bus chan Message) r,
-    Member Fail r,
-    Member Async r,
     Member (MakeNode chan) r
   ) =>
   Address ->
@@ -87,13 +85,8 @@ runR2NodeBus router = interpret \case
   NodeBusGetChan addr -> do
     storedNode <- storageLookupNode addr
     case storedNode of
+      Nothing -> makeConnectedNode addr (R2 router)
       Just node -> pure $ nodeChan node
-      Nothing -> do
-        chan <- nodeBusMakeChan
-        async_ $ handleR2OutputChan router (nodeBusChan ToWorld chan) addr
-        let conn = Connection addr (R2 router) chan
-        ioToNodeBusChan chan $ makeNode (ConnectedNode conn)
-        pure chan
 
 acceptSockets ::
   ( Member (Accept sock) r,
@@ -128,11 +121,28 @@ makeNodes self handler = runMakeNode (async_ . go)
       addr <- storageLockNode node $ ioToNodeBusChan newConnChan (exchangeSelves self newConnAddr)
       let conn = Connection addr newConnTransport newConnChan
       go (ConnectedNode conn)
-    go node@(ConnectedNode conn@Connection {connAddr}) = storageLockNode node do
+    go node@(ConnectedNode conn@Connection {connAddr, connTransport, connChan}) = storageLockNode node do
       trace $ Text.printf "starting %s message handler" (show connAddr)
+      case connTransport of
+        R2 router -> async_ $ sendR2ChanToWorld router (nodeBusChan ToWorld connChan) connAddr
+        _ -> mempty
       makeNodes self handler $
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
+
+r2nd ::
+  ( Member (Storage chan) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member Async r,
+    Member Trace r,
+    Member Fail r
+  ) =>
+  String ->
+  Connection chan ->
+  Sem r ()
+r2nd cmd conn@Connection {connAddr} = runR2NodeBus connAddr $ msgHandler cmd conn
 
 r2d ::
   ( Member (Accept sock) r,
@@ -148,6 +158,4 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = (self `makeNodes` r2nd) acceptSockets
-  where
-    r2nd conn@Connection {connAddr} = runR2NodeBus connAddr $ msgHandler cmd conn
+r2d self cmd = (self `makeNodes` r2nd cmd) acceptSockets
