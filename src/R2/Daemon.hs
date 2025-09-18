@@ -38,7 +38,7 @@ msgHandler ::
   Connection chan ->
   Sem r ()
 msgHandler cmd conn@Connection {..} =
-  traceTagged ("r2d handler " <> show connAddr) $
+  traceTagged ("handler " <> show connAddr) $
     ioToNodeBusChan connChan $
       nodesReaderToStorage $
         handle (handleMsg cmd conn)
