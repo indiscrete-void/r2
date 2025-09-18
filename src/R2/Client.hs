@@ -15,7 +15,6 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
--- action handling
 data Action
   = Ls
   | Connect !ProcessTransport !(Maybe Address)
@@ -34,43 +33,40 @@ listNodes ::
   Sem r ()
 listNodes = traceTagged "Ls" $ output ReqListNodes >> (inputOrFail @Message >>= trace . show)
 
-connectTransport ::
+procToMsg ::
   ( Member ByteInputWithEOF r,
     Member ByteOutput r,
     Member Close r,
     Member (Scoped CreateProcess Process) r,
     Members (Transport Message Message) r,
-    Member Trace r,
     Member Async r
   ) =>
   ProcessTransport ->
   Sem r ()
-connectTransport Stdio = ioToMsg
-connectTransport (Process cmd) = execIO (ioShell cmd) ioToMsg
+procToMsg Stdio = ioToMsg
+procToMsg (Process cmd) = execIO (ioShell cmd) ioToMsg
 
 connectNode ::
   ( Member Async r,
     Members (Transport Message Message) r,
     Members (Transport ByteString ByteString) r,
-    Member Trace r,
     Member (Scoped CreateProcess Process) r
   ) =>
   ProcessTransport ->
   Maybe Address ->
   Sem r ()
-connectNode transport maybeAddress = output (ReqConnectNode transport maybeAddress) >> connectTransport transport
+connectNode transport maybeAddress = output (ReqConnectNode transport maybeAddress) >> procToMsg transport
 
-procToTransport ::
+connectTransport ::
   ( Member (Input (Maybe ByteString)) r,
     Member (Output ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Members (Transport Message Message) r,
-    Member Trace r,
     Member Async r
   ) =>
   ProcessTransport ->
   Sem r ()
-procToTransport transport = output ReqTunnelProcess >> connectTransport transport
+connectTransport transport = output ReqTunnelProcess >> procToMsg transport
 
 handleAction ::
   ( Members (Transport Message Message) r,
@@ -84,9 +80,8 @@ handleAction ::
   Sem r ()
 handleAction Ls = listNodes
 handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
-handleAction (Tunnel transport) = procToTransport transport
+handleAction (Tunnel transport) = connectTransport transport
 
--- networking
 runChainSession ::
   ( Members (Transport Message Message) r,
     Member Trace r,
