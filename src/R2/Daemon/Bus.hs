@@ -11,7 +11,6 @@ module R2.Daemon.Bus
     NodeBus (..),
     NodeBusDir (..),
     nodeBusChan,
-    useNodeBusChan,
     nodeBusGetChan,
     nodeBusChanToIO,
     interpretBusTBM,
@@ -72,7 +71,7 @@ ioToNodeBusChan NodeBusChan {..} =
     . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
 
 data NodeBus addr chan d m a where
-  NodeBusGetChan :: addr -> NodeBus addr chan d m (NodeBusChan chan)
+  NodeBusGetChan :: addr -> NodeBus addr chan d m (Maybe (NodeBusChan chan))
 
 makeSem ''NodeBus
 
@@ -81,11 +80,6 @@ data NodeBusDir = FromWorld | ToWorld
 nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
 nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
 nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
-
-useNodeBusChan :: (Member (NodeBus addr chan d) r, Member (Bus chan d) r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
-useNodeBusChan dir addr m = do
-  chan <- nodeBusGetChan addr
-  busChan (nodeBusChan dir chan) m
 
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
 nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan

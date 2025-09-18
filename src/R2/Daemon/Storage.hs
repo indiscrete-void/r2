@@ -1,4 +1,4 @@
-module R2.Daemon.Storage (NodeState, Storage, storageToIO, storageAddNode, storageRmNode, storageLookupNode, storageNodes, storageLockNode, nodesReaderToStorage) where
+module R2.Daemon.Storage (NodeState, Storage, storageToIO, storageAddNode, storageRmNode, storageLookupNode, storageNodes, storageLockNode, nodesReaderToStorage, nodeBusToStorage) where
 
 import Data.List qualified as List
 import Polysemy
@@ -8,6 +8,7 @@ import Polysemy.Reader
 import Polysemy.Resource
 import R2
 import R2.Daemon
+import R2.Daemon.Bus
 
 type NodeState chan = [Node chan]
 
@@ -31,6 +32,10 @@ nodesReaderToStorage = go id
       Local localF m -> do
         mm <- runT m
         raise $ go localF mm
+
+nodeBusToStorage :: (Member (Storage chan) r) => InterpreterFor (NodeBus Address chan d) r
+nodeBusToStorage = interpret \case
+  NodeBusGetChan addr -> fmap nodeChan <$> storageLookupNode addr
 
 storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
 storageToIO =

@@ -25,8 +25,7 @@ import System.Process.Extra
 import Text.Printf as Text
 
 msgHandler ::
-  ( Member (NodeBus Address chan Message) r,
-    Member (Bus chan Message) r,
+  ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
     Member Fail r,
@@ -40,8 +39,9 @@ msgHandler ::
 msgHandler cmd conn@Connection {..} =
   traceTagged ("r2d handler " <> show connAddr) $
     ioToNodeBusChan connChan $
-      nodesReaderToStorage $
-        handle (handleMsg cmd conn)
+      nodeBusToStorage $
+        nodesReaderToStorage $
+          handle (handleMsg cmd conn)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
@@ -73,20 +73,6 @@ sendR2ChanToWorld router chan addr = do
   whileJust_
     (busChan chan takeChan)
     (busChan routerChan . putChan . Just . MsgRouteTo . RouteTo addr)
-
-runR2NodeBus ::
-  ( Member (Storage chan) r,
-    Member (Bus chan Message) r,
-    Member (MakeNode chan) r
-  ) =>
-  Address ->
-  InterpreterFor (NodeBus Address chan Message) r
-runR2NodeBus router = interpret \case
-  NodeBusGetChan addr -> do
-    storedNode <- storageLookupNode addr
-    case storedNode of
-      Nothing -> makeConnectedNode addr (R2 router)
-      Just node -> pure $ nodeChan node
 
 acceptSockets ::
   ( Member (Accept sock) r,
@@ -130,20 +116,6 @@ makeNodes self handler = runMakeNode (async_ . go)
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
 
-r2nd ::
-  ( Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
-    Member (Bus chan Message) r,
-    Member (MakeNode chan) r,
-    Member Async r,
-    Member Trace r,
-    Member Fail r
-  ) =>
-  String ->
-  Connection chan ->
-  Sem r ()
-r2nd cmd conn@Connection {connAddr} = runR2NodeBus connAddr $ msgHandler cmd conn
-
 r2d ::
   ( Member (Accept sock) r,
     Member (Storage chan) r,
@@ -158,4 +130,4 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = (self `makeNodes` r2nd cmd) acceptSockets
+r2d self cmd = (self `makeNodes` msgHandler cmd) acceptSockets
