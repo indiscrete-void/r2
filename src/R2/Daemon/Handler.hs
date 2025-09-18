@@ -8,6 +8,7 @@ import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Reader
 import Polysemy.Scoped
+import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Daemon
@@ -15,6 +16,7 @@ import R2.Daemon.Bus
 import R2.Daemon.MakeNode
 import R2.Peer
 import System.Process.Extra
+import Text.Printf qualified as Text
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -80,16 +82,29 @@ handleMsg ::
     Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
     Member Fail r,
-    Member Async r
+    Member Async r,
+    Member Trace r
   ) =>
   String ->
   Connection q ->
   Message ->
   Sem r ()
 handleMsg cmd Connection {..} = \case
-  ReqListNodes -> listNodes
-  (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
-  ReqTunnelProcess -> tunnelProcess cmd
-  MsgRouteTo msg -> routeTo connAddr msg
-  MsgRoutedFrom msg -> routedFrom connAddr msg
+  ReqListNodes -> do
+    trace "listing connected nodes"
+    listNodes
+  (ReqConnectNode transport maybeNodeID) -> do
+    case maybeNodeID of
+      Just addr -> trace $ Text.printf "connecting %s over %s" (show addr) (show transport)
+      Nothing -> trace $ Text.printf "connecting unknown node over %s" (show transport)
+    connectNode connAddr transport maybeNodeID
+  ReqTunnelProcess -> do
+    trace (Text.printf "tunneling `%s`" cmd)
+    tunnelProcess cmd
+  MsgRouteTo msg@(RouteTo {..}) -> do
+    trace $ Text.printf "routing `%s` to %s" (show routeToData) (show routeToNode)
+    routeTo connAddr msg
+  MsgRoutedFrom msg@(RoutedFrom {..}) -> do
+    trace $ Text.printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
+    routedFrom connAddr msg
   msg -> fail $ "unexpected message: " <> show msg
