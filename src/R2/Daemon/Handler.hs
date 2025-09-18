@@ -46,8 +46,7 @@ connectNode router transport maybeNewNodeID = do
   msgToIO $ nodeBusChanToIO chan
 
 routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
-routeTo = do
-  r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
+routeTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
 routedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
