@@ -1,4 +1,16 @@
-module R2.Daemon.Storage (NodeState, Storage, storageToIO, storageAddNode, storageRmNode, storageLookupNode, storageNodes, storageLockNode, nodesReaderToStorage, nodeBusToStorage) where
+module R2.Daemon.Storage
+  ( NodeState,
+    Storage,
+    storageToIO,
+    storageAddNode,
+    storageRmNode,
+    storageLookupNode,
+    storageNodes,
+    storageLockNode,
+    nodesReaderToStorage,
+    nodeBusToStorage,
+  )
+where
 
 import Data.List qualified as List
 import Polysemy
@@ -7,8 +19,8 @@ import Polysemy.Internal.Tactics
 import Polysemy.Reader
 import Polysemy.Resource
 import R2
-import R2.Daemon
 import R2.Daemon.Bus
+import R2.Daemon.Node
 
 type NodeState chan = [Node chan]
 
