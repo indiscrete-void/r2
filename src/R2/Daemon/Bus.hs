@@ -14,8 +14,6 @@ module R2.Daemon.Bus
     useNodeBusChan,
     nodeBusGetChan,
     nodeBusChanToIO,
-    nodeBusToIO,
-    ioToNodeBus,
     interpretBusTBM,
     ioToNodeBusChan,
     nodeBusMakeChan,
@@ -104,28 +102,6 @@ nodeBusChanToIO NodeBusChan {..} =
     [ busChan nodeBusIn $ whileJust_ input (busChan nodeBusIn . putChan . Just) >> putChan Nothing,
       busChan nodeBusOut $ whileJust_ takeChan output >> close
     ]
-
-nodeBusToIO ::
-  ( Members (Transport d d) r,
-    Member (NodeBus addr chan d) r,
-    Member (Bus chan d) r,
-    Member Async r
-  ) =>
-  addr ->
-  Sem r ()
-nodeBusToIO addr = nodeBusGetChan addr >>= nodeBusChanToIO
-
-ioToNodeBus ::
-  ( Member (NodeBus addr chan d) r,
-    Member (Bus chan d) r
-  ) =>
-  addr ->
-  InterpretersFor (Transport d d) r
-ioToNodeBus addr m = do
-  NodeBusChan {..} <- nodeBusGetChan addr
-  (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
-    . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
-    $ m
 
 interpretBusTBM :: (Member (Embed IO) r) => Int -> Int -> InterpreterFor (Bus (TBMQueue d) d) r
 interpretBusTBM bufferSize timeoutMS = interpret \case
