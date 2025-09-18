@@ -5,7 +5,6 @@ module R2.Peer
     r2SocketAddr,
     r2Socket,
     withR2Socket,
-    timeout,
     bufferSize,
     queueSize,
     ProcessTransport (..),
@@ -38,7 +37,7 @@ import Data.Maybe
 import Data.Text qualified as Text
 import Debug.Trace qualified as Debug
 import GHC.Generics
-import Network.Socket (Family (..), SockAddr (..), Socket, setSocketOption, socket)
+import Network.Socket (Family (..), SockAddr (..), Socket, socket)
 import Network.Socket qualified as Socket
 import Options.Applicative
 import Polysemy
@@ -80,6 +79,7 @@ data Message where
   MsgRouteTo :: RouteTo Message -> Message
   MsgRoutedFrom :: RoutedFrom Message -> Message
   MsgData :: Maybe Raw -> Message
+  MsgExit :: Message
   ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
   ReqTunnelProcess :: Message
   ReqListNodes :: Message
@@ -103,9 +103,6 @@ msgRoutedFrom = \case
   MsgRoutedFrom routedFrom -> Just routedFrom
   _ -> Nothing
 
-timeout :: Int
-timeout = 16384
-
 bufferSize :: Int
 bufferSize = 8192
 
@@ -122,11 +119,7 @@ defaultUserR2SocketPath = go <$> getEffectiveUserID
     go n = concat ["/run/user/", show n, "/r2.sock"]
 
 r2Socket :: IO Socket
-r2Socket = do
-  s <- socket AF_UNIX Socket.Stream Socket.defaultProtocol
-  setSocketOption s Socket.RecvTimeOut timeout
-  setSocketOption s Socket.SendTimeOut timeout
-  pure s
+r2Socket = socket AF_UNIX Socket.Stream Socket.defaultProtocol
 
 r2SocketAddr :: Maybe FilePath -> IO SockAddr
 r2SocketAddr customPath = do
@@ -175,7 +168,7 @@ runR2Close ::
   ) =>
   Address ->
   InterpreterFor Close r
-runR2Close node = interpret \case Close -> outputRouteTo node (MsgData Nothing)
+runR2Close node = interpret \case Close -> outputRouteTo node MsgExit
 
 runR2Output ::
   ( Member (Output Message) r

@@ -22,7 +22,7 @@ import R2.Daemon.Storage
 
 main :: IO ()
 main =
-  let runTransport f s = closeToSocket timeout s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
+  let runTransport f s = closeToSocket s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
       runSocket s =
         acceptToIO s
           . runScopedBundle @(Transport Message Message) (runTransport $ serializeOutput . deserializeInput)
@@ -38,7 +38,7 @@ main =
           . runSocket s
           . storageToIO
           . interpretRace
-          . interpretBusTBM bufferSize timeout
+          . interpretBusTBM bufferSize
           . traceToStdoutBuffered
       forkIf True m = forkProcess m >> exitSuccess
       forkIf False m = m

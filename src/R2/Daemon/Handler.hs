@@ -86,7 +86,7 @@ handleMsg ::
     Member Trace r
   ) =>
   String ->
-  Connection q ->
+  Connection chan ->
   Message ->
   Sem r ()
 handleMsg cmd Connection {..} = \case
@@ -107,4 +107,7 @@ handleMsg cmd Connection {..} = \case
   MsgRoutedFrom msg@(RoutedFrom {..}) -> do
     trace $ Text.printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
     routedFrom connAddr msg
+  MsgExit -> do
+    trace $ Text.printf "closing input queue"
+    busChan (nodeBusChan FromWorld connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg

@@ -92,7 +92,7 @@ runChainSession ::
 runChainSession [] m = subsume_ m
 runChainSession (addr : rest) m =
   let mdup = insertAt @3 @(Transport Message Message) m
-   in runR2 addr $ runChainSession rest mdup
+   in runR2 addr $ runChainSession rest mdup <* close
 
 r2c ::
   ( Members (Transport Message Message) r,
