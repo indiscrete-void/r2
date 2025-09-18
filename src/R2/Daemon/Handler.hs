@@ -1,6 +1,6 @@
 module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
-import Data.Map qualified as Map
+import Data.Maybe
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Trace
@@ -14,7 +14,7 @@ import Polysemy.Transport
 import R2
 import R2.Daemon
 import R2.Daemon.Bus
-import R2.Daemon.Storage
+import R2.Daemon.MakeNode
 import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
@@ -29,15 +29,15 @@ tunnelProcess ::
   Sem r ()
 tunnelProcess cmd = traceTagged "tunnel" $ execIO (ioShell cmd) ioToMsg
 
-listNodes :: (Member (Reader (NodeState chan)) r, Member (Output Message) r, Member Trace r) => Sem r ()
+listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r, Member Trace r) => Sem r ()
 listNodes = traceTagged "ListNodes" do
-  nodeList <- Map.keys <$> ask
+  nodeList <- mapMaybe nodeAddr <$> ask
   trace (Text.printf "responding with `%s`" (show nodeList))
   output (ResNodeList nodeList)
 
 connectNode ::
   ( Members (Transport Message Message) r,
-    Member (NodeBus NewConnection q Message) r,
+    Member (MakeNode q) r,
     Member (Bus q Message) r,
     Member Trace r,
     Member Fail r,
@@ -47,8 +47,9 @@ connectNode ::
   ProcessTransport ->
   Maybe Address ->
   Sem r ()
-connectNode router transport maybeNewNodeID =
-  msgToIO $ nodeBusToIO (NewConnection maybeNewNodeID (Pipe router transport))
+connectNode router transport maybeNewNodeID = do
+  chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
+  msgToIO $ nodeBusChanToIO chan
 
 routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r) => Address -> RouteTo Message -> Sem r ()
 routeTo = do
@@ -58,10 +59,10 @@ routedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message
 routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
 
 handleMsg ::
-  ( Member (Reader (NodeState chan)) r,
+  ( Member (Reader [Node chan]) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
-    Member (NodeBus NewConnection chan Message) r,
+    Member (MakeNode chan) r,
     Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
     Member Fail r,

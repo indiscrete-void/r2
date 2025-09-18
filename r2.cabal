@@ -50,6 +50,7 @@ library
         R2.Daemon.Sockets,
         R2.Daemon.Sockets.Accept,
         R2.Daemon.Bus,
+        R2.Daemon.MakeNode,
         Serial.Aeson.Options,
 
 executable r2d
