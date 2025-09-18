@@ -46,7 +46,7 @@ library
         R2.Daemon,
         R2.Daemon.Storage,
         R2.Daemon.Handler,
-        R2.Daemon.Coordinator,
+        R2.Daemon.Node,
         R2.Daemon.Sockets,
         R2.Daemon.Sockets.Accept,
         R2.Daemon.Bus,

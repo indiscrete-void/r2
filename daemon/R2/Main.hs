@@ -11,7 +11,7 @@ import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
 import R2.Daemon.Bus
-import R2.Daemon.Coordinator
+import R2.Daemon
 import R2.Daemon.Sockets.Accept
 import R2.Options
 import R2.Peer
