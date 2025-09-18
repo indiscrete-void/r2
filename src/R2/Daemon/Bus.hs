@@ -11,6 +11,7 @@ module R2.Daemon.Bus
     NodeBus (..),
     NodeBusDir (..),
     nodeBusChan,
+    useNodeBusChan,
     nodeBusGetChan,
     nodeBusChanToIO,
     interpretBusTBM,
@@ -25,6 +26,7 @@ import GHC.Conc.Sync
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
+import Polysemy.Fail
 import Polysemy.Transport
 
 data Chan d m a where
@@ -68,16 +70,21 @@ ioToNodeBusChan NodeBusChan {..} =
   (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
     . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
 
+data NodeBusDir = FromWorld | ToWorld
+
 data NodeBus addr chan d m a where
-  NodeBusGetChan :: addr -> NodeBus addr chan d m (Maybe (NodeBusChan chan))
+  NodeBusGetChan :: NodeBusDir -> addr -> NodeBus addr chan d m (Maybe chan)
 
 makeSem ''NodeBus
-
-data NodeBusDir = FromWorld | ToWorld
 
 nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
 nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
 nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
+
+useNodeBusChan :: (Member (NodeBus addr chan d) r, Member (Bus chan d) r, Member Fail r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
+useNodeBusChan dir addr m = do
+  (Just chan) <- nodeBusGetChan dir addr
+  busChan chan m
 
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
 nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
