@@ -1,4 +1,4 @@
-module R2.Daemon.Handler (tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
+module R2.Daemon.Handler (OverlayAddress (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Data.Maybe
 import Polysemy
@@ -17,6 +17,8 @@ import R2.Daemon.Node
 import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
+
+newtype OverlayAddress = OverlayAddress Address
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -48,14 +50,15 @@ connectNode router transport maybeNewNodeID = do
 routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
 routeTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
-routedFrom :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
-routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld routedFromNode $ putChan (Just routedFromData)
+routedFrom :: (Member (NodeBus OverlayAddress chan Message) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
+routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld (OverlayAddress routedFromNode) $ putChan (Just routedFromData)
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
     Member (MakeNode chan) r,
+    Member (NodeBus OverlayAddress chan Message) r,
     Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
     Member Fail r,
