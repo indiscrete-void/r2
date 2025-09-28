@@ -8,11 +8,11 @@ module R2.Daemon.Bus
     busPutData,
     busChan,
     NodeBusChan (..),
-    NodeBus (..),
+    LookupChan (..),
     NodeBusDir (..),
     nodeBusChan,
     useNodeBusChan,
-    nodeBusGetChan,
+    lookupChan,
     nodeBusChanToIO,
     interpretBusTBM,
     ioToNodeBusChan,
@@ -62,6 +62,12 @@ data NodeBusChan chan = NodeBusChan
   }
   deriving stock (Eq, Show)
 
+data NodeBusDir = FromWorld | ToWorld
+
+nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
+nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
+nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
+
 ioToNodeBusChan ::
   (Member (Bus chan d) r) =>
   NodeBusChan chan ->
@@ -70,20 +76,14 @@ ioToNodeBusChan NodeBusChan {..} =
   (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
     . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
 
-data NodeBusDir = FromWorld | ToWorld
+data LookupChan addr chan m a where
+  LookupChan :: NodeBusDir -> addr -> LookupChan addr chan m (Maybe chan)
 
-data NodeBus addr chan d m a where
-  NodeBusGetChan :: NodeBusDir -> addr -> NodeBus addr chan d m (Maybe chan)
+makeSem ''LookupChan
 
-makeSem ''NodeBus
-
-nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
-nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
-nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
-
-useNodeBusChan :: (Member (NodeBus addr chan d) r, Member (Bus chan d) r, Member Fail r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
+useNodeBusChan :: (Member (LookupChan addr chan) r, Member (Bus chan d) r, Member Fail r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
 useNodeBusChan dir addr m = do
-  (Just chan) <- nodeBusGetChan dir addr
+  (Just chan) <- lookupChan dir addr
   busChan chan m
 
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
