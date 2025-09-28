@@ -26,7 +26,6 @@ import GHC.Conc.Sync
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
-import Polysemy.Fail
 import Polysemy.Transport
 
 data Chan d m a where
@@ -77,13 +76,13 @@ ioToNodeBusChan NodeBusChan {..} =
     . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
 
 data LookupChan addr chan m a where
-  LookupChan :: NodeBusDir -> addr -> LookupChan addr chan m (Maybe chan)
+  LookupChan :: NodeBusDir -> addr -> LookupChan addr chan m chan
 
 makeSem ''LookupChan
 
-useNodeBusChan :: (Member (LookupChan addr chan) r, Member (Bus chan d) r, Member Fail r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
+useNodeBusChan :: (Member (LookupChan addr chan) r, Member (Bus chan d) r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
 useNodeBusChan dir addr m = do
-  (Just chan) <- lookupChan dir addr
+  chan <- lookupChan dir addr
   busChan chan m
 
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)

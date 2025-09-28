@@ -1,4 +1,4 @@
-module R2.Daemon.Handler (OverlayAddress (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
+module R2.Daemon.Handler (StatelessConnection (..), EstablishedConnection (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Data.Maybe
 import Polysemy
@@ -18,7 +18,9 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf qualified as Text
 
-newtype OverlayAddress = OverlayAddress Address
+newtype StatelessConnection = StatelessConnection Address
+
+newtype EstablishedConnection = EstablishedConnection Address
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -47,19 +49,23 @@ connectNode router transport maybeNewNodeID = do
   chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
   msgToIO $ nodeBusChanToIO chan
 
-routeTo :: (Member (LookupChan Address chan) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
-routeTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
+routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
+routeTo = r2 \routeToAddr routedFrom -> do
+  (Just chan) <- lookupChan ToWorld (EstablishedConnection routeToAddr)
+  busChan chan $ putChan (Just $ MsgRoutedFrom routedFrom)
 
-routedFrom :: (Member (LookupChan OverlayAddress chan) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
-routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld (OverlayAddress routedFromNode) $ putChan (Just routedFromData)
+routedFrom :: (Member (LookupChan StatelessConnection chan) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
+routedFrom (RoutedFrom routedFromNode routedFromData) = do
+  chan <- lookupChan FromWorld (StatelessConnection routedFromNode)
+  busChan chan $ putChan (Just routedFromData)
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
     Member (MakeNode chan) r,
-    Member (LookupChan OverlayAddress chan) r,
-    Member (LookupChan Address chan) r,
+    Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member (LookupChan StatelessConnection chan) r,
     Member (Bus chan Message) r,
     Member Fail r,
     Member Async r,

@@ -28,8 +28,8 @@ msgHandler ::
   ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
-    Member (LookupChan Address chan) r,
-    Member (LookupChan OverlayAddress chan) r,
+    Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member (LookupChan StatelessConnection chan) r,
     Member (Storage chan) r,
     Member Fail r,
     Member Trace r,
@@ -117,22 +117,21 @@ makeNodes self handler = runMakeNode (async_ . go)
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
 
-runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan Address chan) r
-runLookupChan = interpret \case LookupChan dir addr -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
+runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
+runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
 
 runOverlayLookupChan ::
-  ( Member (LookupChan Address chan) r,
+  ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
     Member (Bus chan Message) r,
     Member (MakeNode chan) r
   ) =>
   Address ->
-  InterpreterFor (LookupChan OverlayAddress chan) r
+  InterpreterFor (LookupChan StatelessConnection chan) r
 runOverlayLookupChan router = interpret \case
-  LookupChan dir (OverlayAddress addr) -> do
+  LookupChan dir (StatelessConnection addr) -> do
     let makeChan = nodeBusChan dir <$> makeConnectedNode addr (R2 router)
-    storedChan <- lookupChan dir addr
-    chan <- maybe makeChan pure storedChan
-    pure $ Just chan
+    storedChan <- lookupChan dir (EstablishedConnection addr)
+    maybe makeChan pure storedChan
 
 r2nd ::
   ( Member (Bus chan Message) r,
