@@ -143,5 +143,7 @@ r2c me (Command targetChain action) = do
         [] -> server
         nodes -> last nodes
   output $ LogAction target action
-  runChainSession targetChain $
-    handleAction action
+  inToLog (LogRecv server) $
+    outToLog (LogSend server) $
+      runChainSession targetChain $
+            handleAction action
