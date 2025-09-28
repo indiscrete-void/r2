@@ -8,13 +8,7 @@ module R2.Peer
     bufferSize,
     queueSize,
     ProcessTransport (..),
-    runR2Input,
-    outputRouteTo,
-    runR2Close,
-    runR2Output,
-    runR2,
     ioToMsg,
-    ioToR2,
     processTransport,
     address,
     msgSelf,
@@ -143,51 +137,6 @@ processTransport = do
 address :: ReadM Address
 address = str >>= maybeFail "invalid node ID" . parseAddressBase58
 
-runR2Input ::
-  ( Member (InputWithEOF Message) r,
-    Member Fail r
-  ) =>
-  Address ->
-  InterpreterFor (InputWithEOF Message) r
-runR2Input node = interpret \case
-  Input ->
-    input >>= \case
-      Just (MsgRoutedFrom (RoutedFrom {..})) ->
-        if routedFromNode == node
-          then pure $ Just routedFromData
-          else fail $ "unexpected node: " <> show routedFromNode
-      Just msg -> fail $ "unexected message: " <> show msg
-      Nothing -> pure Nothing
-
-outputRouteTo :: (Member (Output Message) r) => Address -> Message -> Sem r ()
-outputRouteTo node = output . MsgRouteTo . RouteTo node
-
-runR2Close ::
-  forall r.
-  ( Member (Output Message) r
-  ) =>
-  Address ->
-  InterpreterFor Close r
-runR2Close node = interpret \case Close -> outputRouteTo node MsgExit
-
-runR2Output ::
-  ( Member (Output Message) r
-  ) =>
-  Address ->
-  InterpreterFor (Output Message) r
-runR2Output node = interpret \case Output msg -> outputRouteTo node msg
-
-runR2 ::
-  ( Members (Transport Message Message) r,
-    Member Fail r
-  ) =>
-  Address ->
-  InterpretersFor (Transport Message Message) r
-runR2 node =
-  runR2Close node
-    . runR2Output node
-    . runR2Input node
-
 runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor (InputWithEOF Message) r
 runMsgInput = interpret \case
   Input ->
@@ -230,16 +179,3 @@ ioToMsg =
     [ contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close,
       mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
     ]
-
-ioToR2 ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member (InputWithEOF ByteString) r,
-    Member (Output ByteString) r,
-    Member Fail r,
-    Member Close r,
-    Member Async r
-  ) =>
-  Address ->
-  Sem r ()
-ioToR2 addr = runR2 addr ioToMsg
