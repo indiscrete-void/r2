@@ -47,10 +47,10 @@ connectNode router transport maybeNewNodeID = do
   chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
   msgToIO $ nodeBusChanToIO chan
 
-routeTo :: (Member (NodeBus Address chan Message) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
+routeTo :: (Member (LookupChan Address chan) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
 routeTo = r2 (\reqAddr -> useNodeBusChan ToWorld reqAddr . putChan . Just . MsgRoutedFrom)
 
-routedFrom :: (Member (NodeBus OverlayAddress chan Message) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
+routedFrom :: (Member (LookupChan OverlayAddress chan) r, Member (Bus chan Message) r, Member Fail r) => RoutedFrom Message -> Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = useNodeBusChan FromWorld (OverlayAddress routedFromNode) $ putChan (Just routedFromData)
 
 handleMsg ::
@@ -58,8 +58,8 @@ handleMsg ::
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
     Member (MakeNode chan) r,
-    Member (NodeBus OverlayAddress chan Message) r,
-    Member (NodeBus Address chan Message) r,
+    Member (LookupChan OverlayAddress chan) r,
+    Member (LookupChan Address chan) r,
     Member (Bus chan Message) r,
     Member Fail r,
     Member Async r,
