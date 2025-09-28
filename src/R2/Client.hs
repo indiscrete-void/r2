@@ -82,6 +82,51 @@ handleAction Ls = listNodes
 handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
 handleAction (Tunnel transport) = connectTransport transport
 
+runR2Input ::
+  ( Member (InputWithEOF Message) r,
+    Member Fail r
+  ) =>
+  Address ->
+  InterpreterFor (InputWithEOF Message) r
+runR2Input node = interpret \case
+  Input ->
+    input >>= \case
+      Just (MsgRoutedFrom (RoutedFrom {..})) ->
+        if routedFromNode == node
+          then pure $ Just routedFromData
+          else fail $ "unexpected node: " <> show routedFromNode
+      Just msg -> fail $ "unexected message: " <> show msg
+      Nothing -> pure Nothing
+
+outputRouteTo :: (Member (Output Message) r) => Address -> Message -> Sem r ()
+outputRouteTo node = output . MsgRouteTo . RouteTo node
+
+runR2Close ::
+  forall r.
+  ( Member (Output Message) r
+  ) =>
+  Address ->
+  InterpreterFor Close r
+runR2Close node = interpret \case Close -> outputRouteTo node MsgExit
+
+runR2Output ::
+  ( Member (Output Message) r
+  ) =>
+  Address ->
+  InterpreterFor (Output Message) r
+runR2Output node = interpret \case Output msg -> outputRouteTo node msg
+
+runR2 ::
+  ( Members (Transport Message Message) r,
+    Member Fail r
+  ) =>
+  Address ->
+  InterpretersFor (Transport Message Message) r
+runR2 node =
+  runR2Close node
+    . runR2Output node
+    . runR2Input node
+
 runChainSession ::
   ( Members (Transport Message Message) r,
     Member Trace r,
