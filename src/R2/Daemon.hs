@@ -59,22 +59,6 @@ exchangeSelves self maybeKnownAddr = do
     when (knownNodeAddr /= addr) $ fail (Text.printf "address mismatch")
   pure addr
 
-sendR2ChanToWorld ::
-  ( Member (Storage chan) r,
-    Member (Bus chan Message) r,
-    Member Fail r
-  ) =>
-  Address ->
-  chan ->
-  Address ->
-  Sem r ()
-sendR2ChanToWorld router chan addr = do
-  (Just routerNode) <- storageLookupNode router
-  let routerChan = nodeBusChan ToWorld (nodeChan routerNode)
-  whileJust_
-    (busChan chan takeChan)
-    (busChan routerChan . putChan . Just . MsgRouteTo . RouteTo addr)
-
 acceptSockets ::
   ( Member (Accept sock) r,
     Member (Sockets Message Message sock) r,
@@ -108,11 +92,8 @@ makeNodes self handler = runMakeNode (async_ . go)
       addr <- storageLockNode node $ ioToNodeBusChan newConnChan (exchangeSelves self newConnAddr)
       let conn = Connection addr newConnTransport newConnChan
       go (ConnectedNode conn)
-    go node@(ConnectedNode conn@Connection {connAddr, connTransport, connChan}) = storageLockNode node do
+    go node@(ConnectedNode conn@Connection {connAddr}) = storageLockNode node do
       trace $ Text.printf "starting %s message handler" (show connAddr)
-      case connTransport of
-        R2 router -> async_ $ sendR2ChanToWorld router (nodeBusChan ToWorld connChan) connAddr
-        _ -> mempty
       makeNodes self handler $
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
@@ -120,16 +101,36 @@ makeNodes self handler = runMakeNode (async_ . go)
 runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
 runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
 
+outboundChanToR2 ::
+  ( Member (Bus chan Message) r,
+    Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member Fail r
+  ) =>
+  Address ->
+  chan ->
+  Address ->
+  Sem r ()
+outboundChanToR2 router chan addr = do
+  Just routerChan <- lookupChan ToWorld (EstablishedConnection router)
+  whileJust_
+    (busChan chan takeChan)
+    (busChan routerChan . putChan . Just . MsgRouteTo . RouteTo addr)
+
 runOverlayLookupChan ::
   ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
     Member (Bus chan Message) r,
-    Member (MakeNode chan) r
+    Member (MakeNode chan) r,
+    Member Fail r,
+    Member Async r
   ) =>
   Address ->
   InterpreterFor (LookupChan StatelessConnection chan) r
 runOverlayLookupChan router = interpret \case
   LookupChan dir (StatelessConnection addr) -> do
-    let makeChan = nodeBusChan dir <$> makeConnectedNode addr (R2 router)
+    let makeChan = do
+          chan <- makeConnectedNode addr (R2 router)
+          async_ $ outboundChanToR2 router (nodeBusChan ToWorld chan) addr
+          pure $ nodeBusChan dir chan
     storedChan <- lookupChan dir (EstablishedConnection addr)
     maybe makeChan pure storedChan
 
