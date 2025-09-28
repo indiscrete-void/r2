@@ -2,7 +2,6 @@ module R2.Client.Chain (runChainSession) where
 
 import Polysemy
 import Polysemy.Fail
-import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Peer
@@ -54,7 +53,6 @@ runR2 node =
 
 runChainSession ::
   ( Members (Transport Message Message) r,
-    Member Trace r,
     Member Fail r
   ) =>
   [Address] ->
