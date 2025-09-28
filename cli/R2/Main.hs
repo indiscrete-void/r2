@@ -1,4 +1,3 @@
-import Data.ByteString.Char8 qualified as BS
 import Network.Socket hiding (close)
 import Polysemy hiding (run)
 import Polysemy.Async
@@ -8,7 +7,6 @@ import Polysemy.Process
 import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
-import Polysemy.Transport.Extra
 import R2
 import R2.Client
 import R2.Options
@@ -31,7 +29,7 @@ logToTrace = runOutputSem \case
 main :: IO ()
 main =
   let runUnserialized = deserializeInput . serializeOutput
-      outputToCLI = mapOutput BS.pack
+      outputToCLI = runOutputSem (embed . putStrLn)
       runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
       runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
       run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . ignoreTrace . runTransport s . runStdio . scopedProcToIOFinal bufferSize . outputToCLI . traceToStderrBuffered . logToTrace
