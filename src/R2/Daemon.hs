@@ -29,6 +29,7 @@ msgHandler ::
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
     Member (NodeBus Address chan Message) r,
+    Member (NodeBus OverlayAddress chan Message) r,
     Member (Storage chan) r,
     Member Fail r,
     Member Trace r,
@@ -116,22 +117,22 @@ makeNodes self handler = runMakeNode (async_ . go)
         handler conn
       trace $ Text.printf "forgetting %s" (show connAddr)
 
-runNodeBus ::
-  ( Member (Storage chan) r,
+runNodeBus :: (Member (Storage chan) r) => InterpreterFor (NodeBus Address chan Message) r
+runNodeBus = interpret \case NodeBusGetChan dir addr -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
+
+runOverlayNodeBus ::
+  ( Member (NodeBus Address chan Message) r,
     Member (Bus chan Message) r,
     Member (MakeNode chan) r
   ) =>
   Address ->
-  InterpreterFor (NodeBus Address chan Message) r
-runNodeBus router = interpret \case
-  NodeBusGetChan dir addr -> do
-    storedNode <- storageLookupNode addr
-    chan <- case storedNode of
-      Just node -> pure $ Just $ nodeChan node
-      Nothing -> case dir of
-        FromWorld -> Just <$> makeConnectedNode addr (R2 router)
-        ToWorld -> pure Nothing
-    pure $ nodeBusChan dir <$> chan
+  InterpreterFor (NodeBus OverlayAddress chan Message) r
+runOverlayNodeBus router = interpret \case
+  NodeBusGetChan dir (OverlayAddress addr) -> do
+    let makeChan = nodeBusChan dir <$> makeConnectedNode addr (R2 router)
+    storedChan <- nodeBusGetChan dir addr
+    chan <- maybe makeChan pure storedChan
+    pure $ Just chan
 
 r2nd ::
   ( Member (Bus chan Message) r,
@@ -145,7 +146,7 @@ r2nd ::
   String ->
   Connection chan ->
   Sem r ()
-r2nd cmd conn = runNodeBus (connAddr conn) $ msgHandler cmd conn
+r2nd cmd conn = runNodeBus $ runOverlayNodeBus (connAddr conn) $ msgHandler cmd conn
 
 r2d ::
   ( Member (Accept sock) r,
