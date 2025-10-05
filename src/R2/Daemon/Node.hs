@@ -41,6 +41,3 @@ nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
 nodeChan :: Node chan -> NodeBusChan chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
 nodeChan (ConnectedNode (Connection {connChan})) = connChan
-
-instance Show (Node chan) where
-  show node = show $ nodeAddr node
