@@ -25,7 +25,7 @@ import Text.Printf (printf)
 
 logShowOptionalAddr :: Maybe Address -> String
 logShowOptionalAddr (Just addr) = show addr
-logShowOptionalAddr Nothing = "unknwon node"
+logShowOptionalAddr Nothing = "unknown node"
 
 logShowNode :: Node chan -> String
 logShowNode node = logShowOptionalAddr (nodeAddr node)
