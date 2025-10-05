@@ -68,8 +68,7 @@ handleMsg ::
     Member (LookupChan StatelessConnection chan) r,
     Member (Bus chan Message) r,
     Member Fail r,
-    Member Async r,
-    Member Trace r
+    Member Async r
   ) =>
   String ->
   Connection chan ->
@@ -77,23 +76,12 @@ handleMsg ::
   Sem r ()
 handleMsg cmd Connection {..} = \case
   ReqListNodes -> do
-    trace "listing connected nodes"
     listNodes
   (ReqConnectNode transport maybeNodeID) -> do
-    case maybeNodeID of
-      Just addr -> trace $ Text.printf "connecting %s over %s" (show addr) (show transport)
-      Nothing -> trace $ Text.printf "connecting unknown node over %s" (show transport)
     connectNode connAddr transport maybeNodeID
   ReqTunnelProcess -> do
-    trace (Text.printf "tunneling `%s`" cmd)
     tunnelProcess cmd
-  MsgRouteTo msg@(RouteTo {..}) -> do
-    trace $ Text.printf "routing `%s` to %s" (show routeToData) (show routeToNode)
-    routeTo connAddr msg
-  MsgRoutedFrom msg@(RoutedFrom {..}) -> do
-    trace $ Text.printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
-    routedFrom msg
-  MsgExit -> do
-    trace $ Text.printf "closing input queue"
-    busChan (nodeBusChan FromWorld connChan) $ putChan Nothing
+  MsgRouteTo msg -> routeTo connAddr msg
+  MsgRoutedFrom msg -> routedFrom msg
+  MsgExit -> busChan (nodeBusChan FromWorld connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg
