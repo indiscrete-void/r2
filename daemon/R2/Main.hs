@@ -36,14 +36,14 @@ logToTrace cmd = runOutputSem go
     go (LogConnected node) = case node of
       ConnectedNode Connection {connAddr, connTransport} -> trace $ printf "connection established with %s over %s" (show connAddr) (show connTransport)
       AcceptedNode NewConnection {newConnTransport, newConnAddr} -> trace $ printf "accepted %s over %s" (logShowOptionalAddr newConnAddr) (show newConnTransport)
-    go (LogRecv node msg) = traceTagged (logShowNode node) $ case msg of
+    go (LogRecv node msg) = traceTagged (printf "<-%s" $ logShowNode node) $ case msg of
       ReqListNodes -> trace $ printf "listing connected nodes"
       ReqConnectNode transport maybeNodeID -> trace $ printf "connecting %s over %s" (logShowOptionalAddr maybeNodeID) (show transport)
       ReqTunnelProcess -> trace (printf "tunneling `%s`" cmd)
       MsgRouteTo RouteTo {..} -> trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
       MsgRoutedFrom RoutedFrom {..} -> trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
       msg -> trace $ printf "trace: unknown msg %s" (show msg)
-    go (LogSend node msg) = trace $ printf "sent %s to %s" (show msg) (logShowNode node)
+    go (LogSend node msg) = trace $ printf "->%s: %s" (logShowNode node) (show msg)
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
 
 main :: IO ()
