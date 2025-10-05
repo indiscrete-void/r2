@@ -6,7 +6,6 @@ module R2.Daemon.Bus
     busMakeChan,
     busTakeData,
     busPutData,
-    busClose,
     busChan,
     NodeBusChan (..),
     LookupChan (..),
@@ -55,9 +54,6 @@ busChan :: (Member (Bus chan d) r) => chan -> InterpreterFor (Chan d) r
 busChan chan = interpret \case
   TakeChan -> busTakeData chan
   PutChan d -> busPutData chan d
-
-busClose :: (Member (Bus chan d) r) => chan -> Sem r ()
-busClose chan = busPutData chan Nothing
 
 data NodeBusChan chan = NodeBusChan
   { nodeBusIn :: chan,
