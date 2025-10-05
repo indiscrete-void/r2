@@ -31,10 +31,8 @@ data Log where
 
 ioToLog :: (Member (Output Log) r) => Node chan -> Sem (Append (Transport Message Message) r) a -> Sem (Append (Transport Message Message) r) a
 ioToLog node =
-  subsume @Close
-    . runOutputSem (\o -> output (LogSend node o) >> output o)
-    . runInputSem (input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
-    . raise_
+  intercept @(Output Message) (\(Output o) -> output (LogSend node o) >> output o)
+    . intercept @(InputWithEOF Message) (\Input -> input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
 
 ioToNodeBusChanLogged :: (Member (Bus chan Message) r, Member (Output Log) r) => Node chan -> InterpretersFor (Transport Message Message) r
 ioToNodeBusChanLogged node = ioToNodeBusChan (nodeChan node) . ioToLog node
