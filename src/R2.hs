@@ -78,5 +78,5 @@ instance FromJSON Address where
         . parseAddressBase58
         . Text.unpack
 
-$(deriveJSON (aesonOptions $ Just "routeTo") ''RouteTo)
-$(deriveJSON (aesonOptions $ Just "routedFrom") ''RoutedFrom)
+$(deriveJSON (aesonRemovePrefix "routeTo") ''RouteTo)
+$(deriveJSON (aesonRemovePrefix "routedFrom") ''RoutedFrom)

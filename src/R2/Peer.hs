@@ -59,14 +59,14 @@ instance FromJSON Raw where
 newtype Self = Self {unSelf :: Address}
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON (aesonOptions $ Just "un") ''Self)
+$(deriveJSON (aesonRemovePrefix "un") ''Self)
 
 data ProcessTransport
   = Stdio
   | Process String
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON (aesonOptions Nothing) ''ProcessTransport)
+$(deriveJSON aesonOptions ''ProcessTransport)
 
 data Message where
   MsgSelf :: Self -> Message
@@ -80,7 +80,7 @@ data Message where
   ResNodeList :: [Address] -> Message
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON (aesonOptions Nothing) ''Message)
+$(deriveJSON aesonOptions ''Message)
 
 msgSelf :: Message -> Maybe Self
 msgSelf = \case
