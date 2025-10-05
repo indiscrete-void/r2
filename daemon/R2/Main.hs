@@ -27,21 +27,24 @@ logShowOptionalAddr :: Maybe Address -> String
 logShowOptionalAddr (Just addr) = show addr
 logShowOptionalAddr Nothing = "unknwon node"
 
+logShowNode :: Node chan -> String
+logShowNode node = logShowOptionalAddr (nodeAddr node)
+
 logToTrace :: (Member Trace r) => String -> InterpreterFor (Output Log) r
 logToTrace cmd = runOutputSem go
   where
     go (LogConnected node) = case node of
       ConnectedNode Connection {connAddr, connTransport} -> trace $ printf "connection established with %s over %s" (show connAddr) (show connTransport)
       AcceptedNode NewConnection {newConnTransport, newConnAddr} -> trace $ printf "accepted %s over %s" (logShowOptionalAddr newConnAddr) (show newConnTransport)
-    go (LogRecv node msg) = traceTagged (show node) $ case msg of
+    go (LogRecv node msg) = traceTagged (logShowNode node) $ case msg of
       ReqListNodes -> trace $ printf "listing connected nodes"
       ReqConnectNode transport maybeNodeID -> trace $ printf "connecting %s over %s" (logShowOptionalAddr maybeNodeID) (show transport)
       ReqTunnelProcess -> trace (printf "tunneling `%s`" cmd)
       MsgRouteTo RouteTo {..} -> trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
       MsgRoutedFrom RoutedFrom {..} -> trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
       msg -> trace $ printf "trace: unknown msg %s" (show msg)
-    go (LogSend node msg) = trace $ printf "sent %s to %s" (show msg) (show node)
-    go (LogDisconnected node) = trace $ printf "%s disconnected" (show node)
+    go (LogSend node msg) = trace $ printf "sent %s to %s" (show msg) (logShowNode node)
+    go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
 
 main :: IO ()
 main =
