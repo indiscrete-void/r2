@@ -20,19 +20,16 @@ data NewConnection chan = NewConnection
     newConnTransport :: ConnTransport,
     newConnChan :: NodeBusChan chan
   }
-  deriving stock (Show)
 
 data Connection chan = Connection
   { connAddr :: Address,
     connTransport :: ConnTransport,
     connChan :: NodeBusChan chan
   }
-  deriving stock (Show)
 
 data Node chan
   = AcceptedNode (NewConnection chan)
   | ConnectedNode (Connection chan)
-  deriving stock (Show)
 
 instance Eq (Node chan) where
   a == b = nodeAddr a == nodeAddr b
@@ -44,3 +41,6 @@ nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
 nodeChan :: Node chan -> NodeBusChan chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
 nodeChan (ConnectedNode (Connection {connChan})) = connChan
+
+instance Show (Node chan) where
+  show node = show $ nodeAddr node

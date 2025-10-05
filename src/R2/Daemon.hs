@@ -1,16 +1,15 @@
-module R2.Daemon (msgHandler, acceptSockets, makeNodes, r2d) where
+module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2d) where
 
 import Control.Monad.Extra
 import Control.Monad.Loops
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
-import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Internal.Kind
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
-import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Daemon.Bus
@@ -24,6 +23,22 @@ import R2.Peer
 import System.Process.Extra
 import Text.Printf as Text
 
+data Log where
+  LogConnected :: Node chan -> Log
+  LogRecv :: Node chan -> Message -> Log
+  LogSend :: Node chan -> Message -> Log
+  LogDisconnected :: Node chan -> Log
+
+ioToLog :: (Member (Output Log) r) => Node chan -> Sem (Append (Transport Message Message) r) a -> Sem (Append (Transport Message Message) r) a
+ioToLog node =
+  subsume @Close
+    . runOutputSem (\o -> output (LogSend node o) >> output o)
+    . runInputSem (input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
+    . raise_
+
+ioToNodeBusChanLogged :: (Member (Bus chan Message) r, Member (Output Log) r) => Node chan -> InterpretersFor (Transport Message Message) r
+ioToNodeBusChanLogged node = ioToNodeBusChan (nodeChan node) . ioToLog node
+
 msgHandler ::
   ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -32,17 +47,16 @@ msgHandler ::
     Member (LookupChan StatelessConnection chan) r,
     Member (Storage chan) r,
     Member Fail r,
-    Member Trace r,
-    Member Async r
+    Member Async r,
+    Member (Output Log) r
   ) =>
   String ->
   Connection chan ->
   Sem r ()
-msgHandler cmd conn@Connection {..} =
-  traceTagged ("handler " <> show connAddr) $
-    ioToNodeBusChan connChan $
-      nodesReaderToStorage $
-        handle (handleMsg cmd conn)
+msgHandler cmd conn =
+  ioToNodeBusChanLogged (ConnectedNode conn) $
+    nodesReaderToStorage $
+      handle (handleMsg cmd conn)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
@@ -75,11 +89,11 @@ acceptSockets =
 makeNodes ::
   forall chan r.
   ( Member Async r,
+    Member (Output Log) r,
     Member (Bus chan Message) r,
     Member (Storage chan) r,
     Member Resource r,
-    Member Fail r,
-    Member Trace r
+    Member Fail r
   ) =>
   Address ->
   (Connection chan -> Sem (MakeNode chan ': r) ()) ->
@@ -87,16 +101,16 @@ makeNodes ::
 makeNodes self handler = runMakeNode (async_ . go)
   where
     go :: Node chan -> Sem r ()
-    go node@(AcceptedNode (NewConnection {..})) = do
-      trace $ Text.printf "accepted node over %s. exchanging addresses" (show newConnTransport)
-      addr <- storageLockNode node $ ioToNodeBusChan newConnChan (exchangeSelves self newConnAddr)
+    go node@(AcceptedNode NewConnection {..}) = do
+      output (LogConnected node)
+      addr <- storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
       let conn = Connection addr newConnTransport newConnChan
       go (ConnectedNode conn)
-    go node@(ConnectedNode conn@Connection {connAddr}) = storageLockNode node do
-      trace $ Text.printf "starting %s message handler" (show connAddr)
+    go node@(ConnectedNode conn) = storageLockNode node do
+      output (LogConnected node)
       makeNodes self handler $
         handler conn
-      trace $ Text.printf "forgetting %s" (show connAddr)
+      output (LogDisconnected node)
 
 runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
 runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
@@ -140,8 +154,8 @@ r2nd ::
     Member (MakeNode chan) r,
     Member (Storage chan) r,
     Member Fail r,
-    Member Trace r,
-    Member Async r
+    Member Async r,
+    Member (Output Log) r
   ) =>
   String ->
   Connection chan ->
@@ -156,8 +170,8 @@ r2d ::
     Member (Bus chan Message) r,
     Member Resource r,
     Member Async r,
-    Member Trace r,
-    Member Fail r
+    Member Fail r,
+    Member (Output Log) r
   ) =>
   Address ->
   String ->
