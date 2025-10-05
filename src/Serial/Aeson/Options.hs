@@ -1,17 +1,14 @@
-module Serial.Aeson.Options (aesonOptions) where
+module Serial.Aeson.Options (aesonOptions, aesonRemovePrefix) where
 
 import Data.Aeson (Options (..), SumEncoding (..), defaultOptions)
 import Data.Char (toLower)
 import Data.List qualified as List
 import Data.Maybe qualified as Maybe
 
-aesonOptions :: Maybe String -> Options
-aesonOptions prefix =
+aesonOptions :: Options
+aesonOptions =
   defaultOptions
-    { fieldLabelModifier = case prefix of
-        Just prefix -> lowerFirst . stripPrefixOrSkip prefix
-        Nothing -> id,
-      sumEncoding = ObjectWithSingleField
+    { sumEncoding = ObjectWithSingleField
     }
 
 stripPrefixOrSkip :: (Eq a) => [a] -> [a] -> [a]
@@ -20,3 +17,9 @@ stripPrefixOrSkip prefix fieldName = Maybe.fromMaybe fieldName (List.stripPrefix
 lowerFirst :: [Char] -> [Char]
 lowerFirst (x : xs) = toLower x : xs
 lowerFirst "" = ""
+
+aesonRemovePrefix :: String -> Options
+aesonRemovePrefix prefix =
+  aesonOptions
+    { fieldLabelModifier = lowerFirst . stripPrefixOrSkip prefix
+    }
