@@ -12,7 +12,6 @@ import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Daemon.Bus
-import R2.Daemon.MakeNode
 import R2.Daemon.Node
 import R2.Peer
 import System.Process.Extra
