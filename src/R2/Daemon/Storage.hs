@@ -6,7 +6,6 @@ module R2.Daemon.Storage
     storageRmNode,
     storageLookupNode,
     storageNodes,
-    storageLockNode,
     nodesReaderToStorage,
   )
 where
@@ -16,7 +15,6 @@ import Polysemy
 import Polysemy.AtomicState
 import Polysemy.Internal.Tactics
 import Polysemy.Reader
-import Polysemy.Resource
 import R2
 import R2.Daemon.Node
 
@@ -29,9 +27,6 @@ data Storage chan m a where
   StorageNodes :: Storage chan m (NodeState chan)
 
 makeSem ''Storage
-
-storageLockNode :: (Member (Storage chan) r, Member Resource r) => Node chan -> Sem r c -> Sem r c
-storageLockNode node = bracket_ (storageAddNode node) (storageRmNode node)
 
 nodesReaderToStorage :: (Member (Storage chan) r) => InterpreterFor (Reader (NodeState chan)) r
 nodesReaderToStorage = go id
