@@ -14,6 +14,7 @@ import Polysemy.Transport
 import R2
 import R2.Daemon.Bus
 import R2.Daemon.Handler
+import R2.Daemon.MakeNode
 import R2.Daemon.Node
 import R2.Daemon.Sockets
 import R2.Daemon.Sockets.Accept
@@ -34,16 +35,6 @@ ioToLog node =
     . runOutputSem (\o -> output (LogSend node o) >> output o)
     . runInputSem (input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
     . raise_
-
-logMakeNodes :: (Member (Output Log) r, Member (MakeNode chan) r) => InterpreterFor (MakeNode chan) r
-logMakeNodes = runMakeNode \node -> do
-  output $ LogConnected node
-  makeNode node
-
-logCleanNodes :: (Member (Output Log) r, Member (CleanNode chan) r) => InterpreterFor (CleanNode chan) r
-logCleanNodes = runCleanNode \node -> do
-  output $ LogDisconnected node
-  cleanNode node
 
 ioToNodeBusChanLogged :: (Member (Bus chan Message) r, Member (Output Log) r) => Node chan -> InterpretersFor (Transport Message Message) r
 ioToNodeBusChanLogged node = ioToNodeBusChan (nodeChan node) . ioToLog node
@@ -95,8 +86,31 @@ acceptSockets =
     chan <- makeAcceptedNode Nothing Socket
     socket @Message @Message s $ nodeBusChanToIO chan
 
-runNode :: (Member (CleanNode chan) r, Member (Storage chan) r, Member Resource r) => Node chan -> Sem r c -> Sem r c
-runNode node = bracket_ (storageAddNode node) (storageRmNode node >> cleanNode node)
+makeNodes ::
+  forall chan r.
+  ( Member Async r,
+    Member (Output Log) r,
+    Member (Bus chan Message) r,
+    Member (Storage chan) r,
+    Member Resource r,
+    Member Fail r
+  ) =>
+  Address ->
+  (Connection chan -> Sem (MakeNode chan ': r) ()) ->
+  InterpreterFor (MakeNode chan) r
+makeNodes self handler = runMakeNode (async_ . go)
+  where
+    go :: Node chan -> Sem r ()
+    go node@(AcceptedNode NewConnection {..}) = do
+      output (LogConnected node)
+      addr <- storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
+      let conn = Connection addr newConnTransport newConnChan
+      go (ConnectedNode conn)
+    go node@(ConnectedNode conn) = storageLockNode node do
+      output (LogConnected node)
+      makeNodes self handler $
+        handler conn
+      output (LogDisconnected node)
 
 runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
 runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
@@ -138,7 +152,6 @@ r2nd ::
   ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
-    Member (CleanNode chan) r,
     Member (Storage chan) r,
     Member Fail r,
     Member Async r,
@@ -147,34 +160,7 @@ r2nd ::
   String ->
   Connection chan ->
   Sem r ()
-r2nd cmd conn = logCleanNodes . logMakeNodes $ runLookupChan $ runOverlayLookupChan (connAddr conn) $ msgHandler cmd conn
-
-makeNodes ::
-  forall chan r.
-  ( Member Async r,
-    Member (Output Log) r,
-    Member (Bus chan Message) r,
-    Member (Storage chan) r,
-    Member Resource r,
-    Member Fail r,
-    Member (CleanNode chan) r
-  ) =>
-  Address ->
-  (Connection chan -> Sem (MakeNode chan ': r) ()) ->
-  InterpreterFor (MakeNode chan) r
-makeNodes self handler = runMakeNode (async_ . go)
-  where
-    go :: Node chan -> Sem r ()
-    go node@(AcceptedNode NewConnection {..}) = do
-      addr <- runNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
-      let conn = Connection addr newConnTransport newConnChan
-      go (ConnectedNode conn)
-    go node@(ConnectedNode conn) = runNode node do
-      makeNodes self handler $
-        handler conn
-
-cleanNodes :: InterpreterFor (CleanNode chan) r
-cleanNodes = runCleanNode (const mempty)
+r2nd cmd conn = runLookupChan $ runOverlayLookupChan (connAddr conn) $ msgHandler cmd conn
 
 r2d ::
   ( Member (Accept sock) r,
@@ -190,4 +176,4 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = cleanNodes $ self `makeNodes` r2nd cmd $ acceptSockets
+r2d self cmd = (self `makeNodes` r2nd cmd) acceptSockets

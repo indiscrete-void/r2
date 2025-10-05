@@ -5,18 +5,9 @@ module R2.Daemon.Node
     Node (..),
     nodeAddr,
     nodeChan,
-    MakeNode (..),
-    makeNode,
-    makeAcceptedNode,
-    makeConnectedNode,
-    runMakeNode,
-    CleanNode (..),
-    cleanNode,
-    runCleanNode,
   )
 where
 
-import Polysemy
 import R2
 import R2.Daemon.Bus
 import R2.Peer
@@ -53,43 +44,3 @@ nodeChan (ConnectedNode (Connection {connChan})) = connChan
 
 instance Show (Node chan) where
   show node = show $ nodeAddr node
-
-data MakeNode chan m a where
-  MakeNode :: Node chan -> MakeNode chan m ()
-
-makeSem ''MakeNode
-
-makeAcceptedNode ::
-  ( Member (Bus chan d) r,
-    Member (MakeNode chan) r
-  ) =>
-  Maybe Address ->
-  ConnTransport ->
-  Sem r (NodeBusChan chan)
-makeAcceptedNode addr transport = do
-  chan <- nodeBusMakeChan
-  makeNode $ AcceptedNode (NewConnection addr transport chan)
-  pure chan
-
-makeConnectedNode ::
-  ( Member (Bus chan d) r,
-    Member (MakeNode chan) r
-  ) =>
-  Address ->
-  ConnTransport ->
-  Sem r (NodeBusChan chan)
-makeConnectedNode addr transport = do
-  chan <- nodeBusMakeChan
-  makeNode $ ConnectedNode (Connection addr transport chan)
-  pure chan
-
-runMakeNode :: (Node chan -> Sem r ()) -> Sem (MakeNode chan ': r) a -> Sem r a
-runMakeNode f = interpret \case MakeNode newConn -> f newConn
-
-data CleanNode chan m a where
-  CleanNode :: Node chan -> CleanNode chan m ()
-
-makeSem ''CleanNode
-
-runCleanNode :: (Node chan -> Sem r ()) -> Sem (CleanNode chan ': r) a -> Sem r a
-runCleanNode f = interpret \case CleanNode node -> f node
