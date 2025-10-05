@@ -66,7 +66,7 @@ instance Uniform Word256 where
 instance Show Address where
   show (Addr addr)
     | addr == unAddr defaultAddr = "<default>"
-    | otherwise = show $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
+    | otherwise = BC.unpack $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
 
 instance ToJSON Address where
   toJSON addr = String (Text.pack $ showAddressBase58 addr)
