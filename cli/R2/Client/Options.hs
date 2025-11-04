@@ -1,10 +1,11 @@
-module R2.Options (Options (..), ProcessTransport (..), parse) where
+module R2.Client.Options (Options (..), ProcessTransport (..), parse) where
 
 import Options.Applicative
-import R2.Peer
 import R2.Client
+import R2.Options
+import R2.Peer
 
-data Options = Options Command (Maybe FilePath)
+data Options = Options Verbosity Command (Maybe FilePath)
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -21,7 +22,8 @@ parserInfo =
 opts :: Parser Options
 opts =
   Options
-    <$> commandOpts
+    <$> verbosity
+    <*> commandOpts
     <*> optional (strOption $ long "socket" <> short 's')
 
 commandOpts :: Parser Command

@@ -1,3 +1,4 @@
+import Control.Monad
 import Network.Socket (bind, listen)
 import Network.Socket qualified as IO
 import Polysemy hiding (run, send)
@@ -17,6 +18,7 @@ import R2
 import R2.Daemon
 import R2.Daemon.Bus
 import R2.Daemon.Node
+import R2.Daemon.Options
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
 import R2.Options
@@ -33,8 +35,8 @@ logShowOptionalAddr Nothing = "unknown node"
 logShowNode :: Node chan -> String
 logShowNode node = logShowOptionalAddr (nodeAddr node)
 
-logToTrace :: (Member Trace r) => String -> InterpreterFor (Output Log) r
-logToTrace cmd = runOutputSem go
+logToTrace :: (Member Trace r) => Verbosity -> String -> InterpreterFor (Output Log) r
+logToTrace verbosity cmd = runOutputSem go
   where
     go (LogConnected node) = case node of
       ConnectedNode Connection {connAddr, connTransport} -> trace $ printf "connection established with %s over %s" (show connAddr) (show connTransport)
@@ -43,10 +45,12 @@ logToTrace cmd = runOutputSem go
       ReqListNodes -> trace $ printf "listing connected nodes"
       ReqConnectNode transport maybeNodeID -> trace $ printf "connecting %s over %s" (logShowOptionalAddr maybeNodeID) (show transport)
       ReqTunnelProcess -> trace (printf "tunneling `%s`" cmd)
-      MsgRouteTo RouteTo {..} -> trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
-      MsgRoutedFrom RoutedFrom {..} -> trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
-      msg -> trace $ printf "trace: unknown msg %s" (show msg)
-    go (LogSend node msg) = trace $ printf "->%s: %s" (logShowNode node) (show msg)
+      MsgRouteTo RouteTo {..} -> when (verbosity > 1) $ trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
+      MsgRoutedFrom RoutedFrom {..} -> when (verbosity > 1) $ trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
+      msg -> when (verbosity > 0) $ trace $ printf "trace: unknown msg %s" (show msg)
+    go (LogSend node msg) = traceTagged (printf "->%s" (logShowNode node)) $ case msg of
+      msg@(ResNodeList _) -> trace (show msg)
+      msg -> when (verbosity > 1) $ trace (show msg)
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
 
 runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
@@ -76,7 +80,7 @@ forkIf False m = m
 
 main :: IO ()
 main =
-  let run cmd s =
+  let run verbosity cmd s =
         runFinal @IO
           . interpretRace
           . asyncToIOFinal
@@ -93,12 +97,12 @@ main =
           . storageToIO
           -- log application events
           . traceToStdoutBuffered
-          . logToTrace cmd
+          . logToTrace verbosity cmd
    in withR2Socket \s -> do
-        (Options maybeSocketPath daemon self cmd) <- parse
+        (Options verbosity maybeSocketPath daemon self cmd) <- parse
         addr <- r2SocketAddr maybeSocketPath
         bind s addr
         listen s 5
         forkIf daemon
-          . run cmd s
+          . run verbosity cmd s
           $ r2d self cmd
