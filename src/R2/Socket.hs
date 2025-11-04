@@ -1,4 +1,4 @@
-module R2.Socket (inputToSocket, outputToSocket, closeToSocket) where
+module R2.Socket (inputToSocket, outputToSocket, closeToSocket, runSocketIO) where
 
 import Control.Monad
 import Network.Socket qualified as IO
@@ -24,3 +24,6 @@ outputToSocket s = traceTagged ("outputToSocket " <> show s) . go . raiseUnder @
 
 closeToSocket :: (Member (Embed IO) r) => IO.Socket -> InterpreterFor Close r
 closeToSocket s = interpret \Close -> embed $ IO.gracefulClose s 2000
+
+runSocketIO :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor '[ByteInputWithEOF, ByteOutput, Close] r
+runSocketIO bufferSize s = closeToSocket s . outputToSocket s . inputToSocket bufferSize s
