@@ -8,7 +8,7 @@ import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Reader
 import Polysemy.Scoped
-import Polysemy.Trace
+import Polysemy.Serialize
 import Polysemy.Transport
 import R2
 import R2.Daemon.Bus
@@ -16,7 +16,6 @@ import R2.Daemon.MakeNode
 import R2.Daemon.Node
 import R2.Peer
 import System.Process.Extra
-import Text.Printf qualified as Text
 
 newtype StatelessConnection = StatelessConnection Address
 
@@ -47,7 +46,7 @@ connectNode ::
   Sem r ()
 connectNode router transport maybeNewNodeID = do
   chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
-  msgToIO $ nodeBusChanToIO chan
+  msgToIO $ runSerialization $ nodeBusChanToIO chan
 
 routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do

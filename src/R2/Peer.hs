@@ -137,18 +137,18 @@ processTransport = do
 address :: ReadM Address
 address = str >>= maybeFail "invalid node ID" . parseAddressBase58
 
-runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor (InputWithEOF Message) r
+runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor ByteInputWithEOF r
 runMsgInput = interpret \case
   Input ->
     input >>= \case
-      Just (MsgData (Just raw)) -> pure $ decode @Message (LBS.fromStrict $ unRaw raw)
+      Just (MsgData (Just raw)) -> pure $ Just $ unRaw raw
       Just (MsgData Nothing) -> pure Nothing
       Just msg -> fail $ "unexected message: " <> show msg
       Nothing -> pure Nothing
 
-runMsgOutput :: (Member (Output Message) r) => InterpreterFor (Output Message) r
+runMsgOutput :: (Member (Output Message) r) => InterpreterFor ByteOutput r
 runMsgOutput = interpret \case
-  Output msg -> (output . MsgData . Just . Raw . LBS.toStrict . encode $ msg)
+  Output msg -> output $ MsgData $ Just $ Raw msg
 
 runMsgClose :: (Member (Output Message) r) => InterpreterFor Close r
 runMsgClose = interpret \case
@@ -159,7 +159,7 @@ msgToIO ::
     Member (Output Message) r,
     Member Fail r
   ) =>
-  InterpretersFor (Transport Message Message) r
+  InterpretersFor (Transport ByteString ByteString) r
 msgToIO =
   runMsgClose
     . runMsgOutput
