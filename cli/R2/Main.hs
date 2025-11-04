@@ -31,8 +31,8 @@ logToTrace = runOutputSem \case
 outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
 outputToCLI = runOutputSem (embed . putStrLn)
 
-runStandardIO :: (Member (Embed IO) r) => InterpretersFor (Transport ByteString ByteString) r
-runStandardIO = closeToIO stdout . outputToIO stdout . inputToIO bufferSize stdin
+runStandardIO :: (Member (Embed IO) r) => Int -> InterpretersFor (Transport ByteString ByteString) r
+runStandardIO bufferSize = closeToIO stdout . outputToIO stdout . inputToIO bufferSize stdin
 
 main :: IO ()
 main =
@@ -45,7 +45,7 @@ main =
           . ignoreTrace
           -- socket, std and process io
           . (runSocketIO bufferSize s . runSerialization)
-          . runStandardIO
+          . runStandardIO bufferSize
           . scopedProcToIOFinal bufferSize
           -- log application events
           . outputToCLI

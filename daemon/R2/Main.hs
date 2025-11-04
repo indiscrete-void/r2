@@ -49,8 +49,8 @@ logToTrace cmd = runOutputSem go
     go (LogSend node msg) = trace $ printf "->%s: %s" (logShowNode node) (show msg)
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
 
-runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
-runScopedSocket =
+runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
+runScopedSocket bufferSize =
   runScopedBundle @(Transport Message Message)
     ( \s ->
         runSocketIO bufferSize s
@@ -61,13 +61,14 @@ runScopedSocket =
 
 runServerSocket ::
   (Member (Embed IO) r, Member Fail r, Member Trace r) =>
+  Int ->
   IO.Socket ->
   InterpretersFor
     '[ Scoped IO.Socket (Bundle (Transport Message Message)),
        Accept IO.Socket
      ]
     r
-runServerSocket s = acceptToIO s . runScopedSocket
+runServerSocket bufferSize s = acceptToIO s . runScopedSocket bufferSize
 
 forkIf :: Bool -> IO () -> IO ()
 forkIf True m = forkProcess m >> exitSuccess
@@ -87,7 +88,7 @@ main =
           . ignoreTrace
           -- process and socket io
           . scopedProcToIOFinal bufferSize
-          . runServerSocket s
+          . runServerSocket bufferSize s
           -- AtomicRef storage
           . storageToIO
           -- log application events
@@ -98,5 +99,6 @@ main =
         addr <- r2SocketAddr maybeSocketPath
         bind s addr
         listen s 5
-        forkIf daemon 
-          . run cmd s $ r2d self cmd
+        forkIf daemon
+          . run cmd s
+          $ r2d self cmd
