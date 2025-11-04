@@ -146,4 +146,4 @@ r2c me (Command targetChain action) = do
   inToLog (LogRecv server) $
     outToLog (LogSend server) $
       runChainSession targetChain $
-            handleAction action
+        handleAction action
