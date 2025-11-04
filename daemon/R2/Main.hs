@@ -1,11 +1,14 @@
 import Network.Socket (bind, listen)
+import Network.Socket qualified as IO
 import Polysemy hiding (run, send)
 import Polysemy.Async
+import Polysemy.Bundle
 import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Resource
+import Polysemy.Scoped
 import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Trace
@@ -46,32 +49,54 @@ logToTrace cmd = runOutputSem go
     go (LogSend node msg) = trace $ printf "->%s: %s" (logShowNode node) (show msg)
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
 
+runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
+runScopedSocket =
+  runScopedBundle @(Transport Message Message)
+    ( \s ->
+        runSocketIO bufferSize s
+          . runSerialization
+          . raise2Under @ByteInputWithEOF
+          . raise2Under @ByteOutput
+    )
+
+runServerSocket ::
+  (Member (Embed IO) r, Member Fail r, Member Trace r) =>
+  IO.Socket ->
+  InterpretersFor
+    '[ Scoped IO.Socket (Bundle (Transport Message Message)),
+       Accept IO.Socket
+     ]
+    r
+runServerSocket s = acceptToIO s . runScopedSocket
+
+forkIf :: Bool -> IO () -> IO ()
+forkIf True m = forkProcess m >> exitSuccess
+forkIf False m = m
+
 main :: IO ()
 main =
-  let runTransport f s = closeToSocket s . outputToSocket s . inputToSocket bufferSize s . f . raise2Under @ByteInputWithEOF . raise2Under @ByteOutput
-      runSocket s =
-        acceptToIO s
-          . runScopedBundle @(Transport Message Message) (runTransport $ serializeOutput . deserializeInput)
-      runProcess = scopedProcToIOFinal bufferSize
-      run cmd s =
+  let run cmd s =
         runFinal @IO
-          . ignoreTrace
+          . interpretRace
           . asyncToIOFinal
           . resourceToIOFinal
           . embedToFinal @IO
-          . failToEmbed @IO
-          . runProcess
-          . runSocket s
-          . storageToIO
-          . interpretRace
           . interpretBusTBM queueSize
+          . failToEmbed @IO
+          -- ignore interpreter logs
+          . ignoreTrace
+          -- process and socket io
+          . scopedProcToIOFinal bufferSize
+          . runServerSocket s
+          -- AtomicRef storage
+          . storageToIO
+          -- log application events
           . traceToStdoutBuffered
           . logToTrace cmd
-      forkIf True m = forkProcess m >> exitSuccess
-      forkIf False m = m
    in withR2Socket \s -> do
         (Options maybeSocketPath daemon self cmd) <- parse
         addr <- r2SocketAddr maybeSocketPath
         bind s addr
         listen s 5
-        forkIf daemon . run cmd s $ r2d self cmd
+        forkIf daemon 
+          . run cmd s $ r2d self cmd

@@ -1,4 +1,6 @@
+import Data.ByteString (ByteString)
 import Network.Socket hiding (close)
+import Network.Socket qualified as IO
 import Polysemy hiding (run)
 import Polysemy.Async
 import Polysemy.Extra.Trace
@@ -26,13 +28,29 @@ logToTrace = runOutputSem \case
   (LogSend addr bs) -> trace $ printf "->%s: %s" (show addr) (show bs)
   (LogAction addr action) -> trace $ printf "running %s on %s" (show action) (show addr)
 
+outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
+outputToCLI = runOutputSem (embed . putStrLn)
+
+runStandardIO :: (Member (Embed IO) r) => InterpretersFor (Transport ByteString ByteString) r
+runStandardIO = closeToIO stdout . outputToIO stdout . inputToIO bufferSize stdin
+
 main :: IO ()
 main =
-  let runUnserialized = deserializeInput . serializeOutput
-      outputToCLI = runOutputSem (embed . putStrLn)
-      runTransport s = inputToSocket bufferSize s . outputToSocket s . runUnserialized
-      runStdio = outputToIO stdout . inputToIO bufferSize stdin . closeToIO stdout
-      run s = runFinal . asyncToIOFinal . embedToFinal @IO . failToEmbed @IO . ignoreTrace . runTransport s . runStdio . scopedProcToIOFinal bufferSize . outputToCLI . traceToStderrBuffered . logToTrace
+  let run s =
+        runFinal
+          . asyncToIOFinal
+          . embedToFinal @IO
+          . failToEmbed @IO
+          -- interpreter log is ignored
+          . ignoreTrace
+          -- socket, std and process io
+          . (runSocketIO bufferSize s . runSerialization)
+          . runStandardIO
+          . scopedProcToIOFinal bufferSize
+          -- log application events
+          . outputToCLI
+          . traceToStderrBuffered
+          . logToTrace
    in withR2Socket \s -> do
         (Options command maybeSocketPath) <- parse
         gen <- initStdGen >>= newIOGenM
