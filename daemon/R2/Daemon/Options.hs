@@ -1,10 +1,11 @@
-module R2.Options (Options (..), parse) where
+module R2.Daemon.Options (Options (..), parse) where
 
 import Options.Applicative
 import R2
+import R2.Options
 import R2.Peer
 
-data Options = Options (Maybe FilePath) Bool Address String
+data Options = Options Verbosity (Maybe FilePath) Bool Address String
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -21,7 +22,8 @@ parserInfo =
 opts :: Parser Options
 opts =
   Options
-    <$> optional (strOption $ long "socket" <> short 's')
+    <$> verbosity
+    <*> optional (strOption $ long "socket" <> short 's')
     <*> flag False True (long "daemon" <> short 'd')
     <*> argument address (metavar "ADDRESS")
     <*> argument str (metavar "CMD")

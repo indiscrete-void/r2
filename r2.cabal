@@ -41,6 +41,7 @@ library
     hs-source-dirs: src
     exposed-modules:
         R2,
+        R2.Options,
         R2.Socket,
         R2.Peer,
         R2.Client,
@@ -58,16 +59,16 @@ library
 executable r2d
     import: default
     hs-source-dirs: daemon
-    main-is: R2/Main.hs
+    main-is: R2/Daemon/Main.hs
     build-depends: r2
-    other-modules: R2.Options
+    other-modules: R2.Daemon.Options
 
 executable r2
     import: default
     hs-source-dirs: cli
-    main-is: R2/Main.hs
+    main-is: R2/Client/Main.hs
     build-depends: r2
-    other-modules: R2.Options
+    other-modules: R2.Client.Options
 
 test-suite tests
     import: default
