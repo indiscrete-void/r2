@@ -28,6 +28,7 @@ data Log where
   LogRecv :: Node chan -> Message -> Log
   LogSend :: Node chan -> Message -> Log
   LogDisconnected :: Node chan -> Log
+  LogError :: Node chan -> String -> Log
 
 ioToLog :: (Member (Output Log) r) => Node chan -> Sem (Append (Transport Message Message) r) a -> Sem (Append (Transport Message Message) r) a
 ioToLog node =
@@ -90,25 +91,29 @@ makeNodes ::
     Member (Output Log) r,
     Member (Bus chan Message) r,
     Member (Storage chan) r,
-    Member Resource r,
-    Member Fail r
+    Member Resource r
   ) =>
   Address ->
-  (Connection chan -> Sem (MakeNode chan ': r) ()) ->
+  (Connection chan -> Sem (Fail ': MakeNode chan ': r) ()) ->
   InterpreterFor (MakeNode chan) r
 makeNodes self handler = runMakeNode (async_ . go)
   where
     go :: Node chan -> Sem r ()
     go node@(AcceptedNode NewConnection {..}) = do
       output (LogConnected node)
-      addr <- storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
-      let conn = Connection addr newConnTransport newConnChan
-      go (ConnectedNode conn)
+      result <- runFail $ storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
+      case result of
+        Right addr -> go (ConnectedNode $ Connection addr newConnTransport newConnChan)
+        Left err -> output (LogError node err)
     go node@(ConnectedNode conn) = storageLockNode node do
       output (LogConnected node)
-      makeNodes self handler $
-        handler conn
-      output (LogDisconnected node)
+      result <-
+        makeNodes self handler $
+          runFail $
+            handler conn
+      output $ case result of
+        Right () -> LogDisconnected node
+        Left err -> LogError node err
 
 runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
 runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
@@ -168,7 +173,6 @@ r2d ::
     Member (Bus chan Message) r,
     Member Resource r,
     Member Async r,
-    Member Fail r,
     Member (Output Log) r
   ) =>
   Address ->
