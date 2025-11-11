@@ -52,7 +52,7 @@ logToTrace verbosity cmd = runOutputSem go
       msg@(ResNodeList _) -> trace (show msg)
       msg -> when (verbosity > 1) $ trace (show msg)
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
-    go (LogError node err) = trace $ printf "%s: %s" (logShowNode node) err
+    go (LogError node err) = trace $ printf "%s error: %s" (logShowNode node) err
 
 runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
 runScopedSocket bufferSize =
