@@ -16,6 +16,7 @@ import R2.Daemon.MakeNode
 import R2.Daemon.Node
 import R2.Peer
 import System.Process.Extra
+import Text.Printf
 
 newtype StatelessConnection = StatelessConnection Address
 
@@ -50,8 +51,10 @@ connectNode router transport maybeNewNodeID = do
 
 routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r, Member Fail r) => Address -> RouteTo Message -> Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
-  (Just chan) <- lookupChan ToWorld (EstablishedConnection routeToAddr)
-  busChan chan $ putChan (Just $ MsgRoutedFrom routedFrom)
+  mChan <- lookupChan ToWorld (EstablishedConnection routeToAddr)
+  case mChan of
+    Just chan -> busChan chan $ putChan (Just $ MsgRoutedFrom routedFrom)
+    Nothing -> fail $ printf "no node %s present" (show routeToAddr)
 
 routedFrom :: (Member (LookupChan StatelessConnection chan) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
