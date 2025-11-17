@@ -71,6 +71,7 @@ $(deriveJSON aesonOptions ''ProcessTransport)
 data Message where
   MsgSelf :: Self -> Message
   MsgRouteTo :: RouteTo Message -> Message
+  MsgRouteToErr :: Address -> String -> Message
   MsgRoutedFrom :: RoutedFrom Message -> Message
   MsgData :: Maybe Raw -> Message
   MsgExit :: Message
