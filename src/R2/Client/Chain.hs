@@ -5,6 +5,7 @@ import Polysemy.Fail
 import Polysemy.Transport
 import R2
 import R2.Peer
+import Text.Printf
 
 runR2Input ::
   ( Member (InputWithEOF Message) r,
@@ -19,6 +20,10 @@ runR2Input node = interpret \case
         if routedFromNode == node
           then pure $ Just routedFromData
           else fail $ "unexpected node: " <> show routedFromNode
+      Just (MsgRouteToErr addr err) ->
+        if addr == node
+          then fail $ printf "->%s error: %s" (show addr) err
+          else fail $ "unexpected node: " <> show addr
       Just msg -> fail $ "unexected message: " <> show msg
       Nothing -> pure Nothing
 
