@@ -12,6 +12,7 @@ import Polysemy.Transport
 import R2
 import R2.Client
 import R2.Client.Options
+import R2.Log
 import R2.Options
 import R2.Peer
 import R2.Socket
@@ -41,6 +42,7 @@ main =
         runFinal
           . asyncToIOFinal
           . embedToFinal @IO
+          . traceIOExceptions
           . failToEmbed @IO
           -- interpreter log is ignored
           . ignoreTrace

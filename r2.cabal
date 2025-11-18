@@ -16,6 +16,7 @@ library
   exposed-modules:
       R2
       R2.Options
+      R2.Log
       R2.Socket
       R2.Peer
       R2.Client
