@@ -21,6 +21,7 @@ import R2.Daemon.Node
 import R2.Daemon.Options
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
+import R2.Log (traceIOExceptions)
 import R2.Options
 import R2.Peer
 import R2.Socket
@@ -88,6 +89,7 @@ main =
           . asyncToIOFinal
           . resourceToIOFinal
           . embedToFinal @IO
+          . traceIOExceptions
           . interpretBusTBM queueSize
           . failToEmbed @IO
           -- ignore interpreter logs
