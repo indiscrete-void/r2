@@ -62,7 +62,7 @@ dependencies:
   - polysemy
   - polysemy-plugin
   - polysemy-scoped-process >=0.2.0.0
-  - polysemy-transport >=0.17.0.0
+  - polysemy-transport >=0.18.0.0
   - polysemy-conc
   - stm-chans
   - extra
@@ -78,7 +78,6 @@ library:
   exposed-modules:
     - R2
     - R2.Options
-    - R2.Log
     - R2.Socket
     - R2.Peer
     - R2.Client

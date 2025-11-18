@@ -1,3 +1,4 @@
+import Control.Exception
 import Control.Monad
 import Network.Socket (bind, listen)
 import Network.Socket qualified as IO
@@ -21,7 +22,6 @@ import R2.Daemon.Node
 import R2.Daemon.Options
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
-import R2.Log (traceIOExceptions)
 import R2.Options
 import R2.Peer
 import R2.Socket
@@ -89,7 +89,7 @@ main =
           . asyncToIOFinal
           . resourceToIOFinal
           . embedToFinal @IO
-          . traceIOExceptions
+          . traceIOExceptions @IOException
           . interpretBusTBM queueSize
           . failToEmbed @IO
           -- ignore interpreter logs

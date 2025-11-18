@@ -12,10 +12,10 @@ import Polysemy.Transport
 import R2
 import R2.Client
 import R2.Client.Options
-import R2.Log
 import R2.Options
 import R2.Peer
 import R2.Socket
+import Control.Exception
 import System.IO
 import System.Random.Stateful
 import Text.Printf (printf)
@@ -42,7 +42,7 @@ main =
         runFinal
           . asyncToIOFinal
           . embedToFinal @IO
-          . traceIOExceptions
+          . traceIOExceptions @IOException
           . failToEmbed @IO
           -- interpreter log is ignored
           . ignoreTrace
