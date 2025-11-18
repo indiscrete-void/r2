@@ -1,0 +1,115 @@
+name: r2
+version: 0.1.0.0
+author: indiscrete_void
+maintainer: indiscrete.void@gmail.com
+license: AGPL-3.0-only
+
+language: Haskell2010
+
+ghc-options: 
+  - -fdefer-typed-holes
+  - -Weverything
+  - -Wno-missing-safe-haskell-mode
+  - -Wno-safe
+  - -Wno-unsafe
+  - -Wno-missing-import-lists
+  - -Wno-all-missed-specialisations
+  - -Wno-missed-specialisations
+  - -Wno-missing-local-signatures
+  - -Wno-monomorphism-restriction
+  - -Wno-implicit-prelude
+  - -threaded
+  - -Wno-missing-kind-signatures
+  - -fplugin=Polysemy.Plugin
+  - -Wno-orphans
+  - -Wno-name-shadowing
+
+default-extensions:
+  - DataKinds
+  - FlexibleContexts
+  - GADTs
+  - LambdaCase
+  - PolyKinds
+  - RankNTypes
+  - ScopedTypeVariables
+  - TypeApplications
+  - TypeOperators
+  - TypeFamilies
+  - ImportQualifiedPost
+  - AllowAmbiguousTypes
+  - TemplateHaskell
+  - BlockArguments
+  - DeriveGeneric
+  - DerivingStrategies
+  - EmptyDataDeriving
+  - OverloadedStrings
+  - FlexibleInstances
+  - QuantifiedConstraints
+  - IncoherentInstances
+  - StandaloneKindSignatures
+  - DerivingVia
+  - RecordWildCards
+  - NamedFieldPuns
+
+dependencies:
+  - base >=4.17.2.1 && <5
+  - bytestring
+  - text
+  - containers
+  - optparse-applicative
+  - unix
+  - network
+  - polysemy
+  - polysemy-plugin
+  - polysemy-scoped-process >=0.2.0.0
+  - polysemy-transport >=0.17.0.0
+  - polysemy-conc
+  - stm-chans
+  - extra
+  - random
+  - monad-loops
+  - aeson
+  - base64-bytestring
+  - base58-bytestring
+  - data-dword
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - R2
+    - R2.Options
+    - R2.Socket
+    - R2.Peer
+    - R2.Client
+    - R2.Client.Chain
+    - R2.Daemon
+    - R2.Daemon.Storage
+    - R2.Daemon.Handler
+    - R2.Daemon.Node
+    - R2.Daemon.Sockets
+    - R2.Daemon.Sockets.Accept
+    - R2.Daemon.Bus
+    - R2.Daemon.MakeNode
+    - Serial.Aeson.Options
+
+executables:
+  r2d:
+    main: R2/Daemon/Main.hs
+    source-dirs: daemon
+    dependencies:
+      - r2
+
+  r2:
+    main: R2/Client/Main.hs
+    source-dirs: cli
+    dependencies:
+      - r2
+
+tests:
+  tests:
+    main: Main.hs
+    source-dirs: tests
+    dependencies:
+      - r2
+      - tasty
+      - tasty-hunit

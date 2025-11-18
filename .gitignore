@@ -6,6 +6,7 @@
 !LICENSE
 
 !r2.cabal
+!package.yaml
 !cabal.project.local
 !default.nix
 
