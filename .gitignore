@@ -5,6 +5,9 @@
 !.gitignore
 !LICENSE
 
+!neor2.svg
+!r2.svg
+
 !r2.cabal
 !package.yaml
 !cabal.project.local
