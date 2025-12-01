@@ -1,6 +1,7 @@
 module R2.Peer
   ( Raw (..),
     Self (..),
+    R2Message (..),
     Message (..),
     r2SocketAddr,
     r2Socket,
@@ -26,7 +27,6 @@ import Data.Aeson qualified as Value
 import Data.Aeson.TH
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
-import Data.ByteString.Lazy qualified as LBS
 import Data.Maybe
 import Data.Text qualified as Text
 import Debug.Trace qualified as Debug
@@ -68,11 +68,17 @@ data ProcessTransport
 
 $(deriveJSON aesonOptions ''ProcessTransport)
 
+data R2Message msg where
+  MsgRouteTo :: RouteTo msg -> R2Message msg
+  MsgRouteToErr :: Address -> String -> R2Message msg
+  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
+  deriving stock (Eq, Show, Generic)
+
+$(deriveJSON aesonOptions ''R2Message)
+
 data Message where
   MsgSelf :: Self -> Message
-  MsgRouteTo :: RouteTo Message -> Message
-  MsgRouteToErr :: Address -> String -> Message
-  MsgRoutedFrom :: RoutedFrom Message -> Message
+  MsgR2 :: R2Message Message -> Message
   MsgData :: Maybe Raw -> Message
   MsgExit :: Message
   ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
@@ -95,7 +101,7 @@ msgData = \case
 
 msgRoutedFrom :: Message -> Maybe (RoutedFrom Message)
 msgRoutedFrom = \case
-  MsgRoutedFrom routedFrom -> Just routedFrom
+  MsgR2 (MsgRoutedFrom routedFrom) -> Just routedFrom
   _ -> Nothing
 
 bufferSize :: Int
