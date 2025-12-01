@@ -31,21 +31,6 @@ showAddressBase58 = BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toI
 parseAddressBase58 :: String -> Maybe Address
 parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
 
-data RouteTo msg = RouteTo
-  { routeToNode :: Address,
-    routeToData :: msg
-  }
-  deriving stock (Show, Eq, Generic)
-
-data RoutedFrom msg = RoutedFrom
-  { routedFromNode :: Address,
-    routedFromData :: msg
-  }
-  deriving stock (Show, Eq, Generic)
-
-r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
-r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
-
 defaultAddr :: Address
 defaultAddr = Addr 0
 
@@ -78,5 +63,21 @@ instance FromJSON Address where
         . parseAddressBase58
         . Text.unpack
 
+data RouteTo msg = RouteTo
+  { routeToNode :: Address,
+    routeToData :: msg
+  }
+  deriving stock (Show, Eq, Generic)
+
 $(deriveJSON (aesonRemovePrefix "routeTo") ''RouteTo)
+
+data RoutedFrom msg = RoutedFrom
+  { routedFromNode :: Address,
+    routedFromData :: msg
+  }
+  deriving stock (Show, Eq, Generic)
+
 $(deriveJSON (aesonRemovePrefix "routedFrom") ''RoutedFrom)
+
+r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
+r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
