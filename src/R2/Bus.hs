@@ -1,4 +1,4 @@
-module R2.Daemon.Bus
+module R2.Bus
   ( Chan (..),
     takeChan,
     putChan,

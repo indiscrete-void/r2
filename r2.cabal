@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.38.1.
+-- This file has been generated from package.yaml by hpack version 0.39.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -15,6 +15,7 @@ build-type:     Simple
 library
   exposed-modules:
       R2
+      R2.Bus
       R2.Options
       R2.Socket
       R2.Peer
@@ -26,7 +27,6 @@ library
       R2.Daemon.Node
       R2.Daemon.Sockets
       R2.Daemon.Sockets.Accept
-      R2.Daemon.Bus
       R2.Daemon.MakeNode
       Serial.Aeson.Options
   other-modules:

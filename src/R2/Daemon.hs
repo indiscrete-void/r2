@@ -12,7 +12,7 @@ import Polysemy.Resource
 import Polysemy.Scoped
 import Polysemy.Transport
 import R2
-import R2.Daemon.Bus
+import R2.Bus
 import R2.Daemon.Handler
 import R2.Daemon.MakeNode
 import R2.Daemon.Node

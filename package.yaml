@@ -77,6 +77,7 @@ library:
   source-dirs: src
   exposed-modules:
     - R2
+    - R2.Bus
     - R2.Options
     - R2.Socket
     - R2.Peer
@@ -88,7 +89,6 @@ library:
     - R2.Daemon.Node
     - R2.Daemon.Sockets
     - R2.Daemon.Sockets.Accept
-    - R2.Daemon.Bus
     - R2.Daemon.MakeNode
     - Serial.Aeson.Options
 
