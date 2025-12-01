@@ -9,7 +9,7 @@ where
 
 import Polysemy
 import R2
-import R2.Daemon.Bus
+import R2.Bus
 import R2.Daemon.Node
 
 data MakeNode chan m a where

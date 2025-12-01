@@ -9,8 +9,8 @@ module R2.Daemon.Node
 where
 
 import R2
-import R2.Daemon.Bus
 import R2.Peer
+import R2.Bus
 
 data ConnTransport = R2 Address | Pipe Address ProcessTransport | Socket
   deriving stock (Show)
