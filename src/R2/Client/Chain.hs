@@ -16,11 +16,11 @@ runR2Input ::
 runR2Input node = interpret \case
   Input ->
     input >>= \case
-      Just (MsgRoutedFrom (RoutedFrom {..})) ->
+      Just (MsgR2 (MsgRoutedFrom (RoutedFrom {..}))) ->
         if routedFromNode == node
           then pure $ Just routedFromData
           else fail $ "unexpected node: " <> show routedFromNode
-      Just (MsgRouteToErr addr err) ->
+      Just (MsgR2 (MsgRouteToErr addr err)) ->
         if addr == node
           then fail $ printf "->%s error: %s" (show addr) err
           else fail $ "unexpected node: " <> show addr
@@ -28,7 +28,7 @@ runR2Input node = interpret \case
       Nothing -> pure Nothing
 
 outputRouteTo :: (Member (Output Message) r) => Address -> Message -> Sem r ()
-outputRouteTo node = output . MsgRouteTo . RouteTo node
+outputRouteTo node = output . MsgR2 . MsgRouteTo . RouteTo node
 
 runR2Close ::
   forall r.

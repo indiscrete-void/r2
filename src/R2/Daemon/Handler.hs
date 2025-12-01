@@ -53,8 +53,8 @@ routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bu
 routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan ToWorld (EstablishedConnection routeToAddr)
   case mChan of
-    Just chan -> busChan chan $ putChan (Just $ MsgRoutedFrom routedFrom)
-    Nothing -> output $ MsgRouteToErr routeToAddr "unreachable"
+    Just chan -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
+    Nothing -> output $ MsgR2 $ MsgRouteToErr routeToAddr "unreachable"
 
 routeToError :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r) => Address -> String -> Sem r ()
 routeToError addr _ = do
@@ -65,6 +65,19 @@ routedFrom :: (Member (LookupChan StatelessConnection chan) r, Member (Bus chan 
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
   chan <- lookupChan FromWorld (StatelessConnection routedFromNode)
   busChan chan $ putChan (Just routedFromData)
+
+handleR2Msg ::
+  ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member (LookupChan StatelessConnection chan) r,
+    Member (Bus chan Message) r,
+    Member (Output Message) r
+  ) =>
+  Address ->
+  R2Message Message ->
+  Sem r ()
+handleR2Msg connAddr (MsgRouteTo msg) = routeTo connAddr msg
+handleR2Msg _ (MsgRouteToErr addr err) = routeToError addr err
+handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
@@ -88,8 +101,6 @@ handleMsg cmd Connection {..} = \case
     connectNode connAddr transport maybeNodeID
   ReqTunnelProcess -> do
     tunnelProcess cmd
-  MsgRouteTo msg -> routeTo connAddr msg
-  MsgRouteToErr addr err -> routeToError addr err
-  MsgRoutedFrom msg -> routedFrom msg
+  MsgR2 r2Msg -> handleR2Msg connAddr r2Msg
   MsgExit -> busChan (nodeBusChan FromWorld connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg

@@ -131,7 +131,7 @@ outboundChanToR2 router chan addr = do
   Just routerChan <- lookupChan ToWorld (EstablishedConnection router)
   whileJust_
     (busChan chan takeChan)
-    (busChan routerChan . putChan . Just . MsgRouteTo . RouteTo addr)
+    (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr)
 
 runOverlayLookupChan ::
   ( Member (LookupChan EstablishedConnection (Maybe chan)) r,

@@ -46,9 +46,9 @@ logToTrace verbosity cmd = runOutputSem go
       ReqListNodes -> trace $ printf "listing connected nodes"
       ReqConnectNode transport maybeNodeID -> trace $ printf "connecting %s over %s" (logShowOptionalAddr maybeNodeID) (show transport)
       ReqTunnelProcess -> trace (printf "tunneling `%s`" cmd)
-      MsgRouteTo RouteTo {..} -> when (verbosity > 1) $ trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
-      MsgRouteToErr addr err -> trace $ printf "->%s: error: %s" (show addr) err
-      MsgRoutedFrom RoutedFrom {..} -> when (verbosity > 1) $ trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
+      MsgR2 (MsgRouteTo RouteTo {..}) -> when (verbosity > 1) $ trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
+      MsgR2 (MsgRouteToErr addr err) -> trace $ printf "->%s: error: %s" (show addr) err
+      MsgR2 (MsgRoutedFrom RoutedFrom {..}) -> when (verbosity > 1) $ trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
       msg -> when (verbosity > 0) $ trace $ printf "trace: unknown msg %s" (show msg)
     go (LogSend node msg) = traceTagged (printf "->%s" (logShowNode node)) $ case msg of
       msg@(ResNodeList _) -> trace (show msg)
