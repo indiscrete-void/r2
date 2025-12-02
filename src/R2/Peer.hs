@@ -195,10 +195,10 @@ routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan ToWorld (EstablishedConnection routeToAddr)
   case mChan of
     Just chan -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
-    Nothing -> output $ MsgR2 $ MsgRouteToErr routeToAddr "unreachable"
+    Nothing -> output $ MsgR2 $ MsgRouteToErr $ RouteToErr routeToAddr "unreachable"
 
-routeToError :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r) => Address -> String -> Sem r ()
-routeToError addr _ = do
+routeToError :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r) => RouteToErr -> Sem r ()
+routeToError (RouteToErr addr _) = do
   mChan <- lookupChan ToWorld (EstablishedConnection addr)
   whenJust mChan \chan -> busChan chan (putChan Nothing)
 
@@ -217,5 +217,5 @@ handleR2Msg ::
   R2Message Message ->
   Sem r ()
 handleR2Msg connAddr (MsgRouteTo msg) = routeTo connAddr msg
-handleR2Msg _ (MsgRouteToErr addr err) = routeToError addr err
+handleR2Msg _ (MsgRouteToErr msg) = routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg

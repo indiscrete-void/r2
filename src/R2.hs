@@ -2,6 +2,7 @@ module R2
   ( Address (..),
     RouteTo (..),
     RoutedFrom (..),
+    RouteToErr (..),
     R2Message (..),
     r2,
     defaultAddr,
@@ -80,9 +81,17 @@ data RoutedFrom msg = RoutedFrom
 
 $(deriveJSON (aesonRemovePrefix "routedFrom") ''RoutedFrom)
 
+data RouteToErr = RouteToErr
+  { routeToErrNode :: Address,
+    routeToErrMessage :: String
+  }
+  deriving stock (Eq, Show, Generic)
+
+$(deriveJSON (aesonRemovePrefix "routeToErr") ''RouteToErr)
+
 data R2Message msg where
   MsgRouteTo :: RouteTo msg -> R2Message msg
-  MsgRouteToErr :: Address -> String -> R2Message msg
+  MsgRouteToErr :: RouteToErr -> R2Message msg
   MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
   deriving stock (Eq, Show, Generic)
 
