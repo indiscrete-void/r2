@@ -118,20 +118,25 @@ makeNodes self handler = runMakeNode (async_ . go)
 runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Bidirectional chan)) r
 runLookupChan = interpretLookupChanSem (\(EstablishedConnection addr) -> fmap nodeChan <$> storageLookupNode addr)
 
-outboundChanToR2 ::
-  ( Member (Bus chan Message) r,
-    Member (LookupChan EstablishedConnection (Outbound chan)) r,
-    Member Fail r
-  ) =>
-  Address ->
-  chan ->
-  Address ->
-  Sem r ()
-outboundChanToR2 router chan addr = do
-  Just (Outbound routerChan) <- lookupChan (EstablishedConnection router)
+outboundChanToR2 :: (Member (Bus chan Message) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
+outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   whileJust_
     (busChan chan takeChan)
     (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr)
+
+reciprocateR2Connection ::
+  ( Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member Async r
+  ) =>
+  Address ->
+  Address ->
+  Outbound chan ->
+  Sem r (Bidirectional chan)
+reciprocateR2Connection addr router routerOutboundChan = do
+  chan@Bidirectional {outboundChan = Outbound -> clientOutboundChan} <- makeConnectedNode addr (R2 router)
+  async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
+  pure chan
 
 runOverlayLookupChan ::
   ( Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
@@ -148,9 +153,8 @@ runOverlayLookupChan router = interpret \case
     Inbound <$> case mStoredChan of
       Just Bidirectional {inboundChan} -> pure inboundChan
       Nothing -> do
-        nodeChan <- makeConnectedNode addr (R2 router)
-        async_ $ reinterpretLookupChan (fmap $ Outbound . outboundChan) $ outboundChanToR2 router (outboundChan nodeChan) addr
-        pure $ inboundChan nodeChan
+        Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
+        inboundChan <$> reciprocateR2Connection addr router routerOutboundChan
 
 r2nd ::
   ( Member (Bus chan Message) r,
