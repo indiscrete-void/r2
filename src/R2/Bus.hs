@@ -11,7 +11,6 @@ module R2.Bus
     LookupChan (..),
     NodeBusDir (..),
     nodeBusChan,
-    useNodeBusChan,
     lookupChan,
     nodeBusChanToIO,
     interpretBusTBM,
@@ -79,11 +78,6 @@ data LookupChan addr chan m a where
   LookupChan :: NodeBusDir -> addr -> LookupChan addr chan m chan
 
 makeSem ''LookupChan
-
-useNodeBusChan :: (Member (LookupChan addr chan) r, Member (Bus chan d) r) => NodeBusDir -> addr -> InterpreterFor (Chan d) r
-useNodeBusChan dir addr m = do
-  chan <- lookupChan dir addr
-  busChan chan m
 
 nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
 nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
