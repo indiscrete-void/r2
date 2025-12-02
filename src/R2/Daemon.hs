@@ -147,8 +147,7 @@ runOverlayLookupChan ::
   ) =>
   Address ->
   InterpreterFor (LookupChan StatelessConnection (Inbound chan)) r
-runOverlayLookupChan router = interpret \case
-  LookupChan (StatelessConnection addr) -> do
+runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr) -> do
     mStoredChan <- lookupChan (EstablishedConnection addr)
     Inbound <$> case mStoredChan of
       Just Bidirectional {inboundChan} -> pure inboundChan
