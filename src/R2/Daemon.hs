@@ -36,14 +36,14 @@ ioToLog node =
     . intercept @(InputWithEOF Message) (\Input -> input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
 
 ioToNodeBusChanLogged :: (Member (Bus chan Message) r, Member (Output Log) r) => Node chan -> InterpretersFor (Transport Message Message) r
-ioToNodeBusChanLogged node = ioToNodeBusChan (nodeChan node) . ioToLog node
+ioToNodeBusChanLogged node = ioToChan (nodeChan node) . ioToLog node
 
 msgHandler ::
   ( Member (Bus chan Message) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (MakeNode chan) r,
-    Member (LookupChan EstablishedConnection (Maybe chan)) r,
-    Member (LookupChan StatelessConnection chan) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
     Member (Storage chan) r,
     Member Fail r,
     Member Async r,
@@ -83,7 +83,7 @@ acceptSockets ::
 acceptSockets =
   foreverAcceptAsync \s -> do
     chan <- makeAcceptedNode Nothing Socket
-    socket @Message @Message s $ nodeBusChanToIO chan
+    socket @Message @Message s $ chanToIO chan
 
 makeNodes ::
   forall chan r.
@@ -115,12 +115,12 @@ makeNodes self handler = runMakeNode (async_ . go)
         Right () -> LogDisconnected node
         Left err -> LogError node err
 
-runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Maybe chan)) r
-runLookupChan = interpret \case LookupChan dir (EstablishedConnection addr) -> fmap (nodeBusChan dir . nodeChan) <$> storageLookupNode addr
+runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Bidirectional chan)) r
+runLookupChan = interpretLookupChanSem (\(EstablishedConnection addr) -> fmap nodeChan <$> storageLookupNode addr)
 
 outboundChanToR2 ::
   ( Member (Bus chan Message) r,
-    Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member (LookupChan EstablishedConnection (Outbound chan)) r,
     Member Fail r
   ) =>
   Address ->
@@ -128,28 +128,29 @@ outboundChanToR2 ::
   Address ->
   Sem r ()
 outboundChanToR2 router chan addr = do
-  Just routerChan <- lookupChan ToWorld (EstablishedConnection router)
+  Just (Outbound routerChan) <- lookupChan (EstablishedConnection router)
   whileJust_
     (busChan chan takeChan)
     (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr)
 
 runOverlayLookupChan ::
-  ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
+  ( Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
     Member (Bus chan Message) r,
     Member (MakeNode chan) r,
     Member Fail r,
     Member Async r
   ) =>
   Address ->
-  InterpreterFor (LookupChan StatelessConnection chan) r
+  InterpreterFor (LookupChan StatelessConnection (Inbound chan)) r
 runOverlayLookupChan router = interpret \case
-  LookupChan dir (StatelessConnection addr) -> do
-    let makeChan = do
-          chan <- makeConnectedNode addr (R2 router)
-          async_ $ outboundChanToR2 router (nodeBusChan ToWorld chan) addr
-          pure $ nodeBusChan dir chan
-    storedChan <- lookupChan dir (EstablishedConnection addr)
-    maybe makeChan pure storedChan
+  LookupChan (StatelessConnection addr) -> do
+    mStoredChan <- lookupChan (EstablishedConnection addr)
+    Inbound <$> case mStoredChan of
+      Just Bidirectional {inboundChan} -> pure inboundChan
+      Nothing -> do
+        nodeChan <- makeConnectedNode addr (R2 router)
+        async_ $ reinterpretLookupChan (fmap $ Outbound . outboundChan) $ outboundChanToR2 router (outboundChan nodeChan) addr
+        pure $ inboundChan nodeChan
 
 r2nd ::
   ( Member (Bus chan Message) r,

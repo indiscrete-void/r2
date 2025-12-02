@@ -186,36 +186,49 @@ ioToMsg =
       mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
     ]
 
-newtype StatelessConnection = StatelessConnection Address
-
-newtype EstablishedConnection = EstablishedConnection Address
-
-routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r, Member (Output Message) r) => Address -> RouteTo Message -> Sem r ()
+routeTo ::
+  ( Member (Bus chan Message) r,
+    Member (Output Message) r,
+    Member (LookupChan EstablishedConnection (Outbound chan)) r
+  ) =>
+  Address ->
+  RouteTo Message ->
+  Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
-  mChan <- lookupChan ToWorld (EstablishedConnection routeToAddr)
+  mChan <- lookupChan (EstablishedConnection routeToAddr)
   case mChan of
-    Just chan -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
+    Just (Outbound chan) -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
     Nothing -> output $ MsgR2 $ MsgRouteToErr $ RouteToErr routeToAddr "unreachable"
 
-routeToError :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r) => RouteToErr -> Sem r ()
+routeToError ::
+  ( Member (Bus chan Message) r,
+    Member (LookupChan EstablishedConnection (Inbound chan)) r
+  ) =>
+  RouteToErr ->
+  Sem r ()
 routeToError (RouteToErr addr _) = do
-  mChan <- lookupChan ToWorld (EstablishedConnection addr)
-  whenJust mChan \chan -> busChan chan (putChan Nothing)
+  mChan <- lookupChan (EstablishedConnection addr)
+  whenJust mChan \(Inbound chan) -> busChan chan (putChan Nothing)
 
-routedFrom :: (Member (LookupChan StatelessConnection chan) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
+routedFrom ::
+  ( Member (Bus chan Message) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r
+  ) =>
+  RoutedFrom Message ->
+  Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
-  chan <- lookupChan FromWorld (StatelessConnection routedFromNode)
+  Inbound chan <- lookupChan (StatelessConnection routedFromNode)
   busChan chan $ putChan (Just routedFromData)
 
 handleR2Msg ::
-  ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
-    Member (LookupChan StatelessConnection chan) r,
-    Member (Bus chan Message) r,
+  ( Member (Bus chan Message) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
     Member (Output Message) r
   ) =>
   Address ->
   R2Message Message ->
   Sem r ()
-handleR2Msg connAddr (MsgRouteTo msg) = routeTo connAddr msg
-handleR2Msg _ (MsgRouteToErr msg) = routeToError msg
+handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound . outboundChan) $ routeTo connAddr msg
+handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg

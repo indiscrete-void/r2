@@ -7,15 +7,20 @@ module R2.Bus
     busTakeData,
     busPutData,
     busChan,
-    NodeBusChan (..),
+    Bidirectional (..),
     LookupChan (..),
-    NodeBusDir (..),
-    nodeBusChan,
+    AddressChan,
+    StatelessConnection (..),
+    EstablishedConnection (..),
+    Inbound (..),
+    Outbound (..),
     lookupChan,
-    nodeBusChanToIO,
+    chanToIO,
     interpretBusTBM,
-    ioToNodeBusChan,
-    nodeBusMakeChan,
+    ioToChan,
+    makeBidirectionalChan,
+    interpretLookupChanSem,
+    reinterpretLookupChan,
   )
 where
 
@@ -26,6 +31,7 @@ import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Transport
+import R2
 
 data Chan d m a where
   TakeChan :: Chan d m (Maybe d)
@@ -54,46 +60,60 @@ busChan chan = interpret \case
   TakeChan -> busTakeData chan
   PutChan d -> busPutData chan d
 
-data NodeBusChan chan = NodeBusChan
-  { nodeBusIn :: chan,
-    nodeBusOut :: chan
+data Bidirectional chan = Bidirectional
+  { inboundChan :: chan,
+    outboundChan :: chan
   }
   deriving stock (Eq, Show)
 
-data NodeBusDir = FromWorld | ToWorld
+makeBidirectionalChan :: (Member (Bus chan d) r) => Sem r (Bidirectional chan)
+makeBidirectionalChan = Bidirectional <$> busMakeChan <*> busMakeChan
 
-nodeBusChan :: NodeBusDir -> NodeBusChan chan -> chan
-nodeBusChan FromWorld NodeBusChan {..} = nodeBusIn
-nodeBusChan ToWorld NodeBusChan {..} = nodeBusOut
-
-ioToNodeBusChan ::
+ioToChan ::
   (Member (Bus chan d) r) =>
-  NodeBusChan chan ->
+  Bidirectional chan ->
   InterpretersFor (Transport d d) r
-ioToNodeBusChan NodeBusChan {..} =
-  (busChan nodeBusOut . closeToChan . outputToChan . raise2Under @(Chan _))
-    . (busChan nodeBusIn . inputToChan . raiseUnder @(Chan _))
+ioToChan Bidirectional {..} =
+  (busChan outboundChan . closeToChan . outputToChan . raise2Under @(Chan _))
+    . (busChan inboundChan . inputToChan . raiseUnder @(Chan _))
 
-data LookupChan addr chan m a where
-  LookupChan :: NodeBusDir -> addr -> LookupChan addr chan m chan
-
-makeSem ''LookupChan
-
-nodeBusMakeChan :: (Member (Bus chan d) r) => Sem r (NodeBusChan chan)
-nodeBusMakeChan = NodeBusChan <$> busMakeChan <*> busMakeChan
-
-nodeBusChanToIO ::
+chanToIO ::
   ( Members (Transport d d) r,
     Member (Bus chan d) r,
     Member Async r
   ) =>
-  NodeBusChan chan ->
+  Bidirectional chan ->
   Sem r ()
-nodeBusChanToIO NodeBusChan {..} =
+chanToIO Bidirectional {..} =
   sequenceConcurrently_
-    [ busChan nodeBusIn $ whileJust_ input (busChan nodeBusIn . putChan . Just) >> putChan Nothing,
-      busChan nodeBusOut $ whileJust_ takeChan output >> close
+    [ busChan inboundChan $ whileJust_ input (busChan inboundChan . putChan . Just) >> putChan Nothing,
+      busChan outboundChan $ whileJust_ takeChan output >> close
     ]
+
+type family AddressChan addr chan
+
+data LookupChan addr chan m a where
+  LookupChan :: addr -> LookupChan addr chan m (AddressChan addr chan)
+
+makeSem ''LookupChan
+
+newtype StatelessConnection = StatelessConnection Address
+
+type instance AddressChan StatelessConnection chan = chan
+
+newtype EstablishedConnection = EstablishedConnection Address
+
+type instance AddressChan EstablishedConnection chan = Maybe chan
+
+newtype Inbound chan = Inbound chan
+
+newtype Outbound chan = Outbound chan
+
+interpretLookupChanSem :: (addr -> Sem r (AddressChan addr chan)) -> InterpreterFor (LookupChan addr chan) r
+interpretLookupChanSem f = interpret \(LookupChan addr) -> f addr
+
+reinterpretLookupChan :: (Member (LookupChan addr chan) r) => (AddressChan addr chan -> AddressChan addr chan') -> InterpreterFor (LookupChan addr chan') r
+reinterpretLookupChan f = interpretLookupChanSem (fmap f . lookupChan)
 
 interpretBusTBM :: (Member (Embed IO) r) => Int -> InterpreterFor (Bus (TBMQueue d) d) r
 interpretBusTBM bufferSize = interpret \case

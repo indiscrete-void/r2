@@ -23,9 +23,9 @@ makeAcceptedNode ::
   ) =>
   Maybe Address ->
   ConnTransport ->
-  Sem r (NodeBusChan chan)
+  Sem r (Bidirectional chan)
 makeAcceptedNode addr transport = do
-  chan <- nodeBusMakeChan
+  chan <- makeBidirectionalChan
   makeNode $ AcceptedNode (NewConnection addr transport chan)
   pure chan
 
@@ -35,9 +35,9 @@ makeConnectedNode ::
   ) =>
   Address ->
   ConnTransport ->
-  Sem r (NodeBusChan chan)
+  Sem r (Bidirectional chan)
 makeConnectedNode addr transport = do
-  chan <- nodeBusMakeChan
+  chan <- makeBidirectionalChan
   makeNode $ ConnectedNode (Connection addr transport chan)
   pure chan
 
