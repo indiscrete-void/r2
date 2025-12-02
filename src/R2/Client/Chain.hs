@@ -20,7 +20,7 @@ runR2Input node = interpret \case
         if routedFromNode == node
           then pure $ Just routedFromData
           else fail $ "unexpected node: " <> show routedFromNode
-      Just (MsgR2 (MsgRouteToErr addr err)) ->
+      Just (MsgR2 (MsgRouteToErr (RouteToErr addr err))) ->
         if addr == node
           then fail $ printf "->%s error: %s" (show addr) err
           else fail $ "unexpected node: " <> show addr
