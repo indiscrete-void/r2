@@ -50,6 +50,7 @@ default-extensions:
   - DerivingVia
   - RecordWildCards
   - NamedFieldPuns
+  - ViewPatterns
 
 dependencies:
   - base >=4.17.2.1 && <5
