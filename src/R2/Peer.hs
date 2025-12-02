@@ -1,7 +1,6 @@
 module R2.Peer
   ( Raw (..),
     Self (..),
-    R2Message (..),
     Message (..),
     r2SocketAddr,
     r2Socket,
@@ -18,10 +17,17 @@ module R2.Peer
     runMsgOutput,
     runMsgClose,
     msgToIO,
+    StatelessConnection (..),
+    EstablishedConnection (..),
+    routeTo,
+    routeToError,
+    routedFrom,
+    handleR2Msg,
   )
 where
 
 import Control.Exception
+import Control.Monad.Extra
 import Data.Aeson
 import Data.Aeson qualified as Value
 import Data.Aeson.TH
@@ -41,6 +47,7 @@ import Polysemy.Fail
 import Polysemy.Transport
 import Polysemy.Transport.Extra
 import R2
+import R2.Bus
 import Serial.Aeson.Options
 import System.Environment
 import System.Posix
@@ -67,14 +74,6 @@ data ProcessTransport
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''ProcessTransport)
-
-data R2Message msg where
-  MsgRouteTo :: RouteTo msg -> R2Message msg
-  MsgRouteToErr :: Address -> String -> R2Message msg
-  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
-  deriving stock (Eq, Show, Generic)
-
-$(deriveJSON aesonOptions ''R2Message)
 
 data Message where
   MsgSelf :: Self -> Message
@@ -186,3 +185,37 @@ ioToMsg =
     [ contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close,
       mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
     ]
+
+newtype StatelessConnection = StatelessConnection Address
+
+newtype EstablishedConnection = EstablishedConnection Address
+
+routeTo :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r, Member (Output Message) r) => Address -> RouteTo Message -> Sem r ()
+routeTo = r2 \routeToAddr routedFrom -> do
+  mChan <- lookupChan ToWorld (EstablishedConnection routeToAddr)
+  case mChan of
+    Just chan -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
+    Nothing -> output $ MsgR2 $ MsgRouteToErr routeToAddr "unreachable"
+
+routeToError :: (Member (LookupChan EstablishedConnection (Maybe chan)) r, Member (Bus chan Message) r) => Address -> String -> Sem r ()
+routeToError addr _ = do
+  mChan <- lookupChan ToWorld (EstablishedConnection addr)
+  whenJust mChan \chan -> busChan chan (putChan Nothing)
+
+routedFrom :: (Member (LookupChan StatelessConnection chan) r, Member (Bus chan Message) r) => RoutedFrom Message -> Sem r ()
+routedFrom (RoutedFrom routedFromNode routedFromData) = do
+  chan <- lookupChan FromWorld (StatelessConnection routedFromNode)
+  busChan chan $ putChan (Just routedFromData)
+
+handleR2Msg ::
+  ( Member (LookupChan EstablishedConnection (Maybe chan)) r,
+    Member (LookupChan StatelessConnection chan) r,
+    Member (Bus chan Message) r,
+    Member (Output Message) r
+  ) =>
+  Address ->
+  R2Message Message ->
+  Sem r ()
+handleR2Msg connAddr (MsgRouteTo msg) = routeTo connAddr msg
+handleR2Msg _ (MsgRouteToErr addr err) = routeToError addr err
+handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg

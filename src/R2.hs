@@ -2,6 +2,7 @@ module R2
   ( Address (..),
     RouteTo (..),
     RoutedFrom (..),
+    R2Message (..),
     r2,
     defaultAddr,
     parseAddressBase58,
@@ -78,6 +79,14 @@ data RoutedFrom msg = RoutedFrom
   deriving stock (Show, Eq, Generic)
 
 $(deriveJSON (aesonRemovePrefix "routedFrom") ''RoutedFrom)
+
+data R2Message msg where
+  MsgRouteTo :: RouteTo msg -> R2Message msg
+  MsgRouteToErr :: Address -> String -> R2Message msg
+  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
+  deriving stock (Eq, Show, Generic)
+
+$(deriveJSON aesonOptions ''R2Message)
 
 r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
