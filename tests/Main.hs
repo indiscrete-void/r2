@@ -39,7 +39,7 @@ testR2D :: TestTree
 testR2D =
   testGroup
     "r2d"
-    [ testCat "tunnelProcess" \input ->
+    [ testCat "`tunnelProcess \"cat\"` echoes back" \input ->
         runTunnelTest . runInputList input . outputToIOMonoidAssocR pure . runClose mempty $ do
           tunnelProcess "cat"
     ]
