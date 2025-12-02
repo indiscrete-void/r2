@@ -148,12 +148,12 @@ runOverlayLookupChan ::
   Address ->
   InterpreterFor (LookupChan StatelessConnection (Inbound chan)) r
 runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr) -> do
-    mStoredChan <- lookupChan (EstablishedConnection addr)
-    Inbound <$> case mStoredChan of
-      Just Bidirectional {inboundChan} -> pure inboundChan
-      Nothing -> do
-        Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
-        inboundChan <$> reciprocateR2Connection addr router routerOutboundChan
+  mStoredChan <- lookupChan (EstablishedConnection addr)
+  Inbound <$> case mStoredChan of
+    Just Bidirectional {inboundChan} -> pure inboundChan
+    Nothing -> do
+      Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
+      inboundChan <$> reciprocateR2Connection addr router routerOutboundChan
 
 r2nd ::
   ( Member (Bus chan Message) r,
