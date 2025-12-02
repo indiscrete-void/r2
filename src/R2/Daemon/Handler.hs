@@ -42,15 +42,15 @@ connectNode ::
   Sem r ()
 connectNode router transport maybeNewNodeID = do
   chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
-  msgToIO $ runSerialization $ nodeBusChanToIO chan
+  msgToIO $ runSerialization $ chanToIO chan
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Members (Transport Message Message) r,
     Member (MakeNode chan) r,
-    Member (LookupChan EstablishedConnection (Maybe chan)) r,
-    Member (LookupChan StatelessConnection chan) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
     Member (Bus chan Message) r,
     Member Fail r,
     Member Async r
@@ -67,5 +67,5 @@ handleMsg cmd Connection {..} = \case
   ReqTunnelProcess -> do
     tunnelProcess cmd
   MsgR2 r2Msg -> handleR2Msg connAddr r2Msg
-  MsgExit -> busChan (nodeBusChan FromWorld connChan) $ putChan Nothing
+  MsgExit -> busChan (inboundChan connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg

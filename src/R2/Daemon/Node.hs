@@ -9,8 +9,8 @@ module R2.Daemon.Node
 where
 
 import R2
-import R2.Peer
 import R2.Bus
+import R2.Peer
 
 data ConnTransport = R2 Address | Pipe Address ProcessTransport | Socket
   deriving stock (Show)
@@ -18,13 +18,13 @@ data ConnTransport = R2 Address | Pipe Address ProcessTransport | Socket
 data NewConnection chan = NewConnection
   { newConnAddr :: Maybe Address,
     newConnTransport :: ConnTransport,
-    newConnChan :: NodeBusChan chan
+    newConnChan :: Bidirectional chan
   }
 
 data Connection chan = Connection
   { connAddr :: Address,
     connTransport :: ConnTransport,
-    connChan :: NodeBusChan chan
+    connChan :: Bidirectional chan
   }
 
 data Node chan
@@ -38,6 +38,6 @@ nodeAddr :: Node chan -> Maybe Address
 nodeAddr (AcceptedNode (NewConnection {newConnAddr})) = newConnAddr
 nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
 
-nodeChan :: Node chan -> NodeBusChan chan
+nodeChan :: Node chan -> Bidirectional chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
 nodeChan (ConnectedNode (Connection {connChan})) = connChan
