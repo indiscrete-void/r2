@@ -1,3 +1,4 @@
+import Control.Exception
 import Control.Monad
 import Data.ByteString (ByteString)
 import Network.Socket hiding (close)
@@ -15,20 +16,9 @@ import R2.Client.Options
 import R2.Options
 import R2.Peer
 import R2.Socket
-import Control.Exception
 import System.IO
 import System.Random.Stateful
 import Text.Printf (printf)
-
-logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
-logToTrace verbosity = runOutputSem \case
-  (LogMe me) -> when (verbosity > 0) $ trace $ printf "me: %s" (show me)
-  (LogLocalDaemon them) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
-  (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
-  (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
-  (LogRecv addr bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show addr) (show bs)
-  (LogSend addr bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show addr) (show bs)
-  (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
 
 outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
 outputToCLI = runOutputSem (embed . putStrLn)
