@@ -1,17 +1,21 @@
-module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r2c) where
+module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace) where
 
+import Control.Monad
 import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Scoped
+import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
 import R2
 import R2.Client.Chain
+import R2.Options
 import R2.Peer
 import System.Process.Extra
+import Text.Printf
 
 data Action
   = Ls
@@ -32,6 +36,16 @@ data Log where
   LogRecv :: Address -> (Maybe Message) -> Log
   LogSend :: Address -> Message -> Log
   LogAction :: Address -> Action -> Log
+
+logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
+logToTrace verbosity = runOutputSem \case
+  (LogMe me) -> when (verbosity > 0) $ trace $ printf "me: %s" (show me)
+  (LogLocalDaemon them) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
+  (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
+  (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
+  (LogRecv addr bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show addr) (show bs)
+  (LogSend addr bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show addr) (show bs)
+  (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
 
 inToLog :: forall i r a. (Member (Output Log) r, Member (Input i) r) => (i -> Log) -> Sem r a -> Sem r a
 inToLog f = intercept @(Input i) \case

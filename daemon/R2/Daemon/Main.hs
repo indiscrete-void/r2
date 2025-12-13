@@ -29,33 +29,6 @@ import System.Exit
 import System.Posix
 import Text.Printf (printf)
 
-logShowOptionalAddr :: Maybe Address -> String
-logShowOptionalAddr (Just addr) = show addr
-logShowOptionalAddr Nothing = "unknown node"
-
-logShowNode :: Node chan -> String
-logShowNode node = logShowOptionalAddr (nodeAddr node)
-
-logToTrace :: (Member Trace r) => Verbosity -> String -> InterpreterFor (Output Log) r
-logToTrace verbosity cmd = runOutputSem go
-  where
-    go (LogConnected node) = case node of
-      ConnectedNode Connection {connAddr, connTransport} -> trace $ printf "connection established with %s over %s" (show connAddr) (show connTransport)
-      AcceptedNode NewConnection {newConnTransport, newConnAddr} -> trace $ printf "accepted %s over %s" (logShowOptionalAddr newConnAddr) (show newConnTransport)
-    go (LogRecv node msg) = traceTagged (printf "<-%s" $ logShowNode node) $ case msg of
-      ReqListNodes -> trace $ printf "listing connected nodes"
-      ReqConnectNode transport maybeNodeID -> trace $ printf "connecting %s over %s" (logShowOptionalAddr maybeNodeID) (show transport)
-      ReqTunnelProcess -> trace (printf "tunneling `%s`" cmd)
-      MsgR2 (MsgRouteTo RouteTo {..}) -> when (verbosity > 1) $ trace $ printf "routing `%s` to %s" (show routeToData) (show routeToNode)
-      MsgR2 (MsgRouteToErr RouteToErr {..}) -> trace $ printf "->%s: error: %s" (show routeToErrNode) routeToErrMessage
-      MsgR2 (MsgRoutedFrom RoutedFrom {..}) -> when (verbosity > 1) $ trace $ printf "`%s` routed from %s" (show routedFromData) (show routedFromNode)
-      msg -> when (verbosity > 0) $ trace $ printf "trace: unknown msg %s" (show msg)
-    go (LogSend node msg) = traceTagged (printf "->%s" (logShowNode node)) $ case msg of
-      msg@(ResNodeList _) -> trace (show msg)
-      msg -> when (verbosity > 1) $ trace (show msg)
-    go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
-    go (LogError node err) = trace $ printf "%s error: %s" (logShowNode node) err
-
 runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
 runScopedSocket bufferSize =
   runScopedBundle @(Transport Message Message)
