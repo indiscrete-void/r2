@@ -1,6 +1,7 @@
 module R2.Daemon.Storage
   ( NodeState,
     Storage,
+    storageToAtomicState,
     storageToIO,
     storageAddNode,
     storageRmNode,
@@ -43,10 +44,13 @@ nodesReaderToStorage = go id
         mm <- runT m
         raise $ go localF mm
 
-storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
-storageToIO =
-  fmap snd . atomicStateToIO ([] :: NodeState chan) . reinterpret \case
+storageToAtomicState :: (Member (AtomicState (NodeState chan)) r) => InterpreterFor (Storage chan) r
+storageToAtomicState =
+  interpret \case
     StorageAddNode node -> atomicModify' (node :)
     StorageRmNode node -> atomicModify' $ List.delete node
     StorageLookupNode addr -> List.find ((Just addr ==) . nodeAddr) <$> atomicGet
     StorageNodes -> atomicGet @(NodeState _)
+
+storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
+storageToIO = fmap snd . atomicStateToIO ([] :: NodeState chan) . storageToAtomicState . raiseUnder
