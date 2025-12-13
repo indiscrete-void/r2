@@ -15,19 +15,15 @@ import Polysemy.ScopedBundle
 import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
-import R2
 import R2.Bus
 import R2.Daemon
-import R2.Daemon.Node
 import R2.Daemon.Options
 import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
-import R2.Options
 import R2.Peer
 import R2.Socket
 import System.Exit
 import System.Posix
-import Text.Printf (printf)
 
 runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
 runScopedSocket bufferSize =
@@ -82,4 +78,4 @@ main =
         listen s 5
         forkIf daemon
           . run verbosity cmd s
-          $ r2d self cmd
+          $ r2Socketd self cmd
