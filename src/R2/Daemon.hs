@@ -1,4 +1,4 @@
-module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2nd, r2d, logToTrace) where
+module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2nd, r2d, logToTrace, r2Socketd) where
 
 import Control.Monad.Extra
 import Control.Monad.Loops
@@ -200,6 +200,19 @@ r2nd ::
 r2nd cmd conn = runLookupChan $ runOverlayLookupChan (connAddr conn) $ msgHandler cmd conn
 
 r2d ::
+  ( Member (Bus chan Message) r,
+    Member (Output Log) r,
+    Member (Storage chan) r,
+    Member (Scoped CreateProcess Sem.Process) r,
+    Member Async r,
+    Member Resource r
+  ) =>
+  Address ->
+  String ->
+  InterpreterFor (MakeNode chan) r
+r2d self cmd = self `makeNodes` r2nd cmd
+
+r2Socketd ::
   ( Member (Accept sock) r,
     Member (Storage chan) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -212,4 +225,4 @@ r2d ::
   Address ->
   String ->
   Sem r ()
-r2d self cmd = (self `makeNodes` r2nd cmd) acceptSockets
+r2Socketd self cmd = r2d self cmd acceptSockets
