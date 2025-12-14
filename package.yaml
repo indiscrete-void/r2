@@ -56,6 +56,7 @@ dependencies:
   - base >=4.17.2.1 && <5
   - bytestring
   - text
+  - async
   - containers
   - optparse-applicative
   - unix
@@ -78,6 +79,7 @@ library:
   source-dirs: src
   exposed-modules:
     - R2
+    - R2.DSL
     - R2.Bus
     - R2.Options
     - R2.Socket
@@ -103,6 +105,12 @@ executables:
   r2:
     main: R2/Client/Main.hs
     source-dirs: cli
+    dependencies:
+      - r2
+
+  simple-example:
+    main: Simple/Main.hs
+    source-dirs: examples
     dependencies:
       - r2
 
