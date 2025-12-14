@@ -13,12 +13,10 @@ import Polysemy.Transport
 import R2
 import R2.Client
 import R2.Client.Options
-import R2.Options
 import R2.Peer
 import R2.Socket
 import System.IO
 import System.Random.Stateful
-import Text.Printf (printf)
 
 outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
 outputToCLI = runOutputSem (embed . putStrLn)
