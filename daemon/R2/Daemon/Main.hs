@@ -1,5 +1,4 @@
 import Control.Exception
-import Control.Monad
 import Network.Socket (bind, listen)
 import Network.Socket qualified as IO
 import Polysemy hiding (run, send)
