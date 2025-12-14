@@ -15,6 +15,7 @@ build-type:     Simple
 library
   exposed-modules:
       R2
+      R2.DSL
       R2.Bus
       R2.Options
       R2.Socket
@@ -65,6 +66,7 @@ library
   ghc-options: -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode -Wno-safe -Wno-unsafe -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-local-signatures -Wno-monomorphism-restriction -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures -fplugin=Polysemy.Plugin -Wno-orphans -Wno-name-shadowing
   build-depends:
       aeson
+    , async
     , base >=4.17.2.1 && <5
     , base58-bytestring
     , base64-bytestring
@@ -125,6 +127,7 @@ executable r2
   ghc-options: -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode -Wno-safe -Wno-unsafe -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-local-signatures -Wno-monomorphism-restriction -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures -fplugin=Polysemy.Plugin -Wno-orphans -Wno-name-shadowing
   build-depends:
       aeson
+    , async
     , base >=4.17.2.1 && <5
     , base58-bytestring
     , base64-bytestring
@@ -186,6 +189,68 @@ executable r2d
   ghc-options: -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode -Wno-safe -Wno-unsafe -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-local-signatures -Wno-monomorphism-restriction -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures -fplugin=Polysemy.Plugin -Wno-orphans -Wno-name-shadowing
   build-depends:
       aeson
+    , async
+    , base >=4.17.2.1 && <5
+    , base58-bytestring
+    , base64-bytestring
+    , bytestring
+    , containers
+    , data-dword
+    , extra
+    , monad-loops
+    , network
+    , optparse-applicative
+    , polysemy
+    , polysemy-conc
+    , polysemy-plugin
+    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-transport >=0.18.0.0
+    , r2
+    , random
+    , stm-chans
+    , text
+    , unix
+  default-language: Haskell2010
+
+executable simple-example
+  main-is: Simple/Main.hs
+  other-modules:
+      Paths_r2
+  autogen-modules:
+      Paths_r2
+  hs-source-dirs:
+      examples
+  default-extensions:
+      DataKinds
+      FlexibleContexts
+      GADTs
+      LambdaCase
+      PolyKinds
+      RankNTypes
+      ScopedTypeVariables
+      TypeApplications
+      TypeOperators
+      TypeFamilies
+      ImportQualifiedPost
+      AllowAmbiguousTypes
+      TemplateHaskell
+      BlockArguments
+      DeriveGeneric
+      DerivingStrategies
+      EmptyDataDeriving
+      OverloadedStrings
+      FlexibleInstances
+      QuantifiedConstraints
+      IncoherentInstances
+      StandaloneKindSignatures
+      DerivingVia
+      RecordWildCards
+      NamedFieldPuns
+      ViewPatterns
+  ghc-options: -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode -Wno-safe -Wno-unsafe -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-local-signatures -Wno-monomorphism-restriction -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures -fplugin=Polysemy.Plugin -Wno-orphans -Wno-name-shadowing
+  build-depends:
+      aeson
+    , async
     , base >=4.17.2.1 && <5
     , base58-bytestring
     , base64-bytestring
@@ -247,6 +312,7 @@ test-suite tests
   ghc-options: -fdefer-typed-holes -Weverything -Wno-missing-safe-haskell-mode -Wno-safe -Wno-unsafe -Wno-missing-import-lists -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-local-signatures -Wno-monomorphism-restriction -Wno-implicit-prelude -threaded -Wno-missing-kind-signatures -fplugin=Polysemy.Plugin -Wno-orphans -Wno-name-shadowing
   build-depends:
       aeson
+    , async
     , base >=4.17.2.1 && <5
     , base58-bytestring
     , base64-bytestring

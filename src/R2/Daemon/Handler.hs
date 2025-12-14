@@ -1,6 +1,7 @@
 module R2.Daemon.Handler (StatelessConnection (..), EstablishedConnection (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Data.Maybe
+import Debug.Trace
 import Polysemy
 import Polysemy.Async
 import Polysemy.Fail
@@ -60,12 +61,9 @@ handleMsg ::
   Message ->
   Sem r ()
 handleMsg cmd Connection {..} = \case
-  ReqListNodes -> do
-    listNodes
-  (ReqConnectNode transport maybeNodeID) -> do
-    connectNode connAddr transport maybeNodeID
-  ReqTunnelProcess -> do
-    tunnelProcess cmd
+  ReqListNodes -> listNodes
+  (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
+  ReqTunnelProcess -> tunnelProcess cmd
   MsgR2 r2Msg -> handleR2Msg connAddr r2Msg
   MsgExit -> busChan (inboundChan connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg
