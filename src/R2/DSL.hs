@@ -49,12 +49,7 @@ newtype NetworkNode = NetworkNode
   }
   deriving stock (Show, Eq, Ord)
 
-data NetworkRoute
-  = NetworkNode :/> NetworkRoute
-  | RouteNil
-  deriving stock (Show, Eq, Ord)
-
-infixr 9 :/>
+type NetworkRoute = [NetworkNode]
 
 type NetworkLink = (NetworkNode, NetworkNode)
 
@@ -133,10 +128,6 @@ mkNodes link links serveMap = do
               let chan = links ! (me, them)
               makeNode $ AcceptedNode (NewConnection (Just $ nodeId them) Socket chan)
 
-pathToChain :: NetworkRoute -> [Address]
-pathToChain (node :/> path) = nodeId node : pathToChain path
-pathToChain RouteNil = []
-
 mkActor ::
   forall msgChan stdioChan r.
   ( Member Sem.Async r,
@@ -155,7 +146,7 @@ mkActor ::
   NetworkRoute ->
   Action ->
   InterpretersFor (Transport ByteString ByteString) r
-mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} :/> path) action m = do
+mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m = do
   (stdioLinkA, stdioLinkB) <- makeLink @stdioChan @ByteString
   (msgLinkA, msgLinkB) <- makeLink @msgChan @Message
 
@@ -169,8 +160,7 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} :/> path) action 
         r2d firstNodeId cmd do
           makeNode $ AcceptedNode (NewConnection (Just randAddress) Socket msgLinkA)
 
-  let chain = pathToChain path
-  let command = Command chain action
+  let command = Command (map nodeId path) action
   client <-
     async $
       scoped @_ @(Output Client.Log) randAddress $

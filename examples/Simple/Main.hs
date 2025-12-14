@@ -48,12 +48,12 @@ catnet = do
             ]
         }
 
-  conn_ (pana :/> RouteNil) Ls
-  conn_ (pana :/> carl :/> RouteNil) Ls
-  conn_ (pana :/> carl :/> bob :/> RouteNil) Ls
+  conn_ [pana] Ls
+  conn_ [pana, carl] Ls
+  conn_ [pana, carl, bob] Ls
 
   let panaMsgViaCarl = "pana greets bob"
-  bobRes <- conn (pana :/> carl :/> bob :/> RouteNil) (Tunnel Stdio) $ do
+  bobRes <- conn [pana, carl, bob] (Tunnel Stdio) $ do
     output (BC.pack panaMsgViaCarl)
     echo <- BC.unpack <$> inputOrFail
     close
