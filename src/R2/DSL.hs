@@ -73,7 +73,7 @@ data Network r = Network
   }
 
 node :: String -> NetworkNode
-node = NetworkNode . fromJust . parseAddressBase58
+node = NetworkNode . Addr
 
 linkChans :: (Member (Bus chan d) r) => Bidirectional chan -> Bidirectional chan -> Sem r ()
 linkChans a@Bidirectional {inboundChan} b@Bidirectional {outboundChan} = do
