@@ -150,15 +150,14 @@ executable r2
     , unix
   default-language: Haskell2010
 
-executable r2d
-  main-is: R2/Daemon/Main.hs
+executable r2-simple-example
+  main-is: Simple/Main.hs
   other-modules:
-      R2.Daemon.Options
       Paths_r2
   autogen-modules:
       Paths_r2
   hs-source-dirs:
-      daemon
+      examples
   default-extensions:
       DataKinds
       FlexibleContexts
@@ -212,14 +211,15 @@ executable r2d
     , unix
   default-language: Haskell2010
 
-executable simple-example
-  main-is: Simple/Main.hs
+executable r2d
+  main-is: R2/Daemon/Main.hs
   other-modules:
+      R2.Daemon.Options
       Paths_r2
   autogen-modules:
       Paths_r2
   hs-source-dirs:
-      examples
+      daemon
   default-extensions:
       DataKinds
       FlexibleContexts
