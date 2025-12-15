@@ -108,7 +108,7 @@ executables:
     dependencies:
       - r2
 
-  simple-example:
+  r2-simple-example:
     main: Simple/Main.hs
     source-dirs: examples
     dependencies:
