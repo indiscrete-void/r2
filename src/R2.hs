@@ -6,13 +6,11 @@ module R2
     R2Message (..),
     r2,
     defaultAddr,
-    parseAddressBase58,
   )
 where
 
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Aeson.Types
 import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
@@ -23,20 +21,17 @@ import GHC.Generics
 import Serial.Aeson.Options
 import System.Random.Stateful
 
-newtype Address = Addr {unAddr :: Word256}
+newtype Address = Addr {unAddr :: String}
   deriving stock (Ord, Eq, Generic)
-  deriving (Num) via Word256
 
-showAddressBase58 :: Address -> String
-showAddressBase58 = BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger . unAddr
-
-parseAddressBase58 :: String -> Maybe Address
-parseAddressBase58 = fmap (Addr . fromInteger . bsToInteger) . decodeBase58 bitcoinAlphabet . BC.pack
+instance Show Address where
+  show (Addr addr) = addr
 
 defaultAddr :: Address
-defaultAddr = Addr 0
+defaultAddr = Addr "<default>"
 
-instance Uniform Address
+instance Uniform Address where
+  uniformM g = Addr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g
 
 instance Uniform Word128 where
   uniformM g = do
@@ -50,20 +45,11 @@ instance Uniform Word256 where
     r <- uniformM @Word128 g
     pure $ Word256 l r
 
-instance Show Address where
-  show (Addr addr)
-    | addr == unAddr defaultAddr = "<default>"
-    | otherwise = BC.unpack $ encodeBase58 bitcoinAlphabet (integerToBS $ toInteger addr)
-
 instance ToJSON Address where
-  toJSON addr = String (Text.pack $ showAddressBase58 addr)
+  toJSON (Addr addr) = String (Text.pack addr)
 
 instance FromJSON Address where
-  parseJSON =
-    withText "Address" $
-      maybe (parseFail "non-base58 string") pure
-        . parseAddressBase58
-        . Text.unpack
+  parseJSON = withText "Address" $ pure . Addr . Text.unpack
 
 data RouteTo msg = RouteTo
   { routeToNode :: Address,

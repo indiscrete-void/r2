@@ -21,7 +21,7 @@ Daemon (`r2d`) and manager (`r2`) implement route-to protocol, which they both u
 ## Route-to
 At the core of this network is r2 protocol which is used for routing, multiplexing, tunneling and even ping at the same time while being as simple as `r2 f n0 (RouteTo n1 msg) = f n1 (RoutedFrom n0 msg)`
 
-r2 only supports single-hop routing, which is sufficient to implement _any_ routing (through recursion). Both multiplexing and tunneling are handled by node exposing a virtual node with an agreed-upon Int256 identifier. For multiplexing, the virtual node communicates using the same protocol on its channel, while in case of tunneling, the virtual node occupies the entire channel with raw tunnel (stdio/process) data
+r2 only supports single-hop routing, which is sufficient to implement _any_ routing (through recursion). Both multiplexing and tunneling are handled by node exposing a virtual node with an agreed-upon identifier. For multiplexing, the virtual node communicates using the same protocol on its channel, while in case of tunneling, the virtual node occupies the entire channel with raw tunnel (stdio/process) data
 
 r2 is ping as long as n0 equals n1
 

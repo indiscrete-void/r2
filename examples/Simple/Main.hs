@@ -26,13 +26,13 @@ opts :: Parser Options
 opts = Options <$> verbosity
 
 pana :: NetworkNode
-pana = node "p4n4"
+pana = node "pana"
 
 bob :: NetworkNode
-bob = node "bQb"
+bob = node "bob"
 
 carl :: NetworkNode
-carl = node "k4r1"
+carl = node "carl"
 
 catnet :: (Members (NetworkEffects msgChan stdioChan) r) => Sem r ()
 catnet = do

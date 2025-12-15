@@ -141,7 +141,7 @@ processTransport = do
       else Process arg
 
 address :: ReadM Address
-address = str >>= maybeFail "invalid node ID" . parseAddressBase58
+address = Addr <$> str
 
 runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor ByteInputWithEOF r
 runMsgInput = interpret \case
