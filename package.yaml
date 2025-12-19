@@ -74,6 +74,7 @@ dependencies:
   - base64-bytestring
   - base58-bytestring
   - data-dword
+  - time-units
 
 library:
   source-dirs: src

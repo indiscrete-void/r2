@@ -1,9 +1,10 @@
 module R2.DSL where
 
-import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar)
+import Control.Concurrent (MVar, forkIO, threadDelay)
 import Control.Concurrent.Async (Async)
-import Control.Concurrent.Async qualified as IO
 import Control.Concurrent.STM.TBMQueue
+import Control.Exception (SomeException)
+import Control.Exception qualified as IO
 import Control.Monad
 import Control.Monad.Extra
 import Data.ByteString (ByteString)
@@ -11,6 +12,7 @@ import Data.IORef
 import Data.List qualified as List
 import Data.Map (Map, (!))
 import Data.Map qualified as Map
+import Data.Time.Units
 import Polysemy
 import Polysemy.Async (async, await)
 import Polysemy.Async qualified as Sem
@@ -44,6 +46,7 @@ import R2.Peer
 import System.Process.Extra
 import System.Random
 import System.Random.Stateful (Uniform (uniformM), newIOGenM)
+import Text.Printf (printf)
 
 newtype NetworkNode = NetworkNode
   { nodeId :: Address
@@ -259,9 +262,23 @@ data DaemonDescription = DaemonDescription
     daemonVerbosity :: Verbosity
   }
 
+connRestartDelay :: Integer
+connRestartDelay = toMicroseconds (2718 :: Millisecond)
+
+runManagedDaemonConn :: Verbosity -> Maybe FilePath -> DaemonConnection -> IO ()
+runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr) = do
+  result <- IO.try @SomeException $ r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process linkCmd) mConnAddr)
+  let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
+  let displayDelay = show $ fromInteger @Second connRestartDelay
+  let displayCause :: String = case result of
+        Right () -> "exited"
+        Left err -> printf "exited unexpectedly: %s" (show err)
+  printf "conn %s%s %s. restarting in %s" linkCmd displayConnAddr displayCause displayDelay
+  threadDelay $ fromInteger connRestartDelay
+  runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr)
+
 runManagedDaemon :: DaemonDescription -> IO (MVar ())
 runManagedDaemon DaemonDescription {..} = do
   Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath daemonTunnelProcess
-  forM_ daemonLinks $ \(DaemonConnection linkCmd mConnAddr) ->
-    forkIO $ r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process linkCmd) mConnAddr)
+  forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
   pure joinDaemon
