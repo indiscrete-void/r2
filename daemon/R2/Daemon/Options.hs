@@ -5,7 +5,7 @@ import R2
 import R2.Options
 import R2.Peer
 
-data Options = Options Verbosity (Maybe FilePath) Bool Address String
+data Options = Options Verbosity (Maybe FilePath) Address String
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -24,6 +24,5 @@ opts =
   Options
     <$> verbosity
     <*> optional (strOption $ long "socket" <> short 's')
-    <*> flag False True (long "daemon" <> short 'd')
     <*> argument address (metavar "ADDRESS")
     <*> argument str (metavar "CMD")

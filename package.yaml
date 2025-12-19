@@ -114,6 +114,13 @@ executables:
     dependencies:
       - r2
 
+  r2dm:
+    main: R2/Manager/Main.hs
+    source-dirs: manager
+    dependencies:
+      - r2
+      - tomland
+
 tests:
   tests:
     main: Main.hs

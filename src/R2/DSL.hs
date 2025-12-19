@@ -1,6 +1,8 @@
 module R2.DSL where
 
+import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar)
 import Control.Concurrent.Async (Async)
+import Control.Concurrent.Async qualified as IO
 import Control.Concurrent.STM.TBMQueue
 import Control.Monad
 import Control.Monad.Extra
@@ -9,7 +11,6 @@ import Data.IORef
 import Data.List qualified as List
 import Data.Map (Map, (!))
 import Data.Map qualified as Map
-import Data.Maybe
 import Polysemy
 import Polysemy.Async (async, await)
 import Polysemy.Async qualified as Sem
@@ -244,3 +245,23 @@ dslToIO verbosity =
     . interpretBusTBM @_ @ByteString queueSize
     . interpretBusTBM @_ @Message queueSize
     . scopedProcToIOFinal bufferSize
+
+data DaemonConnection = DaemonConnection
+  { daemonConnProcess :: String,
+    daemonConnAddress :: Maybe Address
+  }
+
+data DaemonDescription = DaemonDescription
+  { daemonAddress :: Address,
+    daemonSocketPath :: Maybe FilePath,
+    daemonTunnelProcess :: String,
+    daemonLinks :: [DaemonConnection],
+    daemonVerbosity :: Verbosity
+  }
+
+runManagedDaemon :: DaemonDescription -> IO (MVar ())
+runManagedDaemon DaemonDescription {..} = do
+  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath daemonTunnelProcess
+  forM_ daemonLinks $ \(DaemonConnection linkCmd mConnAddr) ->
+    forkIO $ r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process linkCmd) mConnAddr)
+  pure joinDaemon

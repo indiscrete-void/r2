@@ -1,6 +1,7 @@
 module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2nd, r2d, logToTrace, r2Socketd, r2dIO) where
 
-import Control.Exception (IOException)
+import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
+import Control.Exception (IOException, finally)
 import Control.Monad.Extra
 import Control.Monad.Loops
 import Network.Socket qualified as IO
@@ -14,7 +15,7 @@ import Polysemy.Fail
 import Polysemy.Internal.Kind
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
-import Polysemy.Resource
+import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.ScopedBundle
 import Polysemy.Serialize
@@ -31,8 +32,6 @@ import R2.Daemon.Storage
 import R2.Options
 import R2.Peer
 import R2.Socket
-import System.Exit
-import System.Posix (forkProcess)
 import System.Process.Extra
 import Text.Printf as Text
 
@@ -237,19 +236,21 @@ r2Socketd ::
   Sem r ()
 r2Socketd self cmd = r2d self cmd acceptSockets
 
-r2dIO :: Verbosity -> Bool -> Address -> Maybe FilePath -> String -> IO ()
-r2dIO verbosity daemon self mSocketPath cmd =
-  withR2Socket \s -> do
-    addr <- r2SocketAddr mSocketPath
-    IO.bind s addr
-    IO.listen s 5
-    forkIf daemon $
-      run verbosity cmd s $
-        r2Socketd self cmd
+r2dIO :: Verbosity -> Bool -> Address -> Maybe FilePath -> String -> IO (Maybe (MVar ()))
+r2dIO verbosity fork self mSocketPath cmd = do
+  addr <- r2SocketAddr mSocketPath
+  s <- r2Socket
+  IO.bind s addr
+  IO.listen s 5
+  forkIf fork $
+    run verbosity cmd s (r2Socketd self cmd) `finally` IO.close s
   where
-    forkIf :: Bool -> IO () -> IO ()
-    forkIf True m = forkProcess m >> exitSuccess
-    forkIf False m = m
+    forkIf :: Bool -> IO () -> IO (Maybe (MVar ()))
+    forkIf True m = do
+      exit <- newEmptyMVar
+      _ <- forkIO (m >> putMVar exit ())
+      pure $ Just exit
+    forkIf False m = Nothing <$ m
 
     runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
     runScopedSocket bufferSize =
