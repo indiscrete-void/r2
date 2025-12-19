@@ -1,12 +1,17 @@
-module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace) where
+module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace, r2cIO) where
 
+import Control.Exception (IOException)
 import Control.Monad
+import Control.Monad.Extra (fromMaybeM)
 import Data.ByteString (ByteString)
+import Network.Socket.Address
 import Polysemy
 import Polysemy.Async
+import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Scoped
+import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
@@ -14,7 +19,11 @@ import R2
 import R2.Client.Chain
 import R2.Options
 import R2.Peer
+import R2.Socket
+import System.IO
 import System.Process.Extra
+import System.Random
+import System.Random.Stateful
 import Text.Printf
 
 data Action
@@ -161,3 +170,33 @@ r2c me (Command targetChain action) = do
     outToLog (LogSend server) $
       runChainSession targetChain $
         handleAction action
+
+r2cIO :: Verbosity -> Maybe Address -> Maybe FilePath -> Command -> IO ()
+r2cIO verbosity mSelf mSocketPath command = do
+  self <- fromMaybeM (initStdGen >>= newIOGenM >>= uniformM @Address) (pure mSelf)
+  withR2Socket \s -> do
+    connect s =<< r2SocketAddr mSocketPath
+    run verbosity s $ r2c self command
+  where
+    outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
+    outputToCLI = runOutputSem (embed . putStrLn)
+
+    runStandardIO :: (Member (Embed IO) r) => Int -> InterpretersFor (Transport ByteString ByteString) r
+    runStandardIO bufferSize = closeToIO stdout . outputToIO stdout . inputToIO bufferSize stdin
+
+    run verbosity s =
+      runFinal
+        . asyncToIOFinal
+        . embedToFinal @IO
+        . traceIOExceptions @IOException
+        . failToEmbed @IO
+        -- interpreter log is ignored
+        . ignoreTrace
+        -- socket, std and process io
+        . (runSocketIO bufferSize s . runSerialization)
+        . runStandardIO bufferSize
+        . scopedProcToIOFinal bufferSize
+        -- log application events
+        . outputToCLI
+        . traceToStderrBuffered
+        . logToTrace verbosity

@@ -1,16 +1,23 @@
-module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2nd, r2d, logToTrace, r2Socketd) where
+module R2.Daemon (Log (..), msgHandler, acceptSockets, makeNodes, r2nd, r2d, logToTrace, r2Socketd, r2dIO) where
 
+import Control.Exception (IOException)
 import Control.Monad.Extra
 import Control.Monad.Loops
+import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
+import Polysemy.Bundle
+import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Internal.Kind
+import Polysemy.Process
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
+import Polysemy.ScopedBundle
+import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
@@ -23,6 +30,9 @@ import R2.Daemon.Sockets.Accept
 import R2.Daemon.Storage
 import R2.Options
 import R2.Peer
+import R2.Socket
+import System.Exit
+import System.Posix (forkProcess)
 import System.Process.Extra
 import Text.Printf as Text
 
@@ -226,3 +236,58 @@ r2Socketd ::
   String ->
   Sem r ()
 r2Socketd self cmd = r2d self cmd acceptSockets
+
+r2dIO :: Verbosity -> Bool -> Address -> Maybe FilePath -> String -> IO ()
+r2dIO verbosity daemon self mSocketPath cmd =
+  withR2Socket \s -> do
+    addr <- r2SocketAddr mSocketPath
+    IO.bind s addr
+    IO.listen s 5
+    forkIf daemon $
+      run verbosity cmd s $
+        r2Socketd self cmd
+  where
+    forkIf :: Bool -> IO () -> IO ()
+    forkIf True m = forkProcess m >> exitSuccess
+    forkIf False m = m
+
+    runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
+    runScopedSocket bufferSize =
+      runScopedBundle @(Transport Message Message)
+        ( \s ->
+            runSocketIO bufferSize s
+              . runSerialization
+              . raise2Under @ByteInputWithEOF
+              . raise2Under @ByteOutput
+        )
+
+    runServerSocket ::
+      (Member (Embed IO) r, Member Fail r, Member Trace r) =>
+      Int ->
+      IO.Socket ->
+      InterpretersFor
+        '[ Scoped IO.Socket (Bundle (Transport Message Message)),
+           Accept IO.Socket
+         ]
+        r
+    runServerSocket bufferSize s = acceptToIO s . runScopedSocket bufferSize
+
+    run verbosity cmd s =
+      runFinal @IO
+        . interpretRace
+        . asyncToIOFinal
+        . resourceToIOFinal
+        . embedToFinal @IO
+        . traceIOExceptions @IOException
+        . interpretBusTBM queueSize
+        . failToEmbed @IO
+        -- ignore interpreter logs
+        . ignoreTrace
+        -- process and socket io
+        . scopedProcToIOFinal bufferSize
+        . runServerSocket bufferSize s
+        -- AtomicRef storage
+        . storageToIO
+        -- log application events
+        . traceToStdoutBuffered
+        . logToTrace verbosity cmd
