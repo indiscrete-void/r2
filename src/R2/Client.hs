@@ -27,7 +27,6 @@ import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Random
-import R2.Random (randomToIO)
 import R2.Socket
 import System.IO
 import System.Process.Extra
@@ -200,7 +199,7 @@ r2c mSelf (Command targetChain action) = do
   output $ LogAction target action
   targetInboundChan <- busMakeChan
   let msgHandler Connection {connAddr} msg
-        | connAddr == target = busChan targetInboundChan $ putChan (Just msg)
+        | connAddr == target = busChan targetInboundChan $ putChan msg
         | otherwise = fail $ printf "unexepcted message %s from %s" (show msg) (show connAddr)
   runPeer me msgHandler $ do
     serverChan <- makeConnectedNode server Socket

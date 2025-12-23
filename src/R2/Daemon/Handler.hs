@@ -1,6 +1,7 @@
 module R2.Daemon.Handler (StatelessConnection (..), EstablishedConnection (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Control.Monad
+import Control.Monad.Extra
 import Data.Maybe
 import Debug.Trace
 import Polysemy
