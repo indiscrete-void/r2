@@ -34,36 +34,35 @@ bob = node "bob"
 carl :: NetworkNode
 carl = node "carl"
 
-catnet :: (Members (NetworkEffects msgChan stdioChan) r) => Sem r ()
-catnet = do
-  Network {conn, conn_} <-
-    mkNet $
-      static
-        { serve =
-            [ (bob, exec "cat")
-            ],
-          link =
-            [ (pana, carl),
-              (carl, bob)
-            ]
-        }
-
-  conn_ [pana] Ls
-  conn_ [pana, carl] Ls
-  conn_ [pana, carl, bob] Ls
-
-  let panaMsgViaCarl = "pana greets bob"
-  bobRes <- conn [pana, carl, bob] (Tunnel Stdio) $ do
-    output (BC.pack panaMsgViaCarl)
-    echo <- BC.unpack <$> inputOrFail
-    close
-    pure echo
-  trace bobRes
+catnet :: NetworkDescription
+catnet =
+  static
+    { serve =
+        [ (bob, exec "cat")
+        ],
+      link =
+        [ (pana, carl),
+          (carl, bob)
+        ]
+    }
 
 main :: IO ()
 main = do
   Options verbosity <- parse
-  dslToIO verbosity catnet
+  dslToIO verbosity (serve catnet) $ do
+    Network {conn, conn_} <- mkNet catnet
+
+    conn_ [pana] Ls
+    conn_ [pana, carl] Ls
+    conn_ [pana, carl, bob] Ls
+
+    let panaMsgViaCarl = "pana greets bob"
+    bobRes <- conn [pana, carl, bob] (Tunnel Stdio) $ do
+      output (BC.pack panaMsgViaCarl)
+      echo <- BC.unpack <$> inputOrFail
+      close
+      pure echo
+    trace bobRes
 
 {-
 panaDaemon = do

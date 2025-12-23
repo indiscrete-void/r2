@@ -57,13 +57,15 @@ type NetworkRoute = [NetworkNode]
 
 type NetworkLink = (NetworkNode, NetworkNode)
 
+type ServeList = [(NetworkNode, Service)]
+
 newtype Service = ServiceCommand String
 
 exec :: String -> Service
 exec = ServiceCommand
 
 data NetworkDescription = NetworkDescription
-  { serve :: [(NetworkNode, Service)],
+  { serve :: ServeList,
     link :: [NetworkLink]
   }
 
@@ -233,25 +235,30 @@ storagesToIO =
       )
     . raiseUnder
 
-dslToIO :: forall a. Verbosity -> Sem (NetworkEffects (TBMQueue Message) (TBMQueue ByteString)) a -> IO a
-dslToIO verbosity =
-  runFinal
-    . interpretMaskFinal
-    . interpretRace
-    . resourceToIOFinal
-    . Sem.asyncToIOFinal
-    . embedToFinal @IO
-    . interpretLockReentrant
-    . traceToStderrBuffered
-    . outputToTrace id
-    . failToEmbed @IO
-    . storagesToIO
-    . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
-    . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity "<unknown cmd>" . raiseUnder @Trace)
-    . interpretBusTBM @_ @ByteString queueSize
-    . interpretBusTBM @_ @Message queueSize
-    . scopedProcToIOFinal bufferSize
-    . randomToIO
+dslToIO :: forall a. Verbosity -> ServeList -> Sem (NetworkEffects (TBMQueue Message) (TBMQueue ByteString)) a -> IO a
+dslToIO verbosity serveList =
+  let serveMap = Map.fromList serveList
+   in runFinal
+        . interpretMaskFinal
+        . interpretRace
+        . resourceToIOFinal
+        . Sem.asyncToIOFinal
+        . embedToFinal @IO
+        . interpretLockReentrant
+        . traceToStderrBuffered
+        . outputToTrace id
+        . failToEmbed @IO
+        . storagesToIO
+        . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
+        . runScopedNew @_ @(Output Peer.Log)
+          ( \addr ->
+              let ServiceCommand service = serveMap ! NetworkNode addr
+               in traceTagged (show addr) . Peer.logToTrace verbosity service . raiseUnder @Trace
+          )
+        . interpretBusTBM @_ @ByteString queueSize
+        . interpretBusTBM @_ @Message queueSize
+        . scopedProcToIOFinal bufferSize
+        . randomToIO
 
 data DaemonConnection = DaemonConnection
   { daemonConnProcess :: String,
