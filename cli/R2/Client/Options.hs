@@ -4,6 +4,7 @@ import Options.Applicative
 import R2.Client
 import R2.Options
 import R2.Peer
+import R2.Peer.Proto
 
 data Options = Options Verbosity Command (Maybe FilePath)
 

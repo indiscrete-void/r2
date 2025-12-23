@@ -1,5 +1,5 @@
-import R2.Client
 import R2.Client.Options
+import R2.Client
 
 main :: IO ()
 main = do

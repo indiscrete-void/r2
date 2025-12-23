@@ -1,42 +1,27 @@
 module R2.Peer
-  ( Raw (..),
-    Self (..),
-    Message (..),
-    r2SocketAddr,
+  ( r2SocketAddr,
     r2Socket,
     withR2Socket,
     bufferSize,
     queueSize,
-    ProcessTransport (..),
-    ioToMsg,
     processTransport,
     address,
-    msgSelf,
-    msgRoutedFrom,
-    runMsgInput,
-    runMsgOutput,
-    runMsgClose,
-    msgToIO,
+    exchangeSelves,
     StatelessConnection (..),
     EstablishedConnection (..),
     routeTo,
     routeToError,
     routedFrom,
     handleR2Msg,
+    runPeer,
+    runRouter,
   )
 where
 
-import Control.Exception
+import Control.Exception qualified as IO
 import Control.Monad.Extra
-import Data.Aeson
-import Data.Aeson qualified as Value
-import Data.Aeson.TH
-import Data.ByteString (ByteString)
-import Data.ByteString.Char8 qualified as BC
 import Data.Maybe
-import Data.Text qualified as Text
 import Debug.Trace qualified as Debug
-import GHC.Generics
 import Network.Socket (Family (..), SockAddr (..), Socket, socket)
 import Network.Socket qualified as Socket
 import Options.Applicative
@@ -44,64 +29,20 @@ import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Fail
+import Polysemy.Internal.Kind
+import Polysemy.Reader
+import Polysemy.Resource
 import Polysemy.Transport
-import Polysemy.Transport.Extra
 import R2
 import R2.Bus
-import Serial.Aeson.Options
+import R2.Peer.Conn
+import R2.Peer.Log
+import R2.Peer.MakeNode
+import R2.Peer.Proto
+import R2.Peer.Storage
 import System.Environment
-import System.Posix
-import Transport.Maybe
-
-newtype Raw = Raw {unRaw :: ByteString}
-  deriving stock (Eq, Show, Generic)
-
-instance ToJSON Raw where
-  toJSON (Raw bs) = Value.String $ Text.pack $ BC.unpack bs
-
-instance FromJSON Raw where
-  parseJSON (Value.String txt) = return $ Raw $ BC.pack $ Text.unpack txt
-  parseJSON _ = fail "Expected a string value"
-
-newtype Self = Self {unSelf :: Address}
-  deriving stock (Eq, Show, Generic)
-
-$(deriveJSON (aesonRemovePrefix "un") ''Self)
-
-data ProcessTransport
-  = Stdio
-  | Process String
-  deriving stock (Eq, Show, Generic)
-
-$(deriveJSON aesonOptions ''ProcessTransport)
-
-data Message where
-  MsgSelf :: Self -> Message
-  MsgR2 :: R2Message Message -> Message
-  MsgData :: Maybe Raw -> Message
-  MsgExit :: Message
-  ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
-  ReqTunnelProcess :: Message
-  ReqListNodes :: Message
-  ResNodeList :: [Address] -> Message
-  deriving stock (Eq, Show, Generic)
-
-$(deriveJSON aesonOptions ''Message)
-
-msgSelf :: Message -> Maybe Self
-msgSelf = \case
-  MsgSelf self -> Just self
-  _ -> Nothing
-
-msgData :: Message -> Maybe Raw
-msgData = \case
-  MsgData raw -> raw
-  _ -> Nothing
-
-msgRoutedFrom :: Message -> Maybe (RoutedFrom Message)
-msgRoutedFrom = \case
-  MsgR2 (MsgRoutedFrom routedFrom) -> Just routedFrom
-  _ -> Nothing
+import System.Posix.User
+import Text.Printf (printf)
 
 bufferSize :: Int
 bufferSize = 8192
@@ -130,7 +71,7 @@ r2SocketAddr customPath = do
   pure $ SockAddrUnix path
 
 withR2Socket :: (Socket -> IO a) -> IO a
-withR2Socket = bracket r2Socket Socket.close
+withR2Socket = IO.bracket r2Socket Socket.close
 
 processTransport :: ReadM ProcessTransport
 processTransport = do
@@ -142,49 +83,6 @@ processTransport = do
 
 address :: ReadM Address
 address = Addr <$> str
-
-runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor ByteInputWithEOF r
-runMsgInput = interpret \case
-  Input ->
-    input >>= \case
-      Just (MsgData (Just raw)) -> pure $ Just $ unRaw raw
-      Just (MsgData Nothing) -> pure Nothing
-      Just msg -> fail $ "unexected message: " <> show msg
-      Nothing -> pure Nothing
-
-runMsgOutput :: (Member (Output Message) r) => InterpreterFor ByteOutput r
-runMsgOutput = interpret \case
-  Output msg -> output $ MsgData $ Just $ Raw msg
-
-runMsgClose :: (Member (Output Message) r) => InterpreterFor Close r
-runMsgClose = interpret \case
-  Close -> output (MsgData Nothing)
-
-msgToIO ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member Fail r
-  ) =>
-  InterpretersFor (Transport ByteString ByteString) r
-msgToIO =
-  runMsgClose
-    . runMsgOutput
-    . runMsgInput
-
-ioToMsg ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member (InputWithEOF ByteString) r,
-    Member (Output ByteString) r,
-    Member Close r,
-    Member Async r
-  ) =>
-  Sem r ()
-ioToMsg =
-  sequenceConcurrently_
-    [ contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close,
-      mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
-    ]
 
 routeTo ::
   ( Member (Bus chan Message) r,
@@ -232,3 +130,153 @@ handleR2Msg ::
 handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound . outboundChan) $ routeTo connAddr msg
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg
+
+type MsgHandler chan r = Connection chan -> Message -> Sem r ()
+
+handlePeerR2Msg ::
+  ( Member (Bus chan Message) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member (Output Message) r
+  ) =>
+  MsgHandler chan r ->
+  Connection chan ->
+  Message ->
+  Sem r ()
+handlePeerR2Msg _ conn (MsgR2 msg) = handleR2Msg (connAddr conn) msg
+handlePeerR2Msg handleNonR2Msg conn msg = handleNonR2Msg conn msg
+
+type MsgHandlerEffects chan = Transport Message Message
+
+msgHandler ::
+  ( Member (Bus chan Message) r,
+    Member (Output Log) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r
+  ) =>
+  MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
+  Connection chan ->
+  Sem r ()
+msgHandler handleNonR2Msg conn =
+  ioToNodeBusChanLogged (ConnectedNode conn) $
+    handle (handlePeerR2Msg handleNonR2Msg conn)
+
+exchangeSelves ::
+  ( Member (InputWithEOF Message) r,
+    Member (Output Message) r,
+    Member Fail r
+  ) =>
+  Address ->
+  Maybe Address ->
+  Sem r Address
+exchangeSelves self maybeKnownAddr = do
+  output (MsgSelf $ Self self)
+  (Just (Self addr)) <- msgSelf <$> inputOrFail
+  whenJust maybeKnownAddr \knownNodeAddr ->
+    when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
+  pure addr
+
+type MakeNodeEffects chan =
+  '[ Fail,
+     MakeNode chan
+   ]
+
+type ConnHandler chan r = Connection chan -> Sem r ()
+
+makeNodes ::
+  forall chan r.
+  ( Member Async r,
+    Member (Output Log) r,
+    Member (Bus chan Message) r,
+    Member (Storage chan) r,
+    Member Resource r
+  ) =>
+  Address ->
+  ConnHandler chan (Append (MakeNodeEffects chan) r) ->
+  InterpreterFor (MakeNode chan) r
+makeNodes self handler = runMakeNode (async_ . go)
+  where
+    go :: Node chan -> Sem r ()
+    go node@(AcceptedNode NewConnection {..}) = do
+      output (LogConnected node)
+      result <- runFail $ storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
+      case result of
+        Right addr -> go (ConnectedNode $ Connection addr newConnTransport newConnChan)
+        Left err -> output (LogError node err)
+    go node@(ConnectedNode conn) = storageLockNode node do
+      output (LogConnected node)
+      result <-
+        makeNodes self handler $
+          runFail $
+            handler conn
+      output $ case result of
+        Right () -> LogDisconnected node
+        Left err -> LogError node err
+
+runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Bidirectional chan)) r
+runLookupChan = interpretLookupChanSem (\(EstablishedConnection addr) -> fmap nodeChan <$> storageLookupNode addr)
+
+runOverlayLookupChan ::
+  ( Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member Fail r,
+    Member Async r
+  ) =>
+  Address ->
+  InterpreterFor (LookupChan StatelessConnection (Inbound chan)) r
+runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr) -> do
+  mStoredChan <- lookupChan (EstablishedConnection addr)
+  Inbound <$> case mStoredChan of
+    Just Bidirectional {inboundChan} -> pure inboundChan
+    Nothing -> do
+      Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
+      inboundChan <$> makeR2ConnectedNode addr router routerOutboundChan
+
+type ConnHandlerEffects chan =
+  '[ Reader (NodeState chan),
+     LookupChan StatelessConnection (Inbound chan),
+     LookupChan EstablishedConnection (Bidirectional chan)
+   ]
+
+type PeerConnMsgHandlerEffects chan = Append (MsgHandlerEffects chan) (ConnHandlerEffects chan)
+
+r2nd ::
+  ( Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member (Storage chan) r,
+    Member (Output Log) r,
+    Member Fail r,
+    Member Async r
+  ) =>
+  MsgHandler chan (Append (PeerConnMsgHandlerEffects chan) r) ->
+  Connection chan ->
+  Sem r ()
+r2nd handler conn = runMsgHandler conn $ msgHandler handler conn
+  where
+    runMsgHandler conn = runLookupChan . runOverlayLookupChan (connAddr conn) . nodesReaderToStorage
+
+type PeerMsgHandlerEffects chan = Append (PeerConnMsgHandlerEffects chan) (MakeNodeEffects chan)
+
+runPeer ::
+  ( Member (Bus chan Message) r,
+    Member (Output Log) r,
+    Member (Storage chan) r,
+    Member Async r,
+    Member Resource r
+  ) =>
+  Address ->
+  MsgHandler chan (Append (PeerMsgHandlerEffects chan) r) ->
+  InterpreterFor (MakeNode chan) r
+runPeer self handler = self `makeNodes` r2nd handler
+
+runRouter ::
+  ( Member (Bus chan Message) r,
+    Member (Output Log) r,
+    Member (Storage chan) r,
+    Member Async r,
+    Member Resource r
+  ) =>
+  Address ->
+  InterpreterFor (MakeNode chan) r
+runRouter self = runPeer self (\conn msg -> fail $ printf "unexpected msg from %s: %s" (show $ connAddr conn) (show msg))

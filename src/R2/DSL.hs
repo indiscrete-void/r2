@@ -37,12 +37,13 @@ import R2.Bus
 import R2.Client
 import R2.Client qualified as Client
 import R2.Daemon
-import R2.Daemon qualified as Daemon
-import R2.Daemon.MakeNode
-import R2.Daemon.Node
-import R2.Daemon.Storage
 import R2.Options
 import R2.Peer
+import R2.Peer.Conn
+import R2.Peer.Log qualified as Peer
+import R2.Peer.MakeNode
+import R2.Peer.Proto
+import R2.Peer.Storage
 import System.Process.Extra
 import System.Random
 import System.Random.Stateful (Uniform (uniformM), newIOGenM)
@@ -110,7 +111,7 @@ mkLinks link =
 mkNodes ::
   ( Member (Bus chan Message) r,
     Member Sem.Async r,
-    Member (Scoped Address (Output Daemon.Log)) r,
+    Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member Resource r,
     Member (Scoped Address (AtomicState (NodeState chan))) r
@@ -124,7 +125,7 @@ mkNodes link links serveMap = do
   forM linkNodes \me@NetworkNode {nodeId = myId} -> do
     let (ServiceCommand service) = serveMap ! me
     async $
-      scoped @_ @(Output Daemon.Log) myId $
+      scoped @_ @(Output Peer.Log) myId $
         scoped @_ @(AtomicState _) myId $
           storageToAtomicState $ r2d myId service do
             let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
@@ -143,7 +144,7 @@ mkActor ::
     Member Fail r,
     Member Resource r,
     Member (Scoped Address (AtomicState (NodeState msgChan))) r,
-    Member (Scoped Address (Output Daemon.Log)) r,
+    Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped Address (Output Client.Log)) r
   ) =>
   Map NetworkNode Service ->
@@ -159,7 +160,7 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
 
   let (ServiceCommand cmd) = serveMap ! firstNode
   scoped @_ @(AtomicState _) firstNodeId $
-    scoped @_ @(Output Daemon.Log) firstNodeId $
+    scoped @_ @(Output Peer.Log) firstNodeId $
       storageToAtomicState $
         r2d firstNodeId cmd do
           makeNode $ AcceptedNode (NewConnection (Just randAddress) Socket msgLinkA)
@@ -168,9 +169,12 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   client <-
     async $
       scoped @_ @(Output Client.Log) randAddress $
-        ioToChan @_ @ByteString stdioLinkA $
-          ioToChan @_ @Message msgLinkB $
-            r2c randAddress command
+        scoped @_ @(Output Peer.Log) randAddress $
+          scoped @_ @(AtomicState _) randAddress $
+            storageToAtomicState $
+              ioToChan @_ @ByteString stdioLinkA $
+                ioToChan @_ @Message msgLinkB $
+                  r2c randAddress command
 
   result <- ioToChan stdioLinkB m
   await_ client
@@ -181,7 +185,7 @@ type NetworkEffects msgChan stdioChan =
   '[ Scoped CreateProcess Sem.Process,
      Bus msgChan Message,
      Bus stdioChan ByteString,
-     Scoped Address (Output Daemon.Log),
+     Scoped Address (Output Peer.Log),
      Scoped Address (Output Client.Log),
      Scoped Address (AtomicState (NodeState msgChan)),
      Fail,
@@ -244,7 +248,7 @@ dslToIO verbosity =
     . failToEmbed @IO
     . storagesToIO
     . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
-    . runScopedNew @_ @(Output Daemon.Log) (\addr -> traceTagged (show addr) . Daemon.logToTrace verbosity "<unknown cmd>" . raiseUnder @Trace)
+    . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity "<unknown cmd>" . raiseUnder @Trace)
     . interpretBusTBM @_ @ByteString queueSize
     . interpretBusTBM @_ @Message queueSize
     . scopedProcToIOFinal bufferSize

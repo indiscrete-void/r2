@@ -4,6 +4,7 @@ import Data.Maybe
 import Debug.Trace
 import Polysemy
 import Polysemy.Async
+import Polysemy.Extra.Async
 import Polysemy.Fail
 import Polysemy.Process
 import Polysemy.Process qualified as Sem
@@ -13,10 +14,12 @@ import Polysemy.Serialize
 import Polysemy.Transport
 import R2
 import R2.Bus
-import R2.Daemon.MakeNode
-import R2.Daemon.Node
 import R2.Peer
+import R2.Peer.Conn
+import R2.Peer.MakeNode
+import R2.Peer.Proto
 import System.Process.Extra
+import Control.Monad
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,
@@ -31,19 +34,20 @@ listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r) => Sem r
 listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 
 connectNode ::
-  ( Members (Transport Message Message) r,
-    Member (MakeNode q) r,
+  ( Member (MakeNode q) r,
     Member (Bus q Message) r,
     Member Fail r,
-    Member Async r
+    Member Async r,
+    Member (LookupChan EstablishedConnection (Bidirectional q)) r
   ) =>
   Address ->
   ProcessTransport ->
   Maybe Address ->
   Sem r ()
-connectNode router transport maybeNewNodeID = do
-  chan <- makeAcceptedNode maybeNewNodeID (Pipe router transport)
-  msgToIO $ runSerialization $ chanToIO chan
+connectNode router _ (Just addr) = do
+  Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
+  void $ makeR2ConnectedNode addr router routerOutboundChan
+connectNode _ _ Nothing = fail "node without addr unsupported"
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
