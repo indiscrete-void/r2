@@ -6,6 +6,7 @@ module R2
     R2Message (..),
     r2,
     defaultAddr,
+    (/>),
   )
 where
 
@@ -15,11 +16,13 @@ import Data.ByteString.Base58
 import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
 import Data.DoubleWord
+import Data.String (IsString (..))
 import Data.Text qualified as Text
 import Data.Word
 import GHC.Generics
 import Serial.Aeson.Options
 import System.Random.Stateful
+import Text.Printf (printf)
 
 newtype Address = Addr {unAddr :: String}
   deriving stock (Ord, Eq, Generic)
@@ -29,6 +32,12 @@ instance Show Address where
 
 defaultAddr :: Address
 defaultAddr = Addr "<default>"
+
+instance IsString Address where
+  fromString = Addr
+
+(/>) :: Address -> Address -> Address
+Addr addr1 /> Addr addr2 = Addr $ printf "%s/%s" addr1 addr2
 
 instance Uniform Address where
   uniformM g = Addr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g

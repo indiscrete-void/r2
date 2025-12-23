@@ -4,7 +4,6 @@ import Polysemy
 import R2
 import System.Random (Uniform, initStdGen)
 import System.Random.Stateful (newIOGenM, uniformM)
-import Text.Printf (printf)
 
 data Random m a where
   UniformlyRandom :: forall a m. (Uniform a) => Random m a
@@ -20,7 +19,7 @@ randomToIO m = do
     go stdGen = interpret \case
       UniformlyRandom -> embed $ uniformM stdGen
 
-childAddr :: (Member Random r, Show a) => a -> Sem r Address
+childAddr :: (Member Random r) => Address -> Sem r Address
 childAddr server = do
   addr <- uniformlyRandom @Address
-  pure $ Addr $ printf "%s/child/%s" (show server) (show addr)
+  pure $ server /> "child" /> addr
