@@ -131,7 +131,7 @@ handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound .
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg
 
-type MsgHandler chan r = Connection chan -> Message -> Sem r ()
+type MsgHandler chan r = Connection chan -> Maybe Message -> Sem r ()
 
 handlePeerR2Msg ::
   ( Member (Bus chan Message) r,
@@ -141,9 +141,9 @@ handlePeerR2Msg ::
   ) =>
   MsgHandler chan r ->
   Connection chan ->
-  Message ->
+  Maybe Message ->
   Sem r ()
-handlePeerR2Msg _ conn (MsgR2 msg) = handleR2Msg (connAddr conn) msg
+handlePeerR2Msg _ conn (Just (MsgR2 msg)) = handleR2Msg (connAddr conn) msg
 handlePeerR2Msg handleNonR2Msg conn msg = handleNonR2Msg conn msg
 
 type MsgHandlerEffects chan = Transport Message Message
@@ -158,8 +158,12 @@ msgHandler ::
   Connection chan ->
   Sem r ()
 msgHandler handleNonR2Msg conn =
-  ioToNodeBusChanLogged (ConnectedNode conn) $
-    handle (handlePeerR2Msg handleNonR2Msg conn)
+  ioToNodeBusChanLogged (ConnectedNode conn) go
+  where
+    go = do
+      mIn <- input
+      handlePeerR2Msg handleNonR2Msg conn mIn
+      whenJust mIn (const go)
 
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,

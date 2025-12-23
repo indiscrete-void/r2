@@ -2,6 +2,7 @@ module R2.Daemon (acceptSockets, logToTrace, r2d, r2Socketd, r2dIO) where
 
 import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
 import Control.Exception (IOException, finally)
+import Control.Monad.Extra
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
@@ -56,7 +57,7 @@ r2d ::
   Address ->
   String ->
   InterpreterFor (MakeNode chan) r
-r2d self cmd = runPeer self (handleMsg cmd)
+r2d self cmd = runPeer self (\conn msg -> whenJust msg $ handleMsg cmd conn)
 
 r2Socketd ::
   ( Member (Accept sock) r,
