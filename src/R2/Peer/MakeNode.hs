@@ -1,16 +1,21 @@
-module R2.Daemon.MakeNode
+module R2.Peer.MakeNode
   ( MakeNode (..),
     makeNode,
     makeAcceptedNode,
     makeConnectedNode,
     runMakeNode,
+    makeR2ConnectedNode,
   )
 where
 
 import Polysemy
+import Polysemy.Async
+import Polysemy.Extra.Async
 import R2
 import R2.Bus
-import R2.Daemon.Node
+import R2.Peer.Conn
+import R2.Peer.Proto
+import Control.Monad.Loops
 
 data MakeNode chan m a where
   MakeNode :: Node chan -> MakeNode chan m ()
@@ -39,6 +44,26 @@ makeConnectedNode ::
 makeConnectedNode addr transport = do
   chan <- makeBidirectionalChan
   makeNode $ ConnectedNode (Connection addr transport chan)
+  pure chan
+
+outboundChanToR2 :: (Member (Bus chan Message) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
+outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
+  whileJust_
+    (busChan chan takeChan)
+    (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr)
+
+makeR2ConnectedNode ::
+  ( Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member Async r
+  ) =>
+  Address ->
+  Address ->
+  Outbound chan ->
+  Sem r (Bidirectional chan)
+makeR2ConnectedNode addr router routerOutboundChan = do
+  chan@Bidirectional {outboundChan = Outbound -> clientOutboundChan} <- makeConnectedNode addr (R2 router)
+  async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
   pure chan
 
 runMakeNode :: (Node chan -> Sem r ()) -> Sem (MakeNode chan ': r) a -> Sem r a

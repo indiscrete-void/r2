@@ -1,4 +1,4 @@
-module R2.Daemon.Node
+module R2.Peer.Conn
   ( ConnTransport (..),
     NewConnection (..),
     Connection (..),
@@ -10,9 +10,9 @@ where
 
 import R2
 import R2.Bus
-import R2.Peer
+import R2.Peer.Proto
 
-data ConnTransport = R2 Address | Pipe Address ProcessTransport | Socket
+data ConnTransport = R2 Address | Pipe ProcessTransport | Socket
   deriving stock (Show)
 
 data NewConnection chan = NewConnection

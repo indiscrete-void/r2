@@ -6,7 +6,7 @@ import Polysemy.Transport
 import R2.Client
 import R2.DSL
 import R2.Options
-import R2.Peer (ProcessTransport (Stdio))
+import R2.Peer.Proto (ProcessTransport (Stdio))
 
 newtype Options = Options Verbosity
 

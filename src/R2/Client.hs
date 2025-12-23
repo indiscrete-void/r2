@@ -7,18 +7,26 @@ import Data.ByteString (ByteString)
 import Network.Socket.Address
 import Polysemy
 import Polysemy.Async
+import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
+import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
+import Polysemy.Wait
 import R2
-import R2.Client.Chain
+import R2.Bus
 import R2.Options
 import R2.Peer
+import R2.Peer.Conn
+import R2.Peer.Log qualified as Peer
+import R2.Peer.MakeNode
+import R2.Peer.Proto
+import R2.Peer.Storage
 import R2.Socket
 import System.IO
 import System.Process.Extra
@@ -80,43 +88,43 @@ listNodes = do
   (ResNodeList list) <- inputOrFail
   output $ show list
 
-procToMsg ::
-  ( Member ByteInputWithEOF r,
-    Member ByteOutput r,
-    Member Close r,
+procToIO ::
+  ( Members (Transport ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
-    Members (Transport Message Message) r,
-    Member Async r,
     Member (Output Log) r
   ) =>
   ProcessTransport ->
-  Sem r ()
-procToMsg transport =
-  let go Stdio = ioToMsg
-      go (Process cmd) = execIO (ioShell cmd) ioToMsg
-   in inToLog (LogInput transport) $
-        outToLog (LogOutput transport) $
-          go transport
+  InterpretersFor '[Input (Maybe ByteString), Output ByteString, Close] r
+procToIO transport m =
+  inToLog (LogInput transport) $
+    outToLog (LogOutput transport) $
+      go transport
+  where
+    go Stdio = subsume_ m
+    go (Process cmd) = execIO (ioShell cmd) $ raise3Under @Wait m
 
 connectNode ::
   ( Member Async r,
     Members (Transport Message Message) r,
     Members (Transport ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
-    Member (Output Log) r
+    Member (Output Log) r,
+    Member (Bus chan Message) r,
+    Member Fail r,
+    Member (MakeNode chan) r
   ) =>
+  Address ->
   ProcessTransport ->
   Maybe Address ->
   Sem r ()
-connectNode transport maybeAddress = do
-  output (ReqConnectNode transport maybeAddress)
-  case maybeAddress of
-    Just addr ->
-      inToLog (LogRecv addr) $
-        outToLog (LogSend addr) $
-          procToMsg transport
-    Nothing ->
-      procToMsg transport
+connectNode self transport (Just addr) = do
+  output $ ReqConnectNode transport $ Just addr
+  procToIO transport $ runSerialization $ do
+    routerAddr <- exchangeSelves self Nothing
+    procConnChan@Bidirectional {outboundChan = Outbound -> routerOutboundChan} <- makeConnectedNode routerAddr (Pipe transport)
+    _ <- makeR2ConnectedNode addr routerAddr routerOutboundChan
+    chanToIO procConnChan
+connectNode _ _ Nothing = fail "node without addr unsupported"
 
 connectTransport ::
   ( Member (Input (Maybe ByteString)) r,
@@ -128,7 +136,7 @@ connectTransport ::
   ) =>
   ProcessTransport ->
   Sem r ()
-connectTransport transport = output ReqTunnelProcess >> procToMsg transport
+connectTransport transport = output ReqTunnelProcess >> procToIO transport ioToMsg
 
 handleAction ::
   ( Members (Transport Message Message) r,
@@ -137,13 +145,30 @@ handleAction ::
     Member (Output String) r,
     Member Fail r,
     Member Async r,
-    Member (Output Log) r
+    Member (Output Log) r,
+    Member (Bus chan Message) r,
+    Member (MakeNode chan) r
   ) =>
+  Address ->
   Action ->
   Sem r ()
-handleAction Ls = listNodes
-handleAction (Connect transport maybeAddress) = connectNode transport maybeAddress
-handleAction (Tunnel transport) = connectTransport transport
+handleAction _ Ls = listNodes
+handleAction server (Connect transport maybeAddress) = connectNode server transport maybeAddress
+handleAction _ (Tunnel transport) = connectTransport transport
+
+makeChain ::
+  ( Member (Bus chan Message) r,
+    Member (MakeNode chan) r,
+    Member Async r
+  ) =>
+  Address ->
+  Outbound chan ->
+  [Address] ->
+  Sem r (Outbound chan)
+makeChain _ routerOutboundChan [] = pure routerOutboundChan
+makeChain router routerOutboundChan (target : rest) = do
+  nextChan <- makeR2ConnectedNode target router routerOutboundChan
+  makeChain target (Outbound $ outboundChan nextChan) rest
 
 r2c ::
   ( Members (Transport Message Message) r,
@@ -152,7 +177,11 @@ r2c ::
     Member Fail r,
     Member Async r,
     Member (Output Log) r,
-    Member (Output String) r
+    Member (Output String) r,
+    Member (Bus chan Message) r,
+    Member (Output Peer.Log) r,
+    Member (Storage chan) r,
+    Member Resource r
   ) =>
   Address ->
   Command ->
@@ -166,10 +195,17 @@ r2c me (Command targetChain action) = do
         [] -> server
         nodes -> last nodes
   output $ LogAction target action
-  inToLog (LogRecv server) $
-    outToLog (LogSend server) $
-      runChainSession targetChain $
-        handleAction action
+  targetInboundChan <- busMakeChan
+  let msgHandler Connection {connAddr} msg
+        | connAddr == target = busChan targetInboundChan $ putChan (Just msg)
+        | otherwise = fail $ printf "unexepcted message %s from %s" (show msg) (show connAddr)
+  runPeer me msgHandler $ do
+    serverChan <- makeConnectedNode server Socket
+    async_ $ chanToIO serverChan
+    Outbound targetOutboundChan <- makeChain server (Outbound $ outboundChan serverChan) targetChain
+    let targetChan = Bidirectional targetInboundChan targetOutboundChan
+    ioToChan @_ @Message targetChan $
+      handleAction target action
 
 r2cIO :: Verbosity -> Maybe Address -> Maybe FilePath -> Command -> IO ()
 r2cIO verbosity mSelf mSocketPath command = do
@@ -187,6 +223,7 @@ r2cIO verbosity mSelf mSocketPath command = do
     run verbosity s =
       runFinal
         . asyncToIOFinal
+        . resourceToIOFinal
         . embedToFinal @IO
         . traceIOExceptions @IOException
         . failToEmbed @IO
@@ -200,3 +237,6 @@ r2cIO verbosity mSelf mSocketPath command = do
         . outputToCLI
         . traceToStderrBuffered
         . logToTrace verbosity
+        . Peer.logToTrace verbosity ""
+        . storageToIO
+        . interpretBusTBM queueSize

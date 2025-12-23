@@ -1,4 +1,4 @@
-module R2.Daemon.Storage
+module R2.Peer.Storage
   ( NodeState,
     Storage,
     storageToAtomicState,
@@ -19,7 +19,7 @@ import Polysemy.Internal.Tactics
 import Polysemy.Reader
 import Polysemy.Resource
 import R2
-import R2.Daemon.Node
+import R2.Peer.Conn
 
 type NodeState chan = [Node chan]
 
