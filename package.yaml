@@ -80,6 +80,7 @@ library:
   source-dirs: src
   exposed-modules:
     - R2
+    - R2.Random
     - R2.DSL
     - R2.Bus
     - R2.Options
