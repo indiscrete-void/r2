@@ -200,7 +200,7 @@ r2c mSelf (Command targetChain action) = do
   targetInboundChan <- busMakeChan
   let msgHandler Connection {connAddr} msg
         | connAddr == target = busChan targetInboundChan $ putChan msg
-        | otherwise = fail $ printf "unexepcted message %s from %s" (show msg) (show connAddr)
+        | otherwise = fail $ printf "unexpected message %s from %s" (show msg) (show connAddr)
   runPeer me msgHandler $ do
     serverChan <- makeConnectedNode server Socket
     async_ $ chanToIO serverChan
