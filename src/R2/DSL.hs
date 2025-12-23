@@ -44,9 +44,8 @@ import R2.Peer.Log qualified as Peer
 import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
+import R2.Random
 import System.Process.Extra
-import System.Random
-import System.Random.Stateful (Uniform (uniformM), newIOGenM)
 import Text.Printf (printf)
 
 newtype NetworkNode = NetworkNode
@@ -138,14 +137,14 @@ mkActor ::
   ( Member Sem.Async r,
     Member (Bus msgChan Message) r,
     Member (Bus stdioChan ByteString) r,
-    Member (Embed IO) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (Output String) r,
     Member Fail r,
     Member Resource r,
     Member (Scoped Address (AtomicState (NodeState msgChan))) r,
     Member (Scoped Address (Output Peer.Log)) r,
-    Member (Scoped Address (Output Client.Log)) r
+    Member (Scoped Address (Output Client.Log)) r,
+    Member Random r
   ) =>
   Map NetworkNode Service ->
   NetworkRoute ->
@@ -155,8 +154,7 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   (stdioLinkA, stdioLinkB) <- makeLink @stdioChan @ByteString
   (msgLinkA, msgLinkB) <- makeLink @msgChan @Message
 
-  gen <- embed $ initStdGen >>= newIOGenM
-  randAddress <- embed $ uniformM @Address gen
+  randAddress <- childAddr firstNodeId
 
   let (ServiceCommand cmd) = serveMap ! firstNode
   scoped @_ @(AtomicState _) firstNodeId $
@@ -174,7 +172,7 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
             storageToAtomicState $
               ioToChan @_ @ByteString stdioLinkA $
                 ioToChan @_ @Message msgLinkB $
-                  r2c randAddress command
+                  r2c (Just randAddress) command
 
   result <- ioToChan stdioLinkB m
   await_ client
@@ -182,7 +180,8 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
 mkActor _ path _ _ = fail $ "invalid path " <> show path
 
 type NetworkEffects msgChan stdioChan =
-  '[ Scoped CreateProcess Sem.Process,
+  '[ Random,
+     Scoped CreateProcess Sem.Process,
      Bus msgChan Message,
      Bus stdioChan ByteString,
      Scoped Address (Output Peer.Log),
@@ -252,6 +251,7 @@ dslToIO verbosity =
     . interpretBusTBM @_ @ByteString queueSize
     . interpretBusTBM @_ @Message queueSize
     . scopedProcToIOFinal bufferSize
+    . randomToIO
 
 data DaemonConnection = DaemonConnection
   { daemonConnProcess :: String,

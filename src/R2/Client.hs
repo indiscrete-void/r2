@@ -2,7 +2,6 @@ module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r
 
 import Control.Exception (IOException)
 import Control.Monad
-import Control.Monad.Extra (fromMaybeM)
 import Data.ByteString (ByteString)
 import Network.Socket.Address
 import Polysemy
@@ -27,11 +26,11 @@ import R2.Peer.Log qualified as Peer
 import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
+import R2.Random
+import R2.Random (randomToIO)
 import R2.Socket
 import System.IO
 import System.Process.Extra
-import System.Random
-import System.Random.Stateful
 import Text.Printf
 
 data Action
@@ -181,15 +180,19 @@ r2c ::
     Member (Bus chan Message) r,
     Member (Output Peer.Log) r,
     Member (Storage chan) r,
-    Member Resource r
+    Member Resource r,
+    Member Random r
   ) =>
-  Address ->
+  Maybe Address ->
   Command ->
   Sem r ()
-r2c me (Command targetChain action) = do
+r2c mSelf (Command targetChain action) = do
+  (Just server) <- fmap unSelf <$> contramapInput (>>= msgSelf) (input @(Maybe Self))
+  me <- case mSelf of
+    Just self -> pure self
+    Nothing -> childAddr server
   output $ LogMe me
   output (MsgSelf $ Self me)
-  (Just server) <- fmap unSelf <$> contramapInput (>>= msgSelf) (input @(Maybe Self))
   output $ LogLocalDaemon server
   let target = case targetChain of
         [] -> server
@@ -209,10 +212,9 @@ r2c me (Command targetChain action) = do
 
 r2cIO :: Verbosity -> Maybe Address -> Maybe FilePath -> Command -> IO ()
 r2cIO verbosity mSelf mSocketPath command = do
-  self <- fromMaybeM (initStdGen >>= newIOGenM >>= uniformM @Address) (pure mSelf)
   withR2Socket \s -> do
     connect s =<< r2SocketAddr mSocketPath
-    run verbosity s $ r2c self command
+    run verbosity s $ r2c mSelf command
   where
     outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
     outputToCLI = runOutputSem (embed . putStrLn)
@@ -240,3 +242,4 @@ r2cIO verbosity mSelf mSocketPath command = do
         . Peer.logToTrace verbosity ""
         . storageToIO
         . interpretBusTBM queueSize
+        . randomToIO

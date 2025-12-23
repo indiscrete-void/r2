@@ -1,5 +1,6 @@
 module R2.Daemon.Handler (StatelessConnection (..), EstablishedConnection (..), tunnelProcess, listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
+import Control.Monad
 import Data.Maybe
 import Debug.Trace
 import Polysemy
@@ -19,7 +20,6 @@ import R2.Peer.Conn
 import R2.Peer.MakeNode
 import R2.Peer.Proto
 import System.Process.Extra
-import Control.Monad
 
 tunnelProcess ::
   ( Member (Scoped CreateProcess Process) r,

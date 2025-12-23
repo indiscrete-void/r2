@@ -8,6 +8,7 @@ module R2.Peer.MakeNode
   )
 where
 
+import Control.Monad.Loops
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
@@ -15,7 +16,6 @@ import R2
 import R2.Bus
 import R2.Peer.Conn
 import R2.Peer.Proto
-import Control.Monad.Loops
 
 data MakeNode chan m a where
   MakeNode :: Node chan -> MakeNode chan m ()
