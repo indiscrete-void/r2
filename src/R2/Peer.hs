@@ -65,7 +65,7 @@ r2Socket = socket AF_UNIX Socket.Stream Socket.defaultProtocol
 resolveSocketPath :: Maybe FilePath -> IO FilePath
 resolveSocketPath customPath = do
   defaultPath <- defaultUserR2SocketPath
-  extraCustomPath <- lookupEnv "R2_SOCKET_PATH"
+  extraCustomPath <- lookupEnv "R2_SOCKET"
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
   Debug.traceM ("comunicating over \"" <> path <> "\"")
   pure path
