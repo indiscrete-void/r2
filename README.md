@@ -26,6 +26,69 @@ r2 only supports single-hop routing, which is sufficient to implement _any_ rout
 r2 is ping as long as n0 equals n1
 
 ## Examples
+### High-level
+```toml
+# /home/usual/.config/r2/alice.toml
+[self]
+addr = "alice"
+socket = "/home/usual/.local/r2/alice.sock"
+cmd = "echo hello from alice"
+
+[[conn]]
+addr = "bob"
+cmd = "socat tcp-l:47210,fork,reuseaddr exec:-%"
+```
+
+```toml
+# /home/usual/.config/r2/bob.toml
+[self]
+addr = "bob"
+socket = "/home/usual/.local/r2/bob.sock"
+cmd = "echo Hello, im bob"
+
+[[conn]]
+addr = "alice"
+cmd = "socat tcp:127.0.0.1:47210 -"
+```
+
+```sh
+usual@pop-os:~/projects/r2 (=) % r2dm -f ~/.config/r2/alice.toml &
+[1] 95688
+comunicating over "/home/usual/.local/r2/alice.sock"                                                                                                                                                         
+starting conn ResolvedNegativeConnectionCmd "socat tcp-l:47210,fork,reuseaddr exec:'r2  --socket /home/usual/.local/r2/alice.sock connect -n bob -'" (bob)
+usual@pop-os:~/projects/r2 [fg: 1] (=) % r2dm -f ~/.config/r2/bob.toml &  
+[2] 95716
+comunicating over "/home/usual/.local/r2/bob.sock"                                                                                                                                                           
+starting conn PositiveConnectionCmd "socat tcp:127.0.0.1:47210 -" (alice)
+accepted unknown node over Socket
+connection established with bob over Socket
+connection established with bob/child/F1F8uE2HmZYYQivQtSLGMp9Bvy7LyB1B8C5PC9EiXed9 over Socket
+<-bob/child/F1F8uE2HmZYYQivQtSLGMp9Bvy7LyB1B8C5PC9EiXed9: connecting alice over Process "socat tcp:127.0.0.1:47210 -"
+connection established with alice over R2 bob/child/F1F8uE2HmZYYQivQtSLGMp9Bvy7LyB1B8C5PC9EiXed9
+comunicating over "/home/usual/.local/r2/alice.sock"
+accepted unknown node over Socket
+connection established with alice/child/A2DuXJpGQbxE2gNbv4qiqiAsrv9EeESDrxtFbra3ERnw over Socket
+connection established with alice over Socket
+connection established with bob over Pipe Stdio
+connection established with alice over Pipe (Process "socat tcp:127.0.0.1:47210 -")
+connection established with bob over R2 bob
+connection established with alice over R2 alice
+<-alice/child/A2DuXJpGQbxE2gNbv4qiqiAsrv9EeESDrxtFbra3ERnw: connecting bob over Stdio
+connection established with bob over R2 alice/child/A2DuXJpGQbxE2gNbv4qiqiAsrv9EeESDrxtFbra3ERnw
+usual@pop-os:~/projects/r2 [fg: 2] (=) % r2 -s ~/.local/r2/alice.sock -t bob ls
+comunicating over "/home/usual/.local/r2/alice.sock"
+accepted unknown node over Socket
+connection established with alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp over Socket
+connection established with alice over Socket
+connection established with bob over R2 alice
+connection established with alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp over R2 alice
+<-alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp: listing connected nodes
+->alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp: ResNodeList [alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp,alice,bob/child/F1F8uE2HmZYYQivQtSLGMp9Bvy7LyB1B8C5PC9EiXed9]
+[alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp,alice,bob/child/F1F8uE2HmZYYQivQtSLGMp9Bvy7LyB1B8C5PC9EiXed9]
+alice/child/F5BiNC5Qu4KYLmNMQBeWn57tM3Cvi8KHrqfzd8RZvbyp disconnected
+```
+
+### Low-level
 ```sh
 # run daemon with ioshd posing as tunnel process
 r2d ioshd
