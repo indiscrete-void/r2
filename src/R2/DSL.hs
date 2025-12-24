@@ -276,7 +276,7 @@ data DaemonDescription = DaemonDescription
 connRestartDelay :: Integer
 connRestartDelay = toMicroseconds (2718 :: Millisecond)
 
-runManagedDaemonConn :: Verbosity -> Maybe FilePath -> DaemonConnection -> IO ()
+runManagedDaemonConn :: Verbosity -> FilePath -> DaemonConnection -> IO ()
 runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr) = do
   result <- IO.try @SomeException $ r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process linkCmd) mConnAddr)
   let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
@@ -290,6 +290,7 @@ runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd 
 
 runManagedDaemon :: DaemonDescription -> IO (MVar ())
 runManagedDaemon DaemonDescription {..} = do
-  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath daemonTunnelProcess
-  forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
+  socketPath <- resolveSocketPath daemonSocketPath
+  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress socketPath daemonTunnelProcess
+  forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity socketPath)
   pure joinDaemon

@@ -1,5 +1,5 @@
 module R2.Peer
-  ( r2SocketAddr,
+  ( resolveSocketPath,
     r2Socket,
     withR2Socket,
     bufferSize,
@@ -62,13 +62,13 @@ defaultUserR2SocketPath = go <$> getEffectiveUserID
 r2Socket :: IO Socket
 r2Socket = socket AF_UNIX Socket.Stream Socket.defaultProtocol
 
-r2SocketAddr :: Maybe FilePath -> IO SockAddr
-r2SocketAddr customPath = do
+resolveSocketPath :: Maybe FilePath -> IO FilePath
+resolveSocketPath customPath = do
   defaultPath <- defaultUserR2SocketPath
   extraCustomPath <- lookupEnv "PNET_SOCKET_PATH"
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
   Debug.traceM ("comunicating over \"" <> path <> "\"")
-  pure $ SockAddrUnix path
+  pure path
 
 withR2Socket :: (Socket -> IO a) -> IO a
 withR2Socket = IO.bracket r2Socket Socket.close

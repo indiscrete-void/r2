@@ -3,7 +3,7 @@ module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r
 import Control.Exception (IOException)
 import Control.Monad
 import Data.ByteString (ByteString)
-import Network.Socket.Address
+import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
@@ -209,10 +209,10 @@ r2c mSelf (Command targetChain action) = do
     ioToChan @_ @Message targetChan $
       handleAction target action
 
-r2cIO :: Verbosity -> Maybe Address -> Maybe FilePath -> Command -> IO ()
-r2cIO verbosity mSelf mSocketPath command = do
+r2cIO :: Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
+r2cIO verbosity mSelf socketPath command = do
   withR2Socket \s -> do
-    connect s =<< r2SocketAddr mSocketPath
+    IO.connect s (IO.SockAddrUnix socketPath)
     run verbosity s $ r2c mSelf command
   where
     outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
