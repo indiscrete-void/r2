@@ -35,6 +35,7 @@ commandOpts =
       ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
           <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
           <> command "tunnel" (info tunnelOpts $ progDesc "Provide transport for application layer")
+          <> command "serve" (info serveOpts $ progDesc "Serve application layer command")
       )
 
 lsOpts :: Parser Action
@@ -45,3 +46,6 @@ connectOpts = Connect <$> argument processTransport (metavar "TRANSPORT") <*> op
 
 tunnelOpts :: Parser Action
 tunnelOpts = Tunnel <$> argument processTransport (metavar "TRANSPORT")
+
+serveOpts :: Parser Action
+serveOpts = Serve <$> optional (option address $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT")

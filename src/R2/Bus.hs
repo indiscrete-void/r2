@@ -21,10 +21,13 @@ module R2.Bus
     makeBidirectionalChan,
     interpretLookupChanSem,
     reinterpretLookupChan,
+    linkChansOneWay,
+    linkChansBidirectional,
   )
 where
 
 import Control.Concurrent.STM.TBMQueue
+import Control.Monad.Extra
 import Control.Monad.Loops
 import GHC.Conc.Sync
 import Polysemy
@@ -89,6 +92,21 @@ chanToIO Bidirectional {..} =
     [ busChan inboundChan $ whileJust_ input (busChan inboundChan . putChan . Just) >> putChan Nothing,
       busChan outboundChan $ whileJust_ takeChan output >> close
     ]
+
+linkChansOneWay :: (Member (Bus chan d) r) => chan -> chan -> Sem r ()
+linkChansOneWay inboundChan outboundChan = do
+  d <- busChan outboundChan takeChan
+  busChan inboundChan $ putChan d
+  whenJust d $ const (linkChansOneWay inboundChan outboundChan)
+
+linkChansBidirectional :: (Member (Bus chan d) r, Member Async r) => Bidirectional chan -> Bidirectional chan -> Sem r ()
+linkChansBidirectional
+  Bidirectional {inboundChan = inboundA, outboundChan = outboundA}
+  Bidirectional {inboundChan = inboundB, outboundChan = outboundB} = do
+    sequenceConcurrently_
+      [ linkChansOneWay inboundA outboundB,
+        linkChansOneWay inboundB outboundA
+      ]
 
 type family AddressChan addr chan
 

@@ -58,6 +58,7 @@ data Message where
   MsgExit :: Message
   ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
   ReqTunnelProcess :: Message
+  ResTunnelProcess :: Address -> Message
   ReqListNodes :: Message
   ResNodeList :: [Address] -> Message
   deriving stock (Eq, Show, Generic)

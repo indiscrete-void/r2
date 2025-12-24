@@ -11,7 +11,6 @@ import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
-import Polysemy.Process qualified as Sem
 import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.ScopedBundle
@@ -31,7 +30,6 @@ import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Socket
-import System.Process.Extra
 
 acceptSockets ::
   ( Member (Accept sock) r,
@@ -50,19 +48,16 @@ r2d ::
   ( Member (Bus chan Message) r,
     Member (Output Log) r,
     Member (Storage chan) r,
-    Member (Scoped CreateProcess Process) r,
     Member Async r,
     Member Resource r
   ) =>
   Address ->
-  String ->
   InterpreterFor (MakeNode chan) r
-r2d self cmd = runPeer self (\conn msg -> whenJust msg $ handleMsg cmd conn)
+r2d self = runPeer self (\conn msg -> whenJust msg $ handleMsg conn)
 
 r2Socketd ::
   ( Member (Accept sock) r,
     Member (Storage chan) r,
-    Member (Scoped CreateProcess Sem.Process) r,
     Member (Sockets Message Message sock) r,
     Member (Bus chan Message) r,
     Member Resource r,
@@ -70,17 +65,16 @@ r2Socketd ::
     Member (Output Log) r
   ) =>
   Address ->
-  String ->
   Sem r ()
-r2Socketd self cmd = r2d self cmd acceptSockets
+r2Socketd self = r2d self acceptSockets
 
-r2dIO :: Verbosity -> Bool -> Address -> FilePath -> String -> IO (Maybe (MVar ()))
-r2dIO verbosity fork self socketPath cmd = do
+r2dIO :: Verbosity -> Bool -> Address -> FilePath -> IO (Maybe (MVar ()))
+r2dIO verbosity fork self socketPath = do
   s <- r2Socket
   IO.bind s (IO.SockAddrUnix socketPath)
   IO.listen s 5
   forkIf fork $
-    run verbosity cmd s (r2Socketd self cmd) `finally` IO.close s
+    run verbosity s (r2Socketd self) `finally` IO.close s
   where
     forkIf :: Bool -> IO () -> IO (Maybe (MVar ()))
     forkIf True m = do
@@ -110,7 +104,7 @@ r2dIO verbosity fork self socketPath cmd = do
         r
     runServerSocket bufferSize s = acceptToIO s . runScopedSocket bufferSize
 
-    run verbosity cmd s =
+    run verbosity s =
       runFinal @IO
         . interpretRace
         . asyncToIOFinal
@@ -128,4 +122,4 @@ r2dIO verbosity fork self socketPath cmd = do
         . storageToIO
         -- log application events
         . traceToStdoutBuffered
-        . logToTrace verbosity cmd
+        . logToTrace verbosity
