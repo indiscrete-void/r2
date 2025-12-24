@@ -10,6 +10,7 @@ import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Data.IORef
 import Data.List qualified as List
+import Data.List.Extra
 import Data.Map (Map, (!))
 import Data.Map qualified as Map
 import Data.Time.Units
@@ -45,6 +46,7 @@ import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Random
+import System.Exit (ExitCode (..))
 import System.Process.Extra
 import Text.Printf (printf)
 
@@ -260,14 +262,33 @@ dslToIO verbosity serveList =
         . scopedProcToIOFinal bufferSize
         . randomToIO
 
+data DaemonConnectionCmd
+  = PositiveConnectionCmd String
+  | ResolvedNegativeConnectionCmd String
+  deriving stock (Show)
+
+negativeCmdPattern :: String
+negativeCmdPattern = "-%"
+
+resolveConnectionCmd :: Verbosity -> FilePath -> Maybe Address -> String -> DaemonConnectionCmd
+resolveConnectionCmd verbosity socketPath daemonConnAddress daemonConnProcess =
+  if negativeCmdPattern `isInfixOf` daemonConnProcess
+    then
+      let connectCmd :: String = printf "'r2 %s --socket %s connect %s -'" r2Opts socketPath connectOpts
+            where
+              r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
+              connectOpts :: String = case daemonConnAddress of Just (Addr addr) -> printf "-n %s" addr; Nothing -> ""
+       in ResolvedNegativeConnectionCmd $ replace "-%" connectCmd daemonConnProcess
+    else PositiveConnectionCmd daemonConnProcess
+
 data DaemonConnection = DaemonConnection
-  { daemonConnProcess :: String,
+  { daemonConnProcess :: DaemonConnectionCmd,
     daemonConnAddress :: Maybe Address
   }
 
 data DaemonDescription = DaemonDescription
   { daemonAddress :: Address,
-    daemonSocketPath :: Maybe FilePath,
+    daemonSocketPath :: FilePath,
     daemonTunnelProcess :: String,
     daemonLinks :: [DaemonConnection],
     daemonVerbosity :: Verbosity
@@ -276,21 +297,33 @@ data DaemonDescription = DaemonDescription
 connRestartDelay :: Integer
 connRestartDelay = toMicroseconds (2718 :: Millisecond)
 
+callCommandNoCtrlC :: String -> IO ()
+callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ shell cmd) cleanupProcess \(_, _, _, ph) -> do
+  exitCode <- waitForProcess ph
+  case exitCode of
+    ExitSuccess -> return ()
+    ExitFailure r -> fail $ printf "%s: (exit %d)" cmd r
+
+runDaemonConn :: Verbosity -> FilePath -> DaemonConnection -> IO ()
+runDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection {daemonConnAddress, daemonConnProcess = PositiveConnectionCmd cmd}) =
+  r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process cmd) daemonConnAddress)
+runDaemonConn _ _ (DaemonConnection {daemonConnProcess = ResolvedNegativeConnectionCmd cmd}) = callCommandNoCtrlC cmd
+
 runManagedDaemonConn :: Verbosity -> FilePath -> DaemonConnection -> IO ()
-runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr) = do
-  result <- IO.try @SomeException $ r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] (Connect (Process linkCmd) mConnAddr)
+runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection linkCmd mConnAddr) = do
   let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
+  printf "starting conn %s%s\n" (show linkCmd) displayConnAddr
+  result <- IO.try @SomeException $ runDaemonConn daemonVerbosity daemonSocketPath conn
   let displayDelay = show $ fromInteger @Second connRestartDelay
   let displayCause :: String = case result of
         Right () -> "exited"
         Left err -> printf "exited unexpectedly: %s" (show err)
-  printf "conn %s%s %s. restarting in %s" linkCmd displayConnAddr displayCause displayDelay
+  printf "conn %s%s %s. restarting in %s" (show linkCmd) displayConnAddr displayCause displayDelay
   threadDelay $ fromInteger connRestartDelay
   runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr)
 
 runManagedDaemon :: DaemonDescription -> IO (MVar ())
 runManagedDaemon DaemonDescription {..} = do
-  socketPath <- resolveSocketPath daemonSocketPath
-  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress socketPath daemonTunnelProcess
-  forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity socketPath)
+  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath daemonTunnelProcess
+  forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
   pure joinDaemon
