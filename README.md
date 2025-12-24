@@ -56,6 +56,7 @@ usual@pop-os:~/projects/r2 (=) % r2dm -f ~/.config/r2/alice.toml &
 [1] 95688
 comunicating over "/home/usual/.local/r2/alice.sock"                                                                                                                                                         
 starting conn ResolvedNegativeConnectionCmd "socat tcp-l:47210,fork,reuseaddr exec:'r2  --socket /home/usual/.local/r2/alice.sock connect -n bob -'" (bob)
+
 usual@pop-os:~/projects/r2 [fg: 1] (=) % r2dm -f ~/.config/r2/bob.toml &  
 [2] 95716
 comunicating over "/home/usual/.local/r2/bob.sock"                                                                                                                                                           
@@ -75,6 +76,7 @@ connection established with bob over R2 bob
 connection established with alice over R2 alice
 <-alice/child/A2DuXJpGQbxE2gNbv4qiqiAsrv9EeESDrxtFbra3ERnw: connecting bob over Stdio
 connection established with bob over R2 alice/child/A2DuXJpGQbxE2gNbv4qiqiAsrv9EeESDrxtFbra3ERnw
+
 usual@pop-os:~/projects/r2 [fg: 2] (=) % r2 -s ~/.local/r2/alice.sock -t bob ls
 comunicating over "/home/usual/.local/r2/alice.sock"
 accepted unknown node over Socket
