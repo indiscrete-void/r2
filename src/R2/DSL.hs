@@ -318,7 +318,7 @@ runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection lin
   let displayCause :: String = case result of
         Right () -> "exited"
         Left err -> printf "exited unexpectedly: %s" (show err)
-  printf "conn %s%s %s. restarting in %s" (show linkCmd) displayConnAddr displayCause displayDelay
+  printf "conn %s%s %s. restarting in %s\n" (show linkCmd) displayConnAddr displayCause displayDelay
   threadDelay $ fromInteger connRestartDelay
   runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr)
 
