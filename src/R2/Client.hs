@@ -2,10 +2,12 @@ module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r
 
 import Control.Exception (IOException)
 import Control.Monad
+import Control.Monad.Extra
 import Data.ByteString (ByteString)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
+import Polysemy.Conc (interpretLockReentrant, interpretMaskFinal, interpretRace)
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
@@ -36,6 +38,7 @@ data Action
   = Ls
   | Connect !ProcessTransport !(Maybe Address)
   | Tunnel !ProcessTransport
+  | Serve (Maybe Address) !ProcessTransport
   deriving stock (Show)
 
 data Command = Command
@@ -101,6 +104,20 @@ procToIO transport m =
     go Stdio = subsume_ m
     go (Process cmd) = execIO (ioShell cmd) $ raise3Under @Wait m
 
+procToMsg ::
+  ( Member (Input (Maybe ByteString)) r,
+    Member (Scoped CreateProcess Process) r,
+    Member (Output ByteString) r,
+    Member (Output Log) r,
+    Member (Input (Maybe Message)) r,
+    Member (Output Message) r,
+    Member Close r,
+    Member Async r
+  ) =>
+  ProcessTransport ->
+  Sem r ()
+procToMsg transport = procToIO transport ioToMsg
+
 connectNode ::
   ( Member Async r,
     Members (Transport Message Message) r,
@@ -134,7 +151,54 @@ connectTransport ::
   ) =>
   ProcessTransport ->
   Sem r ()
-connectTransport transport = output ReqTunnelProcess >> procToIO transport ioToMsg
+connectTransport transport = do
+  output ReqTunnelProcess
+  procToMsg transport
+
+serviceMsgHandler ::
+  ( Members (Transport ByteString ByteString) r,
+    Members (Transport Message Message) r,
+    Member (Scoped CreateProcess Process) r,
+    Member (Output Log) r,
+    Member Fail r,
+    Member Async r
+  ) =>
+  ProcessTransport ->
+  Connection chan ->
+  Maybe Message ->
+  Sem r ()
+serviceMsgHandler transport _ msg = whenJust msg \case
+  ReqTunnelProcess -> procToIO transport ioToMsg
+  msg -> fail $ "unexpected message received from service " <> show msg
+
+serveTransport ::
+  ( Members (Transport ByteString ByteString) r,
+    Member (Scoped CreateProcess Process) r,
+    Member (Bus chan Message) r,
+    Members (Transport Message Message) r,
+    Member Async r,
+    Member (Output Log) r,
+    Member (MakeNode chan) r,
+    Member (Storages chan) r,
+    Member (Output Peer.Log) r,
+    Member Resource r
+  ) =>
+  Address ->
+  Maybe Address ->
+  ProcessTransport ->
+  Sem r ()
+serveTransport self mAddr transport = do
+  let serviceAddrPart = case mAddr of
+        Just addr -> addr
+        Nothing -> case transport of
+          Stdio -> Addr "stdio"
+          Process cmd -> Addr $ head $ words cmd
+  let serviceAddr = "service" /> serviceAddrPart
+  serviceChan <- makeConnectedNode serviceAddr (Pipe transport)
+  output $ ReqConnectNode transport $ Just serviceAddr
+  scoped @_ @(Storage _) serviceAddr $ runPeer serviceAddr (serviceMsgHandler transport) do
+    selfChan <- makeConnectedNode self (Pipe transport)
+    linkChansBidirectional selfChan serviceChan
 
 handleAction ::
   ( Members (Transport Message Message) r,
@@ -145,14 +209,19 @@ handleAction ::
     Member Async r,
     Member (Output Log) r,
     Member (Bus chan Message) r,
-    Member (MakeNode chan) r
+    Member (MakeNode chan) r,
+    Member (Output Peer.Log) r,
+    Member Resource r,
+    Member (Storages chan) r
   ) =>
   Address ->
+  Connection chan ->
   Action ->
   Sem r ()
-handleAction _ Ls = listNodes
-handleAction server (Connect transport maybeAddress) = connectNode server transport maybeAddress
-handleAction _ (Tunnel transport) = connectTransport transport
+handleAction _ _ Ls = listNodes
+handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
+handleAction _ _ (Tunnel transport) = connectTransport transport
+handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
 
 makeChain ::
   ( Member (Bus chan Message) r,
@@ -178,7 +247,7 @@ r2c ::
     Member (Output String) r,
     Member (Bus chan Message) r,
     Member (Output Peer.Log) r,
-    Member (Storage chan) r,
+    Member (Storages chan) r,
     Member Resource r,
     Member Random r
   ) =>
@@ -201,13 +270,14 @@ r2c mSelf (Command targetChain action) = do
   let msgHandler Connection {connAddr} msg
         | connAddr == target = busChan targetInboundChan $ putChan msg
         | otherwise = fail $ printf "unexpected message %s from %s" (show msg) (show connAddr)
-  runPeer me msgHandler $ do
+  scoped @_ @(Storage _) me $ runPeer me msgHandler $ do
     serverChan <- makeConnectedNode server Socket
     async_ $ chanToIO serverChan
     Outbound targetOutboundChan <- makeChain server (Outbound $ outboundChan serverChan) targetChain
     let targetChan = Bidirectional targetInboundChan targetOutboundChan
-    ioToChan @_ @Message targetChan $
-      handleAction target action
+    ioToChan @_ @Message targetChan do
+      let targetConn = Connection {connAddr = target, connChan = targetChan, connTransport = Socket}
+      handleAction me targetConn action
 
 r2cIO :: Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
 r2cIO verbosity mSelf socketPath command = do
@@ -224,7 +294,9 @@ r2cIO verbosity mSelf socketPath command = do
     run verbosity s =
       runFinal
         . asyncToIOFinal
+        . interpretMaskFinal
         . resourceToIOFinal
+        . interpretRace
         . embedToFinal @IO
         . traceIOExceptions @IOException
         . failToEmbed @IO
@@ -238,7 +310,8 @@ r2cIO verbosity mSelf socketPath command = do
         . outputToCLI
         . traceToStderrBuffered
         . logToTrace verbosity
-        . Peer.logToTrace verbosity ""
-        . storageToIO
+        . Peer.logToTrace verbosity
+        . interpretLockReentrant
+        . storagesToIO
         . interpretBusTBM queueSize
         . randomToIO

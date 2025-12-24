@@ -83,18 +83,11 @@ data Network r = Network
 node :: String -> NetworkNode
 node = NetworkNode . Addr
 
-linkChans :: (Member (Bus chan d) r) => Bidirectional chan -> Bidirectional chan -> Sem r ()
-linkChans a@Bidirectional {inboundChan} b@Bidirectional {outboundChan} = do
-  d <- busChan outboundChan takeChan
-  busChan inboundChan $ putChan d
-  whenJust d $ const (linkChans a b)
-
 makeLink :: (Member (Bus chan d) r, Member Sem.Async r) => Sem r (Bidirectional chan, Bidirectional chan)
 makeLink = do
   aToB <- makeBidirectionalChan
   bToA <- makeBidirectionalChan
-  async_ $ linkChans aToB bToA
-  async_ $ linkChans bToA aToB
+  async_ $ linkChansBidirectional aToB bToA
   pure (aToB, bToA)
 
 mkLinks :: (Member (Bus chan Message) r, Member Sem.Async r) => [NetworkLink] -> Sem r (Map NetworkLink (Bidirectional chan))
@@ -115,9 +108,8 @@ mkNodes ::
   ( Member (Bus chan Message) r,
     Member Sem.Async r,
     Member (Scoped Address (Output Peer.Log)) r,
-    Member (Scoped CreateProcess Sem.Process) r,
     Member Resource r,
-    Member (Scoped Address (AtomicState (NodeState chan))) r
+    Member (Storages chan) r
   ) =>
   [NetworkLink] ->
   Map (NetworkNode, NetworkNode) (Bidirectional chan) ->
@@ -129,8 +121,8 @@ mkNodes link links serveMap = do
     let (ServiceCommand service) = serveMap ! me
     async $
       scoped @_ @(Output Peer.Log) myId $
-        scoped @_ @(AtomicState _) myId $
-          storageToAtomicState $ r2d myId service do
+        scoped @_ @(Storage _) myId $
+          r2d myId do
             let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
             forM_ myLinks \them -> do
               let chan = links ! (me, them)
@@ -145,7 +137,7 @@ mkActor ::
     Member (Output String) r,
     Member Fail r,
     Member Resource r,
-    Member (Scoped Address (AtomicState (NodeState msgChan))) r,
+    Member (Storages msgChan) r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped Address (Output Client.Log)) r,
     Member Random r
@@ -161,22 +153,20 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   randAddress <- childAddr firstNodeId
 
   let (ServiceCommand cmd) = serveMap ! firstNode
-  scoped @_ @(AtomicState _) firstNodeId $
+  scoped @_ @(Storage _) firstNodeId $
     scoped @_ @(Output Peer.Log) firstNodeId $
-      storageToAtomicState $
-        r2d firstNodeId cmd do
-          makeNode $ AcceptedNode (NewConnection (Just randAddress) Socket msgLinkA)
+      r2d firstNodeId do
+        makeNode $ AcceptedNode (NewConnection (Just randAddress) Socket msgLinkA)
 
   let command = Command (map nodeId path) action
   client <-
     async $
       scoped @_ @(Output Client.Log) randAddress $
         scoped @_ @(Output Peer.Log) randAddress $
-          scoped @_ @(AtomicState _) randAddress $
-            storageToAtomicState $
-              ioToChan @_ @ByteString stdioLinkA $
-                ioToChan @_ @Message msgLinkB $
-                  r2c (Just randAddress) command
+          scoped @_ @(Storage _) randAddress $
+            ioToChan @_ @ByteString stdioLinkA $
+              ioToChan @_ @Message msgLinkB $
+                r2c (Just randAddress) command
 
   result <- ioToChan stdioLinkB m
   await_ client
@@ -190,7 +180,7 @@ type NetworkEffects msgChan stdioChan =
      Bus stdioChan ByteString,
      Scoped Address (Output Peer.Log),
      Scoped Address (Output Client.Log),
-     Scoped Address (AtomicState (NodeState msgChan)),
+     Storages msgChan,
      Fail,
      Output String,
      Trace,
@@ -216,51 +206,25 @@ mkNet NetworkDescription {..} = do
         join = forM_ handles await
       }
 
-storagesToIO ::
-  (Member (Embed IO) r, Member Lock r) =>
-  Sem (Scoped Address (AtomicState (NodeState (TBMQueue Message))) ': r) a ->
-  Sem r a
-storagesToIO =
-  fmap snd
-    . atomicStateToIO Map.empty
-    . runScopedNew @_ @(AtomicState (NodeState (TBMQueue Message)))
-      ( \addr m -> do
-          stateRef <- lock do
-            stateMap <- atomicGet
-            case Map.lookup addr stateMap of
-              Just state -> pure state
-              Nothing -> do
-                initialState <- embed $ newIORef []
-                atomicPut $ Map.insert addr initialState stateMap
-                pure initialState
-          runAtomicStateIORef stateRef m
-      )
-    . raiseUnder
-
 dslToIO :: forall a. Verbosity -> ServeList -> Sem (NetworkEffects (TBMQueue Message) (TBMQueue ByteString)) a -> IO a
 dslToIO verbosity serveList =
-  let serveMap = Map.fromList serveList
-   in runFinal
-        . interpretMaskFinal
-        . interpretRace
-        . resourceToIOFinal
-        . Sem.asyncToIOFinal
-        . embedToFinal @IO
-        . interpretLockReentrant
-        . traceToStderrBuffered
-        . outputToTrace id
-        . failToEmbed @IO
-        . storagesToIO
-        . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
-        . runScopedNew @_ @(Output Peer.Log)
-          ( \addr ->
-              let ServiceCommand service = serveMap ! NetworkNode addr
-               in traceTagged (show addr) . Peer.logToTrace verbosity service . raiseUnder @Trace
-          )
-        . interpretBusTBM @_ @ByteString queueSize
-        . interpretBusTBM @_ @Message queueSize
-        . scopedProcToIOFinal bufferSize
-        . randomToIO
+  runFinal
+    . interpretMaskFinal
+    . interpretRace
+    . resourceToIOFinal
+    . Sem.asyncToIOFinal
+    . embedToFinal @IO
+    . interpretLockReentrant
+    . traceToStderrBuffered
+    . outputToTrace id
+    . failToEmbed @IO
+    . storagesToIO
+    . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
+    . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity . raiseUnder @Trace)
+    . interpretBusTBM @_ @ByteString queueSize
+    . interpretBusTBM @_ @Message queueSize
+    . scopedProcToIOFinal bufferSize
+    . randomToIO
 
 data DaemonConnectionCmd
   = PositiveConnectionCmd String
@@ -324,6 +288,6 @@ runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection lin
 
 runManagedDaemon :: DaemonDescription -> IO (MVar ())
 runManagedDaemon DaemonDescription {..} = do
-  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath daemonTunnelProcess
+  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath
   forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
   pure joinDaemon

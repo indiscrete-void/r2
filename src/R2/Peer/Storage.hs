@@ -1,6 +1,7 @@
 module R2.Peer.Storage
   ( NodeState,
     Storage,
+    Storages,
     storageToAtomicState,
     storageToIO,
     storageAddNode,
@@ -9,17 +10,24 @@ module R2.Peer.Storage
     storageNodes,
     storageLockNode,
     nodesReaderToStorage,
+    storagesToIO,
   )
 where
 
+import Control.Concurrent.STM.TBMQueue
+import Data.IORef
 import Data.List qualified as List
+import Data.Map qualified as Map
 import Polysemy
 import Polysemy.AtomicState
+import Polysemy.Conc.Effect.Lock
 import Polysemy.Internal.Tactics
 import Polysemy.Reader
 import Polysemy.Resource
+import Polysemy.Scoped
 import R2
 import R2.Peer.Conn
+import R2.Peer.Proto
 
 type NodeState chan = [Node chan]
 
@@ -54,3 +62,28 @@ storageToAtomicState =
 
 storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
 storageToIO = fmap snd . atomicStateToIO ([] :: NodeState chan) . storageToAtomicState . raiseUnder
+
+type Storages chan = Scoped Address (Storage chan)
+
+storagesToIO ::
+  (Member (Embed IO) r, Member Lock r) =>
+  Sem (Storages (TBMQueue Message) ': r) a ->
+  Sem r a
+storagesToIO =
+  fmap snd
+    . atomicStateToIO Map.empty
+    . runScopedNew @_ @(Storage _)
+      ( \addr m -> do
+          stateRef <- lock do
+            stateMap <- atomicGet
+            case Map.lookup addr stateMap of
+              Just state -> pure state
+              Nothing -> do
+                initialState <- embed $ newIORef []
+                atomicPut $ Map.insert addr initialState stateMap
+                pure initialState
+          runAtomicStateIORef stateRef $
+            storageToAtomicState $
+              raiseUnder @(AtomicState _) m
+      )
+    . raiseUnder
