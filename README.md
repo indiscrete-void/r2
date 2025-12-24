@@ -114,6 +114,9 @@ socat udp-l:47210 exec:"r2 connect -n 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqF
 socat udp-l:47210,fork exec:"r2 connect -"
 
 
+# exposes aaaa/service/sshd
+r2 -s /run/aaaa.sock serve "sshd -i"
+
 # exposes aaaa/service/ioshd 
 r2 -s /run/aaaa.sock serve ioshd
 
@@ -126,4 +129,7 @@ r2 -t 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC -t vpn tunnel "socat tun,iff-
 
 # connect iosh to ioshd provided as the tunnel process of 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC
 iosh "r2 -t 6Xb2RtEfug8nxD6A7Afvd3SPt4ePCibjFHLcyRqVqFgC -t ioshd tunnel -" zsh -l
+
+# ssh-tunneling
+r2-ssh alice # ssh -o ProxyCommand="r2 -t alice -t service/sshd tunnel -" r2/alice
 ```
