@@ -74,11 +74,10 @@ r2Socketd ::
   Sem r ()
 r2Socketd self cmd = r2d self cmd acceptSockets
 
-r2dIO :: Verbosity -> Bool -> Address -> Maybe FilePath -> String -> IO (Maybe (MVar ()))
-r2dIO verbosity fork self mSocketPath cmd = do
-  addr <- r2SocketAddr mSocketPath
+r2dIO :: Verbosity -> Bool -> Address -> FilePath -> String -> IO (Maybe (MVar ()))
+r2dIO verbosity fork self socketPath cmd = do
   s <- r2Socket
-  IO.bind s addr
+  IO.bind s (IO.SockAddrUnix socketPath)
   IO.listen s 5
   forkIf fork $
     run verbosity cmd s (r2Socketd self cmd) `finally` IO.close s
