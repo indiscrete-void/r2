@@ -16,5 +16,6 @@
 !src
 !cli
 !daemon
+!manager
 !examples
 !tests
