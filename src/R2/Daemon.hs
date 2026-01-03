@@ -52,8 +52,8 @@ r2d ::
     Member Resource r
   ) =>
   Address ->
-  InterpreterFor (MakeNode chan) r
-r2d self = runPeer self (\conn msg -> whenJust msg $ handleMsg conn)
+  InterpretersFor (Peer chan) r
+r2d self = runPeer self (handleR2MsgDefaultAndRestWith $ \conn msg -> nodesReaderToStorage $ whenJust msg $ handleMsg conn)
 
 r2Socketd ::
   ( Member (Accept sock) r,

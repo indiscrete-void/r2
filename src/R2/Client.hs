@@ -196,7 +196,7 @@ serveTransport self mAddr transport = do
   let serviceAddr = "service" /> serviceAddrPart
   serviceChan <- makeConnectedNode serviceAddr (Pipe transport)
   output $ ReqConnectNode transport $ Just serviceAddr
-  scoped @_ @(Storage _) serviceAddr $ runPeer serviceAddr (serviceMsgHandler transport) do
+  scoped @_ @(Storage _) serviceAddr $ runPeer serviceAddr (handleR2MsgDefaultAndRestWith $ serviceMsgHandler transport) do
     selfChan <- makeConnectedNode self (Pipe transport)
     linkChansBidirectional selfChan serviceChan
 
@@ -270,7 +270,7 @@ r2c mSelf (Command targetChain action) = do
   let msgHandler Connection {connAddr} msg
         | connAddr == target = busChan targetInboundChan $ putChan msg
         | otherwise = fail $ printf "unexpected message %s from %s" (show msg) (show connAddr)
-  scoped @_ @(Storage _) me $ runPeer me msgHandler $ do
+  scoped @_ @(Storage _) me $ runPeer me (handleR2MsgDefaultAndRestWith msgHandler) $ do
     serverChan <- makeConnectedNode server Socket
     async_ $ chanToIO serverChan
     Outbound targetOutboundChan <- makeChain server (Outbound $ outboundChan serverChan) targetChain

@@ -13,7 +13,9 @@ module R2.Peer
     routeToError,
     routedFrom,
     handleR2Msg,
+    Peer,
     runPeer,
+    handleR2MsgDefaultAndRestWith,
     runRouter,
   )
 where
@@ -22,7 +24,7 @@ import Control.Exception qualified as IO
 import Control.Monad.Extra
 import Data.Maybe
 import Debug.Trace qualified as Debug
-import Network.Socket (Family (..), SockAddr (..), Socket, socket)
+import Network.Socket (Family (..), Socket, socket)
 import Network.Socket qualified as Socket
 import Options.Applicative
 import Polysemy
@@ -30,7 +32,6 @@ import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Fail
 import Polysemy.Internal.Kind
-import Polysemy.Reader
 import Polysemy.Resource
 import Polysemy.Transport
 import R2
@@ -131,40 +132,6 @@ handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound .
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg
 
-type MsgHandler chan r = Connection chan -> Maybe Message -> Sem r ()
-
-handlePeerR2Msg ::
-  ( Member (Bus chan Message) r,
-    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r,
-    Member (Output Message) r
-  ) =>
-  MsgHandler chan r ->
-  Connection chan ->
-  Maybe Message ->
-  Sem r ()
-handlePeerR2Msg _ conn (Just (MsgR2 msg)) = handleR2Msg (connAddr conn) msg
-handlePeerR2Msg handleNonR2Msg conn msg = handleNonR2Msg conn msg
-
-type MsgHandlerEffects chan = Transport Message Message
-
-msgHandler ::
-  ( Member (Bus chan Message) r,
-    Member (Output Log) r,
-    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r
-  ) =>
-  MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
-  Connection chan ->
-  Sem r ()
-msgHandler handleNonR2Msg conn =
-  ioToNodeBusChanLogged (ConnectedNode conn) go
-  where
-    go = do
-      mIn <- input
-      handlePeerR2Msg handleNonR2Msg conn mIn
-      whenJust mIn (const go)
-
 exchangeSelves ::
   ( Member (InputWithEOF Message) r,
     Member (Output Message) r,
@@ -238,29 +205,16 @@ runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr)
       inboundChan <$> makeR2ConnectedNode addr router routerOutboundChan
 
 type ConnHandlerEffects chan =
-  '[ Reader (NodeState chan),
-     LookupChan StatelessConnection (Inbound chan),
-     LookupChan EstablishedConnection (Bidirectional chan)
+  Append
+    '[ LookupChan StatelessConnection (Inbound chan),
+       LookupChan EstablishedConnection (Bidirectional chan)
+     ]
+    (MakeNodeEffects chan)
+
+type Peer chan =
+  '[ LookupChan EstablishedConnection (Bidirectional chan),
+     MakeNode chan
    ]
-
-type PeerConnMsgHandlerEffects chan = Append (MsgHandlerEffects chan) (ConnHandlerEffects chan)
-
-r2nd ::
-  ( Member (Bus chan Message) r,
-    Member (MakeNode chan) r,
-    Member (Storage chan) r,
-    Member (Output Log) r,
-    Member Fail r,
-    Member Async r
-  ) =>
-  MsgHandler chan (Append (PeerConnMsgHandlerEffects chan) r) ->
-  Connection chan ->
-  Sem r ()
-r2nd handler conn = runMsgHandler conn $ msgHandler handler conn
-  where
-    runMsgHandler conn = runLookupChan . runOverlayLookupChan (connAddr conn) . nodesReaderToStorage
-
-type PeerMsgHandlerEffects chan = Append (PeerConnMsgHandlerEffects chan) (MakeNodeEffects chan)
 
 runPeer ::
   ( Member (Bus chan Message) r,
@@ -270,9 +224,35 @@ runPeer ::
     Member Resource r
   ) =>
   Address ->
-  MsgHandler chan (Append (PeerMsgHandlerEffects chan) r) ->
-  InterpreterFor (MakeNode chan) r
-runPeer self handler = self `makeNodes` r2nd handler
+  ConnHandler chan (Append (ConnHandlerEffects chan) r) ->
+  InterpretersFor (Peer chan) r
+runPeer self userHandler = makeNodes self handler . runLookupChan
+  where
+    handler conn@Connection {connAddr} = runLookupChan . runOverlayLookupChan connAddr $ userHandler conn
+
+type MsgHandler chan r = Connection chan -> Maybe Message -> Sem r ()
+
+type MsgHandlerEffects chan = Transport Message Message
+
+handleR2MsgDefaultAndRestWith ::
+  ( Member (Bus chan Message) r,
+    Member (Output Log) r,
+    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
+    Member (LookupChan StatelessConnection (Inbound chan)) r
+  ) =>
+  MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
+  Connection chan ->
+  Sem r ()
+handleR2MsgDefaultAndRestWith handleNonR2Msg conn = ioToNodeBusChanLogged (ConnectedNode conn) go
+  where
+    handlePeerR2Msg _ conn (Just (MsgR2 msg)) = handleR2Msg (connAddr conn) msg
+    handlePeerR2Msg handleNonR2Msg conn msg = handleNonR2Msg conn msg
+
+    go = do
+      mIn <- input
+      handlePeerR2Msg handleNonR2Msg conn mIn
+      whenJust mIn (const go)
+
 
 runRouter ::
   ( Member (Bus chan Message) r,
@@ -282,5 +262,7 @@ runRouter ::
     Member Resource r
   ) =>
   Address ->
-  InterpreterFor (MakeNode chan) r
-runRouter self = runPeer self (\conn msg -> fail $ printf "unexpected msg from %s: %s" (show $ connAddr conn) (show msg))
+  InterpretersFor (Peer chan) r
+runRouter self = runPeer self (handleR2MsgDefaultAndRestWith nonR2MsgHandler)
+  where
+    nonR2MsgHandler conn msg = fail $ printf "unexpected msg from %s: %s" (show $ connAddr conn) (show msg)
