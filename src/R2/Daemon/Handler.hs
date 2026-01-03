@@ -5,9 +5,7 @@ import Data.Maybe
 import Polysemy
 import Polysemy.Async
 import Polysemy.Fail
-import Polysemy.Process qualified as Sem
 import Polysemy.Reader
-import Polysemy.Scoped
 import Polysemy.Transport
 import R2
 import R2.Bus
@@ -40,7 +38,6 @@ handleMsg ::
     Members (Transport Message Message) r,
     Member (MakeNode chan) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r,
     Member (Bus chan Message) r,
     Member Fail r,
     Member Async r
@@ -51,6 +48,5 @@ handleMsg ::
 handleMsg Connection {..} = \case
   ReqListNodes -> listNodes
   (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
-  MsgR2 r2Msg -> handleR2Msg connAddr r2Msg
   MsgExit -> busChan (inboundChan connChan) $ putChan Nothing
   msg -> fail $ "unexpected message: " <> show msg
