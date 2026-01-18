@@ -36,6 +36,7 @@ import Polysemy.Resource
 import Polysemy.Transport
 import R2
 import R2.Bus
+import R2.Encoding
 import R2.Peer.Conn
 import R2.Peer.Log
 import R2.Peer.MakeNode
@@ -91,7 +92,7 @@ routeTo ::
     Member (LookupChan EstablishedConnection (Outbound chan)) r
   ) =>
   Address ->
-  RouteTo Message ->
+  RouteTo Base64Text ->
   Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan (EstablishedConnection routeToAddr)
@@ -111,22 +112,25 @@ routeToError (RouteToErr addr _) = do
 
 routedFrom ::
   ( Member (Bus chan Message) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member Fail r
   ) =>
-  RoutedFrom Message ->
+  RoutedFrom Base64Text ->
   Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
   Inbound chan <- lookupChan (StatelessConnection routedFromNode)
-  busChan chan $ putChan (Just routedFromData)
+  decoded <- decodeBase64Sem routedFromData
+  busChan chan $ putChan (Just decoded)
 
 handleR2Msg ::
   ( Member (Bus chan Message) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
     Member (LookupChan StatelessConnection (Inbound chan)) r,
-    Member (Output Message) r
+    Member (Output Message) r,
+    Member Fail r
   ) =>
   Address ->
-  R2Message Message ->
+  R2Message ->
   Sem r ()
 handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound . outboundChan) $ routeTo connAddr msg
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
@@ -238,7 +242,7 @@ handleR2MsgDefaultAndRestWith ::
   ( Member (Bus chan Message) r,
     Member (Output Log) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r
+    Member (LookupChan StatelessConnection (Inbound chan)) r, Member Fail r
   ) =>
   MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
   Connection chan ->
@@ -252,7 +256,6 @@ handleR2MsgDefaultAndRestWith handleNonR2Msg conn = ioToNodeBusChanLogged (Conne
       mIn <- input
       handlePeerR2Msg handleNonR2Msg conn mIn
       whenJust mIn (const go)
-
 
 runRouter ::
   ( Member (Bus chan Message) r,

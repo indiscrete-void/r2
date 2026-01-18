@@ -14,6 +14,7 @@ import Polysemy.Async
 import Polysemy.Extra.Async
 import R2
 import R2.Bus
+import R2.Encoding
 import R2.Peer.Conn
 import R2.Peer.Proto
 
@@ -50,7 +51,7 @@ outboundChanToR2 :: (Member (Bus chan Message) r) => Outbound chan -> Outbound c
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   whileJust_
     (busChan chan takeChan)
-    (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr)
+    (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr . encodeBase64)
 
 makeR2ConnectedNode ::
   ( Member (Bus chan Message) r,

@@ -27,6 +27,7 @@ import Polysemy.Fail
 import Polysemy.Transport
 import Polysemy.Transport.Extra
 import R2
+import R2.Encoding (Base64Text)
 import Serial.Aeson.Options
 
 data ProcessTransport
@@ -53,7 +54,7 @@ $(deriveJSON (aesonRemovePrefix "un") ''Self)
 
 data Message where
   MsgSelf :: Self -> Message
-  MsgR2 :: R2Message Message -> Message
+  MsgR2 :: R2Message -> Message
   MsgData :: Maybe Raw -> Message
   MsgExit :: Message
   ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
@@ -75,7 +76,7 @@ msgData = \case
   MsgData raw -> raw
   _ -> Nothing
 
-msgRoutedFrom :: Message -> Maybe (RoutedFrom Message)
+msgRoutedFrom :: Message -> Maybe (RoutedFrom Base64Text)
 msgRoutedFrom = \case
   MsgR2 (MsgRoutedFrom routedFrom) -> Just routedFrom
   _ -> Nothing
