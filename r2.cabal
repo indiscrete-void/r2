@@ -1,4 +1,4 @@
-cabal-version: 2.2
+cabal-version: 1.12
 
 -- This file has been generated from package.yaml by hpack version 0.39.0.
 --
@@ -8,7 +8,7 @@ name:           r2
 version:        0.1.0.0
 author:         indiscrete_void
 maintainer:     indiscrete.void@gmail.com
-license:        AGPL-3.0-only
+license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 
@@ -36,8 +36,6 @@ library
       R2.Client.Stream
       R2.Encoding
       R2.Encoding.LengthPrefix
-      Paths_r2
-  autogen-modules:
       Paths_r2
   hs-source-dirs:
       src
@@ -101,8 +99,6 @@ executable r2
   other-modules:
       R2.Client.Options
       Paths_r2
-  autogen-modules:
-      Paths_r2
   hs-source-dirs:
       cli
   default-extensions:
@@ -164,8 +160,6 @@ executable r2
 executable r2-simple-example
   main-is: Simple/Main.hs
   other-modules:
-      Paths_r2
-  autogen-modules:
       Paths_r2
   hs-source-dirs:
       examples
@@ -230,8 +224,6 @@ executable r2d
   other-modules:
       R2.Daemon.Options
       Paths_r2
-  autogen-modules:
-      Paths_r2
   hs-source-dirs:
       daemon
   default-extensions:
@@ -294,8 +286,6 @@ executable r2dm
   main-is: R2/Manager/Main.hs
   other-modules:
       R2.Manager.Options
-      Paths_r2
-  autogen-modules:
       Paths_r2
   hs-source-dirs:
       manager
@@ -360,8 +350,6 @@ test-suite tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
-      Paths_r2
-  autogen-modules:
       Paths_r2
   hs-source-dirs:
       tests

@@ -2,7 +2,7 @@ name: r2
 version: 0.1.0.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
-license: AGPL-3.0-only
+license: BSD3
 
 language: Haskell2010
 
