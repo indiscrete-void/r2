@@ -25,11 +25,11 @@ parserInfo =
 opts :: Parser Options
 opts = Options <$> verbosity
 
-pana :: NetworkNode
-pana = node "pana"
+lain :: NetworkNode
+lain = node "lain"
 
-bob :: NetworkNode
-bob = node "bob"
+spongebob :: NetworkNode
+spongebob = node "spongebob"
 
 carl :: NetworkNode
 carl = node "carl"
@@ -38,11 +38,11 @@ catnet :: NetworkDescription
 catnet =
   static
     { serve =
-        [ (bob, exec "cat")
+        [ (spongebob, exec "cat")
         ],
       link =
-        [ (pana, carl),
-          (carl, bob)
+        [ (lain, carl),
+          (carl, spongebob)
         ]
     }
 
@@ -52,34 +52,34 @@ main = do
   dslToIO verbosity (serve catnet) $ do
     Network {conn, conn_} <- mkNet catnet
 
-    conn_ [pana] Ls
-    conn_ [pana, carl] Ls
-    conn_ [pana, carl, bob] Ls
+    conn_ [lain] Ls
+    conn_ [lain, carl] Ls
+    conn_ [lain, carl, spongebob] Ls
 
-    let panaMsgViaCarl = "pana greets bob"
-    bobRes <- conn [pana, carl, bob] (Tunnel Stdio) $ do
-      output (BC.pack panaMsgViaCarl)
+    let lainMsgViaCarl = "lain greets spongebob"
+    spongebobRes <- conn [lain, carl, spongebob] (Tunnel Stdio) $ do
+      output (BC.pack lainMsgViaCarl)
       echo <- BC.unpack <$> inputOrFail
       close
       pure echo
-    trace bobRes
+    trace spongebobRes
 
 {-
-panaDaemon = do
+lainDaemon = do
   Network {conn} <-
-    (mkDaemon pana)
+    (mkDaemon lain)
       daemonConfig
         { peers =
             [ socat carl "tcp:example.com:47210",
-              carl :/> bob
+              carl :/> spongebob
             ]
         }
 
-  let panaMsgViaCarl = "pana greets bob"
-  bobRes <- conn bob $ printf "echo %s" panaMsgViaCarl
-  assertEq bobRes panaMsgViaCarl
+  let lainMsgViaCarl = "lain greets spongebob"
+  spongebobRes <- conn spongebob $ printf "echo %s" lainMsgViaCarl
+  assertEq spongebobRes lainMsgViaCarl
 
 simpleDaemon = await =<< mkDaemon me daemonConfig {peers = [carl]}
   where
-    me = node "pana"
+    me = node "lain"
 -}
