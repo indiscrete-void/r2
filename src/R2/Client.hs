@@ -1,4 +1,4 @@
-module R2.Client (Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace, r2cIO) where
+module R2.Client (ClientStream (..), Stream, Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace, r2cIO) where
 
 import Control.Exception (IOException)
 import Control.Monad
@@ -11,16 +11,18 @@ import Polysemy.Conc (interpretLockReentrant, interpretMaskFinal, interpretRace)
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
+import Polysemy.Internal.Kind
 import Polysemy.Process
 import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
-import Polysemy.Serialize
+import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
 import Polysemy.Transport.Extra
 import Polysemy.Wait
 import R2
 import R2.Bus
+import R2.Encoding
 import R2.Options
 import R2.Peer
 import R2.Peer.Conn
@@ -33,6 +35,36 @@ import R2.Socket
 import System.IO
 import System.Process.Extra
 import Text.Printf
+
+data ClientStream = ProcStream | ServerStream
+
+type Stream stream =
+  '[ Tagged stream ByteInputWithEOF,
+     Tagged stream ByteOutput,
+     Tagged stream Close
+   ]
+
+ioToStream :: forall stream r. (Members (Transport ByteString ByteString) r) => InterpretersFor (Stream stream) r
+ioToStream =
+  (subsume . untag @stream @Close)
+    . (subsume . untag @stream @ByteOutput)
+    . (subsume . untag @stream @ByteInputWithEOF)
+
+streamToChan ::
+  forall stream chan r.
+  (Member (Bus chan ByteString) r) =>
+  Bidirectional chan ->
+  InterpretersFor (Stream stream) r
+streamToChan Bidirectional {..} =
+  ( busChan outboundChan
+      . (closeToChan . untag @stream @Close)
+      . (outputToChan . untag @stream @ByteOutput)
+      . raise2Under @(Chan _)
+  )
+    . ( busChan inboundChan
+          . (inputToChan . untag @stream @ByteInputWithEOF)
+          . raiseUnder @(Chan _)
+      )
 
 data Action
   = Ls
@@ -51,8 +83,8 @@ data Log where
   LogLocalDaemon :: Address -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogOutput :: ProcessTransport -> ByteString -> Log
-  LogRecv :: Address -> (Maybe Message) -> Log
-  LogSend :: Address -> Message -> Log
+  LogRecv :: Address -> (Maybe ByteString) -> Log
+  LogSend :: Address -> ByteString -> Log
   LogAction :: Address -> Action -> Log
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
@@ -79,52 +111,55 @@ outToLog f = intercept @(Output o) \case
     output o
 
 listNodes ::
-  ( Members (Transport Message Message) r,
+  ( Members (Transport ByteString ByteString) r,
     Member (Output String) r,
     Member Fail r
   ) =>
   Sem r ()
 listNodes = do
-  output ReqListNodes
-  (ResNodeList list) <- inputOrFail
+  output $ encodeStrict ReqListNodes
+  (ResNodeList list) <- decodeStrictSem =<< inputOrFail
   output $ show list
 
-procToIO ::
-  ( Members (Transport ByteString ByteString) r,
+procToProcStream ::
+  ( Members (Stream 'ProcStream) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r
   ) =>
   ProcessTransport ->
   InterpretersFor '[Input (Maybe ByteString), Output ByteString, Close] r
-procToIO transport m =
-  inToLog (LogInput transport) $
-    outToLog (LogOutput transport) $
-      go transport
+procToProcStream transport m =
+  go transport $
+    inToLog (LogInput transport) $
+      outToLog (LogOutput transport) m
   where
-    go Stdio = subsume_ m
-    go (Process cmd) = execIO (ioShell cmd) $ raise3Under @Wait m
+    go Stdio = tagStream @'ProcStream
+    go (Process cmd) = execIO (ioShell cmd) . raise3Under @Wait
 
 procToMsg ::
-  ( Member (Input (Maybe ByteString)) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
-    Member (Output ByteString) r,
     Member (Output Log) r,
-    Member (Input (Maybe Message)) r,
-    Member (Output Message) r,
-    Member Close r,
-    Member Async r
+    Member Async r,
+    Member Fail r
   ) =>
   ProcessTransport ->
   Sem r ()
-procToMsg transport = procToIO transport ioToMsg
+procToMsg transport =
+  procToProcStream transport $
+    sequenceConcurrently_
+      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF $ contramapInputSem (mapM decodeStrictSem) inputMsgOutputBs,
+        tag @'ServerStream @(Output ByteString) $ mapOutput encodeStrict inputBsOutputMsg
+      ]
 
 connectNode ::
   ( Member Async r,
-    Members (Transport Message Message) r,
-    Members (Transport ByteString ByteString) r,
+    Members (Stream 'ServerStream) r,
+    Members (Stream 'ProcStream) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r,
-    Member (Bus chan Message) r,
+    Member (Bus chan ByteString) r,
     Member Fail r,
     Member (MakeNode chan) r
   ) =>
@@ -133,8 +168,8 @@ connectNode ::
   Maybe Address ->
   Sem r ()
 connectNode self transport (Just addr) = do
-  output $ ReqConnectNode transport $ Just addr
-  procToIO transport $ runSerialization $ do
+  tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just addr
+  procToProcStream transport $ do
     routerAddr <- exchangeSelves self Nothing
     procConnChan@Bidirectional {outboundChan = Outbound -> routerOutboundChan} <- makeConnectedNode routerAddr (Pipe transport)
     _ <- makeR2ConnectedNode addr routerAddr routerOutboundChan
@@ -142,22 +177,22 @@ connectNode self transport (Just addr) = do
 connectNode _ _ Nothing = fail "node without addr unsupported"
 
 connectTransport ::
-  ( Member (Input (Maybe ByteString)) r,
-    Member (Output ByteString) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
-    Members (Transport Message Message) r,
     Member Async r,
-    Member (Output Log) r
+    Member (Output Log) r,
+    Member Fail r
   ) =>
   ProcessTransport ->
   Sem r ()
 connectTransport transport = do
-  output ReqTunnelProcess
+  tag @'ServerStream $ output $ encodeStrict ReqTunnelProcess
   procToMsg transport
 
 serviceMsgHandler ::
-  ( Members (Transport ByteString ByteString) r,
-    Members (Transport Message Message) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Transport ByteString ByteString) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r,
     Member Fail r,
@@ -165,17 +200,20 @@ serviceMsgHandler ::
   ) =>
   ProcessTransport ->
   Connection chan ->
-  Maybe Message ->
+  Maybe ByteString ->
   Sem r ()
-serviceMsgHandler transport _ msg = whenJust msg \case
-  ReqTunnelProcess -> procToIO transport ioToMsg
-  msg -> fail $ "unexpected message received from service " <> show msg
+serviceMsgHandler transport _ mIn =
+  ioToStream @'ServerStream $
+    whenJust mIn $
+      decodeStrictSem >=> \case
+        ReqTunnelProcess -> procToMsg transport
+        msg -> fail $ "unexpected message received from service " <> show msg
 
 serveTransport ::
-  ( Members (Transport ByteString ByteString) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
-    Member (Bus chan Message) r,
-    Members (Transport Message Message) r,
+    Member (Bus chan ByteString) r,
     Member Async r,
     Member (Output Log) r,
     Member (MakeNode chan) r,
@@ -195,20 +233,21 @@ serveTransport self mAddr transport = do
           Process cmd -> Addr $ head $ words cmd
   let serviceAddr = "service" /> serviceAddrPart
   serviceChan <- makeConnectedNode serviceAddr (Pipe transport)
-  output $ ReqConnectNode transport $ Just serviceAddr
-  scoped @_ @(Storage _) serviceAddr $ runPeer serviceAddr (handleR2MsgDefaultAndRestWith $ serviceMsgHandler transport) do
-    selfChan <- makeConnectedNode self (Pipe transport)
-    linkChansBidirectional selfChan serviceChan
+  tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just serviceAddr
+  scoped @_ @(Storage _) serviceAddr $
+    runPeer serviceAddr (handleR2MsgDefaultAndRestWith $ serviceMsgHandler transport) do
+      selfChan <- makeConnectedNode self (Pipe transport)
+      linkChansBidirectional selfChan serviceChan
 
 handleAction ::
-  ( Members (Transport Message Message) r,
-    Members (Transport ByteString ByteString) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output String) r,
     Member Fail r,
     Member Async r,
     Member (Output Log) r,
-    Member (Bus chan Message) r,
+    Member (Bus chan ByteString) r,
     Member (MakeNode chan) r,
     Member (Output Peer.Log) r,
     Member Resource r,
@@ -218,13 +257,13 @@ handleAction ::
   Connection chan ->
   Action ->
   Sem r ()
-handleAction _ _ Ls = listNodes
+handleAction _ _ Ls = tagStream @'ServerStream listNodes
 handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
 handleAction _ _ (Tunnel transport) = connectTransport transport
 handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
 
 makeChain ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (MakeNode chan) r,
     Member Async r
   ) =>
@@ -238,14 +277,14 @@ makeChain router routerOutboundChan (target : rest) = do
   makeChain target (Outbound $ outboundChan nextChan) rest
 
 r2c ::
-  ( Members (Transport Message Message) r,
-    Members (Transport ByteString ByteString) r,
+  ( Members (Stream 'ProcStream) r,
+    Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
     Member Fail r,
     Member Async r,
     Member (Output Log) r,
     Member (Output String) r,
-    Member (Bus chan Message) r,
+    Member (Bus chan ByteString) r,
     Member (Output Peer.Log) r,
     Member (Storages chan) r,
     Member Resource r,
@@ -255,12 +294,13 @@ r2c ::
   Command ->
   Sem r ()
 r2c mSelf (Command targetChain action) = do
-  (Just server) <- fmap unSelf <$> contramapInput (>>= msgSelf) (input @(Maybe Self))
+  (Just server) <-
+    fmap unSelf . msgSelf <$> (decodeStrictSem =<< (tag @'ServerStream @ByteInputWithEOF $ inputOrFail))
   me <- case mSelf of
     Just self -> pure self
     Nothing -> childAddr server
   output $ LogMe me
-  output (MsgSelf $ Self me)
+  tag @'ServerStream @ByteOutput $ output (encodeStrict $ MsgSelf $ Self me)
   output $ LogLocalDaemon server
   let target = case targetChain of
         [] -> server
@@ -272,12 +312,18 @@ r2c mSelf (Command targetChain action) = do
         | otherwise = fail $ printf "unexpected message %s from %s" (show msg) (show connAddr)
   scoped @_ @(Storage _) me $ runPeer me (handleR2MsgDefaultAndRestWith msgHandler) $ do
     serverChan <- makeConnectedNode server Socket
-    async_ $ chanToIO serverChan
+    async_ $ tagStream @'ServerStream $ chanToIO serverChan
     Outbound targetOutboundChan <- makeChain server (Outbound $ outboundChan serverChan) targetChain
     let targetChan = Bidirectional targetInboundChan targetOutboundChan
-    ioToChan @_ @Message targetChan do
+    streamToChan @'ServerStream targetChan do
       let targetConn = Connection {connAddr = target, connChan = targetChan, connTransport = Socket}
       handleAction me targetConn action
+
+tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append (Transport ByteString ByteString) r) a -> Sem r a
+tagStream =
+  tag @stream @Close
+    . tag @stream @ByteOutput
+    . tag @stream @ByteInputWithEOF
 
 r2cIO :: Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
 r2cIO verbosity mSelf socketPath command = do
@@ -288,8 +334,17 @@ r2cIO verbosity mSelf socketPath command = do
     outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
     outputToCLI = runOutputSem (embed . putStrLn)
 
-    runStandardIO :: (Member (Embed IO) r) => Int -> InterpretersFor (Transport ByteString ByteString) r
-    runStandardIO bufferSize = closeToIO stdout . outputToIO stdout . inputToIO bufferSize stdin
+    runStandardIO :: (Member (Embed IO) r) => Int -> InterpretersFor (Stream 'ProcStream) r
+    runStandardIO bufferSize =
+      (closeToIO stdout . untag @'ProcStream)
+        . (outputToIO stdout . untag @'ProcStream)
+        . (inputToIO bufferSize stdin . untag @'ProcStream)
+
+    runSocketIO :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor (Stream 'ServerStream) r
+    runSocketIO bufferSize s =
+      (closeToSocket s . untag @'ServerStream @Close)
+        . (outputToSocket s . untag @'ServerStream @ByteOutput)
+        . (inputToSocket bufferSize s . untag @'ServerStream @ByteInputWithEOF)
 
     run verbosity s =
       runFinal
@@ -303,7 +358,7 @@ r2cIO verbosity mSelf socketPath command = do
         -- interpreter log is ignored
         . ignoreTrace
         -- socket, std and process io
-        . (runSocketIO bufferSize s . runSerialization)
+        . runSocketIO bufferSize s
         . runStandardIO bufferSize
         . scopedProcToIOFinal bufferSize
         -- log application events

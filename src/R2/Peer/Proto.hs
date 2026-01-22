@@ -9,6 +9,8 @@ module R2.Peer.Proto
     runMsgInput,
     runMsgOutput,
     runMsgClose,
+    inputMsgOutputBs,
+    inputBsOutputMsg,
     msgToIO,
   )
 where
@@ -54,7 +56,7 @@ $(deriveJSON (aesonRemovePrefix "un") ''Self)
 
 data Message where
   MsgSelf :: Self -> Message
-  MsgR2 :: R2Message -> Message
+  MsgR2 :: R2Message Base64Text -> Message
   MsgData :: Maybe Raw -> Message
   MsgExit :: Message
   ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
@@ -109,6 +111,12 @@ msgToIO =
     . runMsgOutput
     . runMsgInput
 
+inputMsgOutputBs :: (Member (InputWithEOF Message) r, Member ByteOutput r, Member Close r) => Sem r ()
+inputMsgOutputBs = contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close
+
+inputBsOutputMsg :: (Member ByteInputWithEOF r, Member (Output Message) r) => Sem r ()
+inputBsOutputMsg = mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
+
 ioToMsg ::
   ( Member (InputWithEOF Message) r,
     Member (Output Message) r,
@@ -118,8 +126,4 @@ ioToMsg ::
     Member Async r
   ) =>
   Sem r ()
-ioToMsg =
-  sequenceConcurrently_
-    [ contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close,
-      mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
-    ]
+ioToMsg = sequenceConcurrently_ [inputMsgOutputBs, inputBsOutputMsg]

@@ -22,6 +22,7 @@ where
 
 import Control.Exception qualified as IO
 import Control.Monad.Extra
+import Data.ByteString (ByteString)
 import Data.Maybe
 import Debug.Trace qualified as Debug
 import Network.Socket (Family (..), Socket, socket)
@@ -87,8 +88,8 @@ address :: ReadM Address
 address = Addr <$> str
 
 routeTo ::
-  ( Member (Bus chan Message) r,
-    Member (Output Message) r,
+  ( Member (Bus chan ByteString) r,
+    Member (Output ByteString) r,
     Member (LookupChan EstablishedConnection (Outbound chan)) r
   ) =>
   Address ->
@@ -97,11 +98,11 @@ routeTo ::
 routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan (EstablishedConnection routeToAddr)
   case mChan of
-    Just (Outbound chan) -> busChan chan $ putChan (Just $ MsgR2 $ MsgRoutedFrom routedFrom)
-    Nothing -> output $ MsgR2 $ MsgRouteToErr $ RouteToErr routeToAddr "unreachable"
+    Just (Outbound chan) -> busChan chan $ putChan (Just $ encodeStrict $ MsgR2 $ MsgRoutedFrom routedFrom)
+    Nothing -> output $ encodeStrict $ MsgR2 $ MsgRouteToErr $ RouteToErr routeToAddr "unreachable"
 
 routeToError ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (LookupChan EstablishedConnection (Inbound chan)) r
   ) =>
   RouteToErr ->
@@ -111,7 +112,7 @@ routeToError (RouteToErr addr _) = do
   whenJust mChan \(Inbound chan) -> busChan chan (putChan Nothing)
 
 routedFrom ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (LookupChan StatelessConnection (Inbound chan)) r,
     Member Fail r
   ) =>
@@ -119,34 +120,34 @@ routedFrom ::
   Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
   Inbound chan <- lookupChan (StatelessConnection routedFromNode)
-  decoded <- decodeBase64Sem routedFromData
+  decoded <- base64ToBsSem routedFromData
   busChan chan $ putChan (Just decoded)
 
 handleR2Msg ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
     Member (LookupChan StatelessConnection (Inbound chan)) r,
-    Member (Output Message) r,
+    Member (Output ByteString) r,
     Member Fail r
   ) =>
   Address ->
-  R2Message ->
+  R2Message Base64Text ->
   Sem r ()
 handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap $ Outbound . outboundChan) $ routeTo connAddr msg
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg _ (MsgRoutedFrom msg) = routedFrom msg
 
 exchangeSelves ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
+  ( Member (InputWithEOF ByteString) r,
+    Member (Output ByteString) r,
     Member Fail r
   ) =>
   Address ->
   Maybe Address ->
   Sem r Address
 exchangeSelves self maybeKnownAddr = do
-  output (MsgSelf $ Self self)
-  (Just (Self addr)) <- msgSelf <$> inputOrFail
+  output (encodeStrict $ MsgSelf $ Self self)
+  (Just (Self addr)) <- msgSelf <$> (decodeStrictSem =<< inputOrFail)
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr
@@ -162,7 +163,7 @@ makeNodes ::
   forall chan r.
   ( Member Async r,
     Member (Output Log) r,
-    Member (Bus chan Message) r,
+    Member (Bus chan ByteString) r,
     Member (Storage chan) r,
     Member Resource r
   ) =>
@@ -193,7 +194,7 @@ runLookupChan = interpretLookupChanSem (\(EstablishedConnection addr) -> fmap no
 
 runOverlayLookupChan ::
   ( Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (Bus chan Message) r,
+    Member (Bus chan ByteString) r,
     Member (MakeNode chan) r,
     Member Fail r,
     Member Async r
@@ -221,7 +222,7 @@ type Peer chan =
    ]
 
 runPeer ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
@@ -234,31 +235,35 @@ runPeer self userHandler = makeNodes self handler . runLookupChan
   where
     handler conn@Connection {connAddr} = runLookupChan . runOverlayLookupChan connAddr $ userHandler conn
 
-type MsgHandler chan r = Connection chan -> Maybe Message -> Sem r ()
+type MsgHandler chan r = Connection chan -> Maybe ByteString -> Sem r ()
 
-type MsgHandlerEffects chan = Transport Message Message
+type MsgHandlerEffects chan = Transport ByteString ByteString
 
 handleR2MsgDefaultAndRestWith ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r, Member Fail r
+    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member Fail r
   ) =>
   MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
   Connection chan ->
   Sem r ()
 handleR2MsgDefaultAndRestWith handleNonR2Msg conn = ioToNodeBusChanLogged (ConnectedNode conn) go
   where
-    handlePeerR2Msg _ conn (Just (MsgR2 msg)) = handleR2Msg (connAddr conn) msg
-    handlePeerR2Msg handleNonR2Msg conn msg = handleNonR2Msg conn msg
-
     go = do
       mIn <- input
-      handlePeerR2Msg handleNonR2Msg conn mIn
-      whenJust mIn (const go)
+      case mIn of
+        Just bs -> do
+          msg <- decodeStrictSem bs
+          case msg of
+            Just (MsgR2 msg) -> handleR2Msg (connAddr conn) msg
+            _ -> handleNonR2Msg conn (Just bs)
+          go
+        Nothing -> handleNonR2Msg conn Nothing
 
 runRouter ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,

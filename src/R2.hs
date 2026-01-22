@@ -85,10 +85,10 @@ data RouteToErr = RouteToErr
 
 $(deriveJSON (aesonRemovePrefix "routeToErr") ''RouteToErr)
 
-data R2Message where
-  MsgRouteTo :: RouteTo Base64Text -> R2Message
-  MsgRouteToErr :: RouteToErr -> R2Message
-  MsgRoutedFrom :: RoutedFrom Base64Text -> R2Message
+data R2Message msg where
+  MsgRouteTo :: RouteTo msg -> R2Message msg
+  MsgRouteToErr :: RouteToErr -> R2Message msg
+  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''R2Message)

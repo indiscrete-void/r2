@@ -17,6 +17,12 @@ module R2.Bus
     lookupChan,
     chanToIO,
     interpretBusTBM,
+    closeToChan,
+    inputToChan,
+    outputToChan,
+    closeToBusChan,
+    inputToBusChan,
+    outputToBusChan,
     ioToChan,
     makeBidirectionalChan,
     interpretLookupChanSem,
@@ -72,13 +78,23 @@ data Bidirectional chan = Bidirectional
 makeBidirectionalChan :: (Member (Bus chan d) r) => Sem r (Bidirectional chan)
 makeBidirectionalChan = Bidirectional <$> busMakeChan <*> busMakeChan
 
+inputToBusChan :: (Member (Bus chan d) r) => chan -> Sem (InputWithEOF d ': r) a -> Sem r a
+inputToBusChan chan = busChan chan . inputToChan . raiseUnder @(Chan _)
+
+closeToBusChan :: (Member (Bus chan d) r) => chan -> Sem (Close ': r) a -> Sem r a
+closeToBusChan chan = busChan chan . closeToChan . raiseUnder @(Chan _)
+
+outputToBusChan :: (Member (Bus chan d) r) => chan -> Sem (Output d ': r) a -> Sem r a
+outputToBusChan chan = busChan chan . outputToChan . raiseUnder @(Chan _)
+
 ioToChan ::
   (Member (Bus chan d) r) =>
   Bidirectional chan ->
   InterpretersFor (Transport d d) r
 ioToChan Bidirectional {..} =
-  (busChan outboundChan . closeToChan . outputToChan . raise2Under @(Chan _))
-    . (busChan inboundChan . inputToChan . raiseUnder @(Chan _))
+  closeToBusChan outboundChan
+    . outputToBusChan outboundChan
+    . inputToBusChan inboundChan
 
 chanToIO ::
   ( Members (Transport d d) r,

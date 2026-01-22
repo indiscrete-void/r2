@@ -6,9 +6,7 @@ import Control.Concurrent.STM.TBMQueue
 import Control.Exception (SomeException)
 import Control.Exception qualified as IO
 import Control.Monad
-import Control.Monad.Extra
 import Data.ByteString (ByteString)
-import Data.IORef
 import Data.List qualified as List
 import Data.List.Extra
 import Data.Map (Map, (!))
@@ -17,7 +15,6 @@ import Data.Time.Units
 import Polysemy
 import Polysemy.Async (async, await)
 import Polysemy.Async qualified as Sem
-import Polysemy.AtomicState
 import Polysemy.Conc (interpretMaskFinal)
 import Polysemy.Conc.Effect.Lock
 import Polysemy.Conc.Effect.Mask
@@ -31,6 +28,7 @@ import Polysemy.Process (scopedProcToIOFinal)
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
+import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
@@ -83,14 +81,14 @@ data Network r = Network
 node :: String -> NetworkNode
 node = NetworkNode . Addr
 
-makeLink :: (Member (Bus chan d) r, Member Sem.Async r) => Sem r (Bidirectional chan, Bidirectional chan)
+makeLink :: forall chan d r. (Member (Bus chan d) r, Member Sem.Async r) => Sem r (Bidirectional chan, Bidirectional chan)
 makeLink = do
   aToB <- makeBidirectionalChan
   bToA <- makeBidirectionalChan
   async_ $ linkChansBidirectional aToB bToA
   pure (aToB, bToA)
 
-mkLinks :: (Member (Bus chan Message) r, Member Sem.Async r) => [NetworkLink] -> Sem r (Map NetworkLink (Bidirectional chan))
+mkLinks :: (Member (Bus chan d) r, Member Sem.Async r) => [NetworkLink] -> Sem r (Map NetworkLink (Bidirectional chan))
 mkLinks link =
   mconcat
     <$> forM
@@ -105,7 +103,7 @@ mkLinks link =
       )
 
 mkNodes ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member Sem.Async r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member Resource r,
@@ -128,16 +126,21 @@ mkNodes link links serveMap = do
               let chan = links ! (me, them)
               makeNode $ AcceptedNode (NewConnection (Just $ nodeId them) Socket chan)
 
+streamToChan :: forall stream chan r. (Member (Bus chan ByteString) r) => Bidirectional chan -> InterpretersFor (Stream stream) r
+streamToChan Bidirectional {..} =
+  (closeToBusChan outboundChan . untag @stream)
+    . (outputToBusChan outboundChan . untag @stream)
+    . (inputToBusChan inboundChan . untag @stream)
+
 mkActor ::
-  forall msgChan stdioChan r.
+  forall chan r.
   ( Member Sem.Async r,
-    Member (Bus msgChan Message) r,
-    Member (Bus stdioChan ByteString) r,
+    Member (Bus chan ByteString) r,
     Member (Scoped CreateProcess Sem.Process) r,
     Member (Output String) r,
     Member Fail r,
     Member Resource r,
-    Member (Storages msgChan) r,
+    Member (Storages chan) r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped Address (Output Client.Log)) r,
     Member Random r
@@ -147,8 +150,8 @@ mkActor ::
   Action ->
   InterpretersFor (Transport ByteString ByteString) r
 mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m = do
-  (stdioLinkA, stdioLinkB) <- makeLink @stdioChan @ByteString
-  (msgLinkA, msgLinkB) <- makeLink @msgChan @Message
+  (stdioLinkA, stdioLinkB) <- makeLink
+  (msgLinkA, msgLinkB) <- makeLink
 
   randAddress <- childAddr firstNodeId
 
@@ -164,8 +167,8 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
       scoped @_ @(Output Client.Log) randAddress $
         scoped @_ @(Output Peer.Log) randAddress $
           scoped @_ @(Storage _) randAddress $
-            ioToChan @_ @ByteString stdioLinkA $
-              ioToChan @_ @Message msgLinkB $
+            streamToChan @'ProcStream stdioLinkA $
+              streamToChan @'ServerStream msgLinkB $
                 r2c (Just randAddress) command
 
   result <- ioToChan stdioLinkB m
@@ -173,14 +176,13 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   pure result
 mkActor _ path _ _ = fail $ "invalid path " <> show path
 
-type NetworkEffects msgChan stdioChan =
+type NetworkEffects chan =
   '[ Random,
      Scoped CreateProcess Sem.Process,
-     Bus msgChan Message,
-     Bus stdioChan ByteString,
+     Bus chan ByteString,
      Scoped Address (Output Peer.Log),
      Scoped Address (Output Client.Log),
-     Storages msgChan,
+     Storages chan,
      Fail,
      Output String,
      Trace,
@@ -193,7 +195,7 @@ type NetworkEffects msgChan stdioChan =
      Final IO
    ]
 
-mkNet :: (Members (NetworkEffects chan stdioChan) r) => NetworkDescription -> Sem r (Network r)
+mkNet :: (Members (NetworkEffects chan) r) => NetworkDescription -> Sem r (Network r)
 mkNet NetworkDescription {..} = do
   let serveMap = Map.fromList serve
   links <- mkLinks link
@@ -206,7 +208,7 @@ mkNet NetworkDescription {..} = do
         join = forM_ handles await
       }
 
-dslToIO :: forall a. Verbosity -> ServeList -> Sem (NetworkEffects (TBMQueue Message) (TBMQueue ByteString)) a -> IO a
+dslToIO :: forall a. Verbosity -> ServeList -> Sem (NetworkEffects (TBMQueue ByteString)) a -> IO a
 dslToIO verbosity serveList =
   runFinal
     . interpretMaskFinal
@@ -222,7 +224,6 @@ dslToIO verbosity serveList =
     . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
     . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity . raiseUnder @Trace)
     . interpretBusTBM @_ @ByteString queueSize
-    . interpretBusTBM @_ @Message queueSize
     . scopedProcToIOFinal bufferSize
     . randomToIO
 

@@ -9,9 +9,11 @@ module R2.Peer.MakeNode
 where
 
 import Control.Monad.Loops
+import Data.ByteString
 import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
+import Polysemy.Transport
 import R2
 import R2.Bus
 import R2.Encoding
@@ -47,14 +49,14 @@ makeConnectedNode addr transport = do
   makeNode $ ConnectedNode (Connection addr transport chan)
   pure chan
 
-outboundChanToR2 :: (Member (Bus chan Message) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
+outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   whileJust_
     (busChan chan takeChan)
-    (busChan routerChan . putChan . Just . MsgR2 . MsgRouteTo . RouteTo addr . encodeBase64)
+    (busChan routerChan . outputToChan . output . encodeStrict . MsgR2 . MsgRouteTo . RouteTo addr . bsToBase64)
 
 makeR2ConnectedNode ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (MakeNode chan) r,
     Member Async r
   ) =>

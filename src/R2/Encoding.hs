@@ -2,13 +2,16 @@ module R2.Encoding where
 
 import Control.Monad
 import Data.Aeson
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString, StrictByteString)
 import Data.ByteString qualified as B
 import Data.ByteString.Base64 qualified as B64
 import Data.ByteString.Char8 qualified as BC
 import GHC.Generics
 import Polysemy
 import Polysemy.Fail
+
+encodeStrict :: (ToJSON a) => a -> StrictByteString
+encodeStrict = B.toStrict . encode
 
 newtype Base64Text = Base64Text {unBase64 :: String}
   deriving stock (Eq, Show, Generic)
@@ -21,10 +24,19 @@ base64ToBs :: Base64Text -> Either String ByteString
 base64ToBs = B64.decode . BC.pack . unBase64
 
 encodeBase64 :: (ToJSON a) => a -> Base64Text
-encodeBase64 = bsToBase64 . B.toStrict . encode
+encodeBase64 = bsToBase64 . encodeStrict
 
 decodeBase64 :: (FromJSON a) => Base64Text -> Either String a
 decodeBase64 = base64ToBs >=> eitherDecodeStrict
 
+eitherToFail :: (Member Fail r) => Either String a -> Sem r a
+eitherToFail = either fail pure
+
+base64ToBsSem :: (Member Fail r) => Base64Text -> Sem r ByteString
+base64ToBsSem = eitherToFail . base64ToBs
+
+decodeStrictSem :: (Member Fail r, FromJSON a) => ByteString -> Sem r a
+decodeStrictSem = eitherToFail . eitherDecodeStrict
+
 decodeBase64Sem :: (Member Fail r, FromJSON a) => Base64Text -> Sem r a
-decodeBase64Sem = either fail pure . decodeBase64
+decodeBase64Sem = eitherToFail . decodeBase64

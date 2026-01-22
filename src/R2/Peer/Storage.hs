@@ -15,6 +15,7 @@ module R2.Peer.Storage
 where
 
 import Control.Concurrent.STM.TBMQueue
+import Data.ByteString (ByteString)
 import Data.IORef
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -67,7 +68,7 @@ type Storages chan = Scoped Address (Storage chan)
 
 storagesToIO ::
   (Member (Embed IO) r, Member Lock r) =>
-  Sem (Storages (TBMQueue Message) ': r) a ->
+  Sem (Storages (TBMQueue msg) ': r) a ->
   Sem r a
 storagesToIO =
   fmap snd

@@ -3,6 +3,7 @@ module R2.Daemon (acceptSockets, logToTrace, r2d, r2Socketd, r2dIO) where
 import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
 import Control.Exception (IOException, finally)
 import Control.Monad.Extra
+import Data.ByteString (ByteString)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
@@ -14,7 +15,6 @@ import Polysemy.Process
 import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.ScopedBundle
-import Polysemy.Serialize
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
@@ -27,14 +27,13 @@ import R2.Peer
 import R2.Peer.Conn
 import R2.Peer.Log
 import R2.Peer.MakeNode
-import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Socket
 
 acceptSockets ::
   ( Member (Accept sock) r,
-    Member (Sockets Message Message sock) r,
-    Member (Bus chan Message) r,
+    Member (Sockets ByteString ByteString sock) r,
+    Member (Bus chan ByteString) r,
     Member Async r,
     Member (MakeNode chan) r
   ) =>
@@ -42,10 +41,10 @@ acceptSockets ::
 acceptSockets =
   foreverAcceptAsync \s -> do
     chan <- makeAcceptedNode Nothing Socket
-    socket @Message @Message s $ chanToIO chan
+    socket s $ chanToIO chan
 
 r2d ::
-  ( Member (Bus chan Message) r,
+  ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
@@ -58,8 +57,8 @@ r2d self = runPeer self (handleR2MsgDefaultAndRestWith $ \conn msg -> nodesReade
 r2Socketd ::
   ( Member (Accept sock) r,
     Member (Storage chan) r,
-    Member (Sockets Message Message sock) r,
-    Member (Bus chan Message) r,
+    Member (Sockets ByteString ByteString sock) r,
+    Member (Bus chan ByteString) r,
     Member Resource r,
     Member Async r,
     Member (Output Log) r
@@ -83,25 +82,11 @@ r2dIO verbosity fork self socketPath = do
       pure $ Just exit
     forkIf False m = Nothing <$ m
 
-    runScopedSocket :: (Member (Embed IO) r, Member Trace r, Member Fail r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport Message Message))) r
+    runScopedSocket :: (Member (Embed IO) r, Member Trace r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport ByteString ByteString))) r
     runScopedSocket bufferSize =
-      runScopedBundle @(Transport Message Message)
-        ( \s ->
-            runSocketIO bufferSize s
-              . runSerialization
-              . raise2Under @ByteInputWithEOF
-              . raise2Under @ByteOutput
-        )
+      runScopedBundle @(Transport ByteString ByteString) (runSocketIO bufferSize)
 
-    runServerSocket ::
-      (Member (Embed IO) r, Member Fail r, Member Trace r) =>
-      Int ->
-      IO.Socket ->
-      InterpretersFor
-        '[ Scoped IO.Socket (Bundle (Transport Message Message)),
-           Accept IO.Socket
-         ]
-        r
+    runServerSocket :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor '[Scoped IO.Socket (Bundle (Transport ByteString ByteString)), Accept IO.Socket] r
     runServerSocket bufferSize s = acceptToIO s . runScopedSocket bufferSize
 
     run verbosity s =
