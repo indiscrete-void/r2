@@ -3,7 +3,6 @@ module R2
     RouteTo (..),
     RoutedFrom (..),
     RouteToErr (..),
-    R2Message (..),
     r2,
     defaultAddr,
     (/>),
@@ -20,7 +19,6 @@ import Data.String (IsString (..))
 import Data.Text qualified as Text
 import Data.Word
 import GHC.Generics
-import R2.Encoding
 import Serial.Aeson.Options
 import System.Random.Stateful
 import Text.Printf (printf)
@@ -84,14 +82,6 @@ data RouteToErr = RouteToErr
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON (aesonRemovePrefix "routeToErr") ''RouteToErr)
-
-data R2Message msg where
-  MsgRouteTo :: RouteTo msg -> R2Message msg
-  MsgRouteToErr :: RouteToErr -> R2Message msg
-  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
-  deriving stock (Eq, Show, Generic)
-
-$(deriveJSON aesonOptions ''R2Message)
 
 r2 :: (Address -> RoutedFrom msg -> a) -> (Address -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr

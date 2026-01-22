@@ -18,7 +18,6 @@ import Polysemy.Scoped
 import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
-import Polysemy.Transport.Extra
 import Polysemy.Wait
 import R2
 import R2.Bus
@@ -80,7 +79,7 @@ data Command = Command
   }
 
 listNodes ::
-  ( Members (Transport Message Message) r,
+  ( Members (Transport DaemonToClientMessage ClientToDaemonMessage) r,
     Member (Output String) r,
     Member Fail r
   ) =>
@@ -110,16 +109,15 @@ procToMsg ::
     Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r,
-    Member Async r,
-    Member Fail r
+    Member Async r
   ) =>
   ProcessTransport ->
   Sem r ()
 procToMsg transport =
   procToProcStream transport $
     sequenceConcurrently_
-      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF $ decodeInput inputMsgOutputBs,
-        tag @'ServerStream @(Output ByteString) $ encodeOutput inputBsOutputMsg
+      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF inputToOutput,
+        tag @'ServerStream @(Output ByteString) inputToOutput
       ]
 
 connectNode ::
@@ -226,7 +224,7 @@ handleAction ::
   Connection chan ->
   Action ->
   Sem r ()
-handleAction _ _ Ls = tagStream @'ServerStream $ runEncodingU @Message listNodes
+handleAction _ _ Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage listNodes
 handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
 handleAction _ _ (Tunnel transport) = connectTransport transport
 handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
@@ -263,13 +261,12 @@ r2c ::
   Command ->
   Sem r ()
 r2c mSelf (Command targetChain action) = do
-  (Just server) <-
-    fmap unSelf . msgSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
+  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
   me <- case mSelf of
     Just self -> pure self
     Nothing -> childAddr server
   output $ LogMe me
-  tag @'ServerStream @ByteOutput $ output (encodeStrict $ MsgSelf $ Self me)
+  tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
   output $ LogLocalDaemon server
   let target = case targetChain of
         [] -> server

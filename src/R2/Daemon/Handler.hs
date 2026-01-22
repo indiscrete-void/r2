@@ -16,7 +16,7 @@ import R2.Peer.Conn
 import R2.Peer.MakeNode
 import R2.Peer.Proto
 
-listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r) => Sem r ()
+listNodes :: (Member (Reader [Node chan]) r, Member (Output DaemonToClientMessage) r) => Sem r ()
 listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 
 connectNode ::

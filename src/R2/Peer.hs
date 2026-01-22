@@ -98,8 +98,8 @@ routeTo ::
 routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan (EstablishedConnection routeToAddr)
   case mChan of
-    Just (Outbound chan) -> busChan chan $ putChan (Just $ encodeStrict $ MsgR2 $ MsgRoutedFrom routedFrom)
-    Nothing -> output $ encodeStrict $ MsgR2 $ MsgRouteToErr $ RouteToErr routeToAddr "unreachable"
+    Just (Outbound chan) -> busChan chan $ putChan (Just $ encodeStrict $ MsgRoutedFrom routedFrom)
+    Nothing -> output $ encodeStrict $ MsgRouteToErr @Base64Text $ RouteToErr routeToAddr "unreachable"
 
 routeToError ::
   ( Member (Bus chan ByteString) r,
@@ -146,8 +146,8 @@ exchangeSelves ::
   Maybe Address ->
   Sem r Address
 exchangeSelves self maybeKnownAddr = runEncoding do
-  output (MsgSelf $ Self self)
-  (Just (Self addr)) <- msgSelf <$> inputOrFail
+  output (Self self)
+  (Self addr) <- inputOrFail
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr
@@ -255,10 +255,10 @@ handleR2MsgDefaultAndRestWith handleNonR2Msg conn = ioToNodeBusChanLogged (Conne
       mIn <- input
       case mIn of
         Just bs -> do
-          msg <- decodeStrictSem bs
-          case msg of
-            Just (MsgR2 msg) -> handleR2Msg (connAddr conn) msg
-            _ -> handleNonR2Msg conn (Just bs)
+          result <- runFail $ decodeStrictSem bs
+          case result of
+            Right msg -> handleR2Msg (connAddr conn) msg
+            Left _ -> handleNonR2Msg conn (Just bs)
           go
         Nothing -> handleNonR2Msg conn Nothing
 

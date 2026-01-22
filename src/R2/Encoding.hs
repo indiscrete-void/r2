@@ -61,17 +61,6 @@ runEncoding ::
   InterpretersFor '[InputWithEOF i, Output o] r
 runEncoding = encodeOutput . decodeInput
 
-runEncodingU ::
-  forall m r.
-  ( Member ByteInputWithEOF r,
-    Member ByteOutput r,
-    Member Fail r,
-    FromJSON m,
-    ToJSON m
-  ) =>
-  InterpretersFor '[InputWithEOF m, Output m] r
-runEncodingU = runEncoding @m @m
-
 deserializeInput :: forall a r. (FromJSON a, Member Fail r, Member ByteInputWithEOF r) => InterpreterFor (InputWithEOF a) r
 deserializeInput =
   lenDecodeInput

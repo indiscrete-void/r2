@@ -53,7 +53,7 @@ outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outboun
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   whileJust_
     (busChan chan takeChan)
-    (busChan routerChan . outputToChan . output . encodeStrict . MsgR2 . MsgRouteTo . RouteTo addr . bsToBase64)
+    (busChan routerChan . outputToChan . encodeOutput . output . MsgRouteTo . RouteTo addr . bsToBase64)
 
 makeR2ConnectedNode ::
   ( Member (Bus chan ByteString) r,

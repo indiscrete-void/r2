@@ -2,16 +2,9 @@ module R2.Peer.Proto
   ( Raw (..),
     Self (..),
     ProcessTransport (..),
-    Message (..),
-    ioToMsg,
-    msgSelf,
-    msgRoutedFrom,
-    runMsgInput,
-    runMsgOutput,
-    runMsgClose,
-    inputMsgOutputBs,
-    inputBsOutputMsg,
-    msgToIO,
+    R2Message (..),
+    ClientToDaemonMessage (..),
+    DaemonToClientMessage (..),
   )
 where
 
@@ -22,14 +15,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
 import Data.Text qualified as Text
 import GHC.Generics
-import Polysemy
-import Polysemy.Async
-import Polysemy.Extra.Async
-import Polysemy.Fail
-import Polysemy.Transport
-import Polysemy.Transport.Extra
 import R2
-import R2.Encoding (Base64Text)
 import Serial.Aeson.Options
 
 data ProcessTransport
@@ -54,76 +40,26 @@ newtype Self = Self {unSelf :: Address}
 
 $(deriveJSON (aesonRemovePrefix "un") ''Self)
 
-data Message where
-  MsgSelf :: Self -> Message
-  MsgR2 :: R2Message Base64Text -> Message
-  MsgData :: Maybe Raw -> Message
-  MsgExit :: Message
-  ReqConnectNode :: ProcessTransport -> Maybe Address -> Message
-  ReqTunnelProcess :: Message
-  ResTunnelProcess :: Address -> Message
-  ReqListNodes :: Message
-  ResNodeList :: [Address] -> Message
+data R2Message msg where
+  MsgRouteTo :: RouteTo msg -> R2Message msg
+  MsgRouteToErr :: RouteToErr -> R2Message msg
+  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
   deriving stock (Eq, Show, Generic)
 
-$(deriveJSON aesonOptions ''Message)
+$(deriveJSON aesonOptions ''R2Message)
 
-msgSelf :: Message -> Maybe Self
-msgSelf = \case
-  MsgSelf self -> Just self
-  _ -> Nothing
+data ClientToDaemonMessage where
+  ReqConnectNode :: ProcessTransport -> Maybe Address -> ClientToDaemonMessage
+  ReqTunnelProcess :: ClientToDaemonMessage
+  ReqListNodes :: ClientToDaemonMessage
+  MsgExit :: ClientToDaemonMessage
+  deriving stock (Eq, Show, Generic)
 
-msgData :: Message -> Maybe Raw
-msgData = \case
-  MsgData raw -> raw
-  _ -> Nothing
+$(deriveJSON aesonOptions ''ClientToDaemonMessage)
 
-msgRoutedFrom :: Message -> Maybe (RoutedFrom Base64Text)
-msgRoutedFrom = \case
-  MsgR2 (MsgRoutedFrom routedFrom) -> Just routedFrom
-  _ -> Nothing
+data DaemonToClientMessage where
+  ResTunnelProcess :: Address -> DaemonToClientMessage
+  ResNodeList :: [Address] -> DaemonToClientMessage
+  deriving stock (Eq, Show, Generic)
 
-runMsgInput :: (Member (InputWithEOF Message) r, Member Fail r) => InterpreterFor ByteInputWithEOF r
-runMsgInput = interpret \case
-  Input ->
-    input >>= \case
-      Just (MsgData (Just raw)) -> pure $ Just $ unRaw raw
-      Just (MsgData Nothing) -> pure Nothing
-      Just msg -> fail $ "unexected message: " <> show msg
-      Nothing -> pure Nothing
-
-runMsgOutput :: (Member (Output Message) r) => InterpreterFor ByteOutput r
-runMsgOutput = interpret \case
-  Output msg -> output $ MsgData $ Just $ Raw msg
-
-runMsgClose :: (Member (Output Message) r) => InterpreterFor Close r
-runMsgClose = interpret \case
-  Close -> output (MsgData Nothing)
-
-msgToIO ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member Fail r
-  ) =>
-  InterpretersFor ByteTransport r
-msgToIO =
-  runMsgClose
-    . runMsgOutput
-    . runMsgInput
-
-inputMsgOutputBs :: (Member (InputWithEOF Message) r, Member ByteOutput r, Member Close r) => Sem r ()
-inputMsgOutputBs = contramapInput (>>= fmap unRaw . msgData) inputToOutput >> close
-
-inputBsOutputMsg :: (Member ByteInputWithEOF r, Member (Output Message) r) => Sem r ()
-inputBsOutputMsg = mapOutput (MsgData . Just . Raw) inputToOutput >> output (MsgData Nothing)
-
-ioToMsg ::
-  ( Member (InputWithEOF Message) r,
-    Member (Output Message) r,
-    Member (InputWithEOF ByteString) r,
-    Member (Output ByteString) r,
-    Member Close r,
-    Member Async r
-  ) =>
-  Sem r ()
-ioToMsg = sequenceConcurrently_ [inputMsgOutputBs, inputBsOutputMsg]
+$(deriveJSON aesonOptions ''DaemonToClientMessage)
