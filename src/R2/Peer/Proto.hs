@@ -52,7 +52,6 @@ data ClientToDaemonMessage where
   ReqConnectNode :: ProcessTransport -> Maybe Address -> ClientToDaemonMessage
   ReqTunnelProcess :: ClientToDaemonMessage
   ReqListNodes :: ClientToDaemonMessage
-  MsgExit :: ClientToDaemonMessage
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''ClientToDaemonMessage)

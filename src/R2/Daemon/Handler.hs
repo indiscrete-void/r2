@@ -51,5 +51,4 @@ handleMsg Connection {..} bs =
   decodeStrictSem bs >>= \case
     ReqListNodes -> encodeOutput listNodes
     (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
-    MsgExit -> busChan (inboundChan connChan) $ putChan Nothing
     msg -> fail $ "unexpected message: " <> show msg
