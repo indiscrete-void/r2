@@ -55,6 +55,8 @@ default-extensions:
 dependencies:
   - base >=4.17.2.1 && <5
   - bytestring
+  - binary
+  - transformers
   - text
   - async
   - containers
