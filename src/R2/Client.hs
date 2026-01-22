@@ -40,8 +40,6 @@ data Log where
   LogLocalDaemon :: Address -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogOutput :: ProcessTransport -> ByteString -> Log
-  LogRecv :: Address -> (Maybe ByteString) -> Log
-  LogSend :: Address -> ByteString -> Log
   LogAction :: Address -> Action -> Log
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
@@ -50,8 +48,6 @@ logToTrace verbosity = runOutputSem \case
   (LogLocalDaemon them) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
   (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
   (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
-  (LogRecv addr bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show addr) (show bs)
-  (LogSend addr bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show addr) (show bs)
   (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
 
 inToLog :: forall i r a. (Member (Output Log) r, Member (Input i) r) => (i -> Log) -> Sem r a -> Sem r a
