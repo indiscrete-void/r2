@@ -7,7 +7,7 @@ module R2.Peer
     processTransport,
     address,
     exchangeSelves,
-    StatelessConnection (..),
+    OverlayConnection (..),
     EstablishedConnection (..),
     routeTo,
     routeToError,
@@ -113,20 +113,20 @@ routeToError (RouteToErr addr _) = do
 
 routedFrom ::
   ( Member (Bus chan ByteString) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member (LookupChan OverlayConnection (Inbound chan)) r,
     Member Fail r
   ) =>
   RoutedFrom Base64Text ->
   Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
-  Inbound chan <- lookupChan (StatelessConnection routedFromNode)
+  Inbound chan <- lookupChan (OverlayConnection routedFromNode)
   decoded <- base64ToBsSem routedFromData
   busChan chan $ putChan (Just decoded)
 
 handleR2Msg ::
   ( Member (Bus chan ByteString) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member (LookupChan OverlayConnection (Inbound chan)) r,
     Member (Output ByteString) r,
     Member Fail r
   ) =>
@@ -200,8 +200,8 @@ runOverlayLookupChan ::
     Member Async r
   ) =>
   Address ->
-  InterpreterFor (LookupChan StatelessConnection (Inbound chan)) r
-runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr) -> do
+  InterpreterFor (LookupChan OverlayConnection (Inbound chan)) r
+runOverlayLookupChan router = interpretLookupChanSem \(OverlayConnection addr) -> do
   mStoredChan <- lookupChan (EstablishedConnection addr)
   Inbound <$> case mStoredChan of
     Just Bidirectional {inboundChan} -> pure inboundChan
@@ -211,7 +211,7 @@ runOverlayLookupChan router = interpretLookupChanSem \(StatelessConnection addr)
 
 type ConnHandlerEffects chan =
   Append
-    '[ LookupChan StatelessConnection (Inbound chan),
+    '[ LookupChan OverlayConnection (Inbound chan),
        LookupChan EstablishedConnection (Bidirectional chan)
      ]
     (MakeNodeEffects chan)
@@ -243,7 +243,7 @@ handleR2MsgDefaultAndRestWith ::
   ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan StatelessConnection (Inbound chan)) r,
+    Member (LookupChan OverlayConnection (Inbound chan)) r,
     Member Fail r
   ) =>
   MsgHandler chan (Append (MsgHandlerEffects chan) r) ->

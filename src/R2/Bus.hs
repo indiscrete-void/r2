@@ -10,7 +10,7 @@ module R2.Bus
     Bidirectional (..),
     LookupChan (..),
     AddressChan,
-    StatelessConnection (..),
+    OverlayConnection (..),
     EstablishedConnection (..),
     Inbound (..),
     Outbound (..),
@@ -131,9 +131,9 @@ data LookupChan addr chan m a where
 
 makeSem ''LookupChan
 
-newtype StatelessConnection = StatelessConnection Address
+newtype OverlayConnection = OverlayConnection Address
 
-type instance AddressChan StatelessConnection chan = chan
+type instance AddressChan OverlayConnection chan = chan
 
 newtype EstablishedConnection = EstablishedConnection Address
 

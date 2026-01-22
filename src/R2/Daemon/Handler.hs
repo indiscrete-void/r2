@@ -1,4 +1,4 @@
-module R2.Daemon.Handler (StatelessConnection (..), EstablishedConnection (..), listNodes, connectNode, routeTo, routedFrom, handleMsg) where
+module R2.Daemon.Handler (OverlayConnection (..), EstablishedConnection (..), listNodes, connectNode, routeTo, routedFrom, handleMsg) where
 
 import Control.Monad
 import Data.ByteString (ByteString)
