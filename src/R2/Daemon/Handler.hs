@@ -16,8 +16,8 @@ import R2.Peer.Conn
 import R2.Peer.MakeNode
 import R2.Peer.Proto
 
-listNodes :: (Member (Reader [Node chan]) r, Member (Output ByteString) r) => Sem r ()
-listNodes = ask >>= output . encodeStrict . ResNodeList . mapMaybe nodeAddr
+listNodes :: (Member (Reader [Node chan]) r, Member (Output Message) r) => Sem r ()
+listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 
 connectNode ::
   ( Member (MakeNode q) r,
@@ -49,7 +49,7 @@ handleMsg ::
   Sem r ()
 handleMsg Connection {..} bs =
   decodeStrictSem bs >>= \case
-    ReqListNodes -> listNodes
+    ReqListNodes -> encodeOutput listNodes
     (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
     MsgExit -> busChan (inboundChan connChan) $ putChan Nothing
     msg -> fail $ "unexpected message: " <> show msg

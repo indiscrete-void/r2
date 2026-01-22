@@ -9,8 +9,9 @@ import Data.ByteString.Char8 qualified as BC
 import GHC.Generics
 import Polysemy
 import Polysemy.Fail
-import R2.Encoding.LengthPrefix
 import Polysemy.Transport
+import Polysemy.Transport.Extra
+import R2.Encoding.LengthPrefix
 
 encodeStrict :: (ToJSON a) => a -> StrictByteString
 encodeStrict = B.toStrict . encode
@@ -42,6 +43,34 @@ decodeStrictSem = eitherToFail . eitherDecodeStrict
 
 decodeBase64Sem :: (Member Fail r, FromJSON a) => Base64Text -> Sem r a
 decodeBase64Sem = eitherToFail . decodeBase64
+
+decodeInput :: (Member ByteInputWithEOF r, Member Fail r, FromJSON i) => InterpreterFor (InputWithEOF i) r
+decodeInput = contramapInputSem (mapM decodeStrictSem)
+
+encodeOutput :: (Member ByteOutput r, ToJSON o) => InterpreterFor (Output o) r
+encodeOutput = mapOutput encodeStrict
+
+runEncoding ::
+  forall i o r.
+  ( Member ByteInputWithEOF r,
+    Member ByteOutput r,
+    Member Fail r,
+    FromJSON i,
+    ToJSON o
+  ) =>
+  InterpretersFor '[InputWithEOF i, Output o] r
+runEncoding = encodeOutput . decodeInput
+
+runEncodingU ::
+  forall m r.
+  ( Member ByteInputWithEOF r,
+    Member ByteOutput r,
+    Member Fail r,
+    FromJSON m,
+    ToJSON m
+  ) =>
+  InterpretersFor '[InputWithEOF m, Output m] r
+runEncodingU = runEncoding @m @m
 
 deserializeInput :: forall a r. (FromJSON a, Member Fail r, Member ByteInputWithEOF r) => InterpreterFor (InputWithEOF a) r
 deserializeInput =

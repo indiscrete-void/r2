@@ -145,9 +145,9 @@ exchangeSelves ::
   Address ->
   Maybe Address ->
   Sem r Address
-exchangeSelves self maybeKnownAddr = do
-  output (encodeStrict $ MsgSelf $ Self self)
-  (Just (Self addr)) <- msgSelf <$> (decodeStrictSem =<< inputOrFail)
+exchangeSelves self maybeKnownAddr = runEncoding do
+  output (MsgSelf $ Self self)
+  (Just (Self addr)) <- msgSelf <$> inputOrFail
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr

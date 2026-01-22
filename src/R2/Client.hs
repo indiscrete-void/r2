@@ -80,14 +80,14 @@ data Command = Command
   }
 
 listNodes ::
-  ( Members ByteTransport r,
+  ( Members (Transport Message Message) r,
     Member (Output String) r,
     Member Fail r
   ) =>
   Sem r ()
 listNodes = do
-  output $ encodeStrict ReqListNodes
-  (ResNodeList list) <- decodeStrictSem =<< inputOrFail
+  output ReqListNodes
+  (ResNodeList list) <- inputOrFail
   output $ show list
 
 procToProcStream ::
@@ -118,8 +118,8 @@ procToMsg ::
 procToMsg transport =
   procToProcStream transport $
     sequenceConcurrently_
-      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF $ contramapInputSem (mapM decodeStrictSem) inputMsgOutputBs,
-        tag @'ServerStream @(Output ByteString) $ mapOutput encodeStrict inputBsOutputMsg
+      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF $ decodeInput inputMsgOutputBs,
+        tag @'ServerStream @(Output ByteString) $ encodeOutput inputBsOutputMsg
       ]
 
 connectNode ::
@@ -226,7 +226,7 @@ handleAction ::
   Connection chan ->
   Action ->
   Sem r ()
-handleAction _ _ Ls = tagStream @'ServerStream listNodes
+handleAction _ _ Ls = tagStream @'ServerStream $ runEncodingU @Message listNodes
 handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
 handleAction _ _ (Tunnel transport) = connectTransport transport
 handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
@@ -264,7 +264,7 @@ r2c ::
   Sem r ()
 r2c mSelf (Command targetChain action) = do
   (Just server) <-
-    fmap unSelf . msgSelf <$> (decodeStrictSem =<< (tag @'ServerStream @ByteInputWithEOF $ inputOrFail))
+    fmap unSelf . msgSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
   me <- case mSelf of
     Just self -> pure self
     Nothing -> childAddr server
