@@ -28,13 +28,13 @@ import Polysemy.Process (scopedProcToIOFinal)
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
-import Polysemy.Tagged
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
 import R2.Bus
 import R2.Client
 import R2.Client qualified as Client
+import R2.Client.Stream
 import R2.Daemon
 import R2.Options
 import R2.Peer
@@ -125,12 +125,6 @@ mkNodes link links serveMap = do
             forM_ myLinks \them -> do
               let chan = links ! (me, them)
               makeNode $ AcceptedNode (NewConnection (Just $ nodeId them) Socket chan)
-
-streamToChan :: forall stream chan r. (Member (Bus chan ByteString) r) => Bidirectional chan -> InterpretersFor (Stream stream) r
-streamToChan Bidirectional {..} =
-  (closeToBusChan outboundChan . untag @stream)
-    . (outputToBusChan outboundChan . untag @stream)
-    . (inputToBusChan inboundChan . untag @stream)
 
 mkActor ::
   forall chan r.

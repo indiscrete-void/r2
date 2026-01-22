@@ -33,6 +33,7 @@ library
       R2.Daemon.Sockets.Accept
       Serial.Aeson.Options
   other-modules:
+      R2.Client.Stream
       R2.Encoding
       Paths_r2
   autogen-modules:

@@ -1,4 +1,4 @@
-module R2.Client (ClientStream (..), Stream, Command (..), Action (..), Log (..), listNodes, connectNode, r2c, logToTrace, r2cIO) where
+module R2.Client (Log (..), Command (..), Action (..), listNodes, connectNode, r2c, logToTrace, r2cIO) where
 
 import Control.Exception (IOException)
 import Control.Monad
@@ -22,6 +22,7 @@ import Polysemy.Transport.Extra
 import Polysemy.Wait
 import R2
 import R2.Bus
+import R2.Client.Stream
 import R2.Encoding
 import R2.Options
 import R2.Peer
@@ -31,52 +32,8 @@ import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Random
-import R2.Socket
-import System.IO
 import System.Process.Extra
 import Text.Printf
-
-data ClientStream = ProcStream | ServerStream
-
-type Stream stream =
-  '[ Tagged stream ByteInputWithEOF,
-     Tagged stream ByteOutput,
-     Tagged stream Close
-   ]
-
-ioToStream :: forall stream r. (Members (Transport ByteString ByteString) r) => InterpretersFor (Stream stream) r
-ioToStream =
-  (subsume . untag @stream @Close)
-    . (subsume . untag @stream @ByteOutput)
-    . (subsume . untag @stream @ByteInputWithEOF)
-
-streamToChan ::
-  forall stream chan r.
-  (Member (Bus chan ByteString) r) =>
-  Bidirectional chan ->
-  InterpretersFor (Stream stream) r
-streamToChan Bidirectional {..} =
-  ( busChan outboundChan
-      . (closeToChan . untag @stream @Close)
-      . (outputToChan . untag @stream @ByteOutput)
-      . raise2Under @(Chan _)
-  )
-    . ( busChan inboundChan
-          . (inputToChan . untag @stream @ByteInputWithEOF)
-          . raiseUnder @(Chan _)
-      )
-
-data Action
-  = Ls
-  | Connect !ProcessTransport !(Maybe Address)
-  | Tunnel !ProcessTransport
-  | Serve (Maybe Address) !ProcessTransport
-  deriving stock (Show)
-
-data Command = Command
-  { commandTargetChain :: [Address],
-    commandAction :: Action
-  }
 
 data Log where
   LogMe :: Address -> Log
@@ -109,6 +66,18 @@ outToLog f = intercept @(Output o) \case
   Output o -> do
     output (f o)
     output o
+
+data Action
+  = Ls
+  | Connect !ProcessTransport !(Maybe Address)
+  | Tunnel !ProcessTransport
+  | Serve (Maybe Address) !ProcessTransport
+  deriving stock (Show)
+
+data Command = Command
+  { commandTargetChain :: [Address],
+    commandAction :: Action
+  }
 
 listNodes ::
   ( Members (Transport ByteString ByteString) r,
@@ -334,18 +303,6 @@ r2cIO verbosity mSelf socketPath command = do
     outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
     outputToCLI = runOutputSem (embed . putStrLn)
 
-    runStandardIO :: (Member (Embed IO) r) => Int -> InterpretersFor (Stream 'ProcStream) r
-    runStandardIO bufferSize =
-      (closeToIO stdout . untag @'ProcStream)
-        . (outputToIO stdout . untag @'ProcStream)
-        . (inputToIO bufferSize stdin . untag @'ProcStream)
-
-    runSocketIO :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor (Stream 'ServerStream) r
-    runSocketIO bufferSize s =
-      (closeToSocket s . untag @'ServerStream @Close)
-        . (outputToSocket s . untag @'ServerStream @ByteOutput)
-        . (inputToSocket bufferSize s . untag @'ServerStream @ByteInputWithEOF)
-
     run verbosity s =
       runFinal
         . asyncToIOFinal
@@ -358,8 +315,8 @@ r2cIO verbosity mSelf socketPath command = do
         -- interpreter log is ignored
         . ignoreTrace
         -- socket, std and process io
-        . runSocketIO bufferSize s
-        . runStandardIO bufferSize
+        . serverStreamToSocket bufferSize s
+        . procStreamToStdio bufferSize
         . scopedProcToIOFinal bufferSize
         -- log application events
         . outputToCLI
