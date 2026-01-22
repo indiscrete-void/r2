@@ -146,13 +146,13 @@ socat udp-l:47210,fork exec:"r2 connect -"
 Run r2d as a system service to provide network connectivity to all local applications.
 
 ### As a Library
-Embed r2net functionality directly into your applications.
+Embed r2 functionality directly into your applications.
 
 ### As Standalone Binaries
 Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 
 ### Via Adapters
-Connect existing protocols and applications through r2net adapters.
+Connect existing protocols and applications through r2 adapters.
 
 ## Project Status
 
