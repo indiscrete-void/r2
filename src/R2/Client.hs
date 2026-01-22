@@ -243,6 +243,24 @@ makeChain router routerOutboundChan (target : rest) = do
   nextChan <- makeR2ConnectedNode target router routerOutboundChan
   makeChain target (Outbound $ outboundChan nextChan) rest
 
+meetServerAssignSelf ::
+  ( Members (Stream 'ServerStream) r,
+    Member Random r,
+    Member Fail r,
+    Member (Output Log) r
+  ) =>
+  Maybe Address ->
+  Sem r (Address, Address)
+meetServerAssignSelf mSelf = do
+  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
+  me <- case mSelf of
+    Just self -> pure self
+    Nothing -> childAddr server
+  tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
+  output $ LogMe me
+  output $ LogLocalDaemon server
+  pure (me, server)
+
 r2c ::
   ( Members (Stream 'ProcStream) r,
     Members (Stream 'ServerStream) r,
@@ -261,13 +279,7 @@ r2c ::
   Command ->
   Sem r ()
 r2c mSelf (Command targetChain action) = do
-  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
-  me <- case mSelf of
-    Just self -> pure self
-    Nothing -> childAddr server
-  output $ LogMe me
-  tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
-  output $ LogLocalDaemon server
+  (me, server) <- meetServerAssignSelf mSelf
   let target = case targetChain of
         [] -> server
         nodes -> last nodes
