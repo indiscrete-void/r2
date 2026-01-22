@@ -37,7 +37,7 @@ connectNode _ _ Nothing = fail "node without addr unsupported"
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
-    Members (Transport ByteString ByteString) r,
+    Members ByteTransport r,
     Member (MakeNode chan) r,
     Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
     Member (Bus chan ByteString) r,

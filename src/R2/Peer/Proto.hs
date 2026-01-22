@@ -105,7 +105,7 @@ msgToIO ::
     Member (Output Message) r,
     Member Fail r
   ) =>
-  InterpretersFor (Transport ByteString ByteString) r
+  InterpretersFor ByteTransport r
 msgToIO =
   runMsgClose
     . runMsgOutput

@@ -74,7 +74,7 @@ static = NetworkDescription {serve = [], link = []}
 
 data Network r = Network
   { join :: Sem r (),
-    conn :: NetworkRoute -> Action -> InterpretersFor (Transport ByteString ByteString) r,
+    conn :: NetworkRoute -> Action -> InterpretersFor ByteTransport r,
     conn_ :: NetworkRoute -> Action -> Sem r ()
   }
 
@@ -142,7 +142,7 @@ mkActor ::
   Map NetworkNode Service ->
   NetworkRoute ->
   Action ->
-  InterpretersFor (Transport ByteString ByteString) r
+  InterpretersFor ByteTransport r
 mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m = do
   (stdioLinkA, stdioLinkB) <- makeLink
   (msgLinkA, msgLinkB) <- makeLink

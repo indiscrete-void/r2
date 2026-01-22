@@ -80,7 +80,7 @@ data Command = Command
   }
 
 listNodes ::
-  ( Members (Transport ByteString ByteString) r,
+  ( Members ByteTransport r,
     Member (Output String) r,
     Member Fail r
   ) =>
@@ -161,7 +161,7 @@ connectTransport transport = do
 
 serviceMsgHandler ::
   ( Members (Stream 'ProcStream) r,
-    Members (Transport ByteString ByteString) r,
+    Members ByteTransport r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r,
     Member Fail r,
@@ -288,7 +288,7 @@ r2c mSelf (Command targetChain action) = do
       let targetConn = Connection {connAddr = target, connChan = targetChan, connTransport = Socket}
       handleAction me targetConn action
 
-tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append (Transport ByteString ByteString) r) a -> Sem r a
+tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append ByteTransport r) a -> Sem r a
 tagStream =
   tag @stream @Close
     . tag @stream @ByteOutput

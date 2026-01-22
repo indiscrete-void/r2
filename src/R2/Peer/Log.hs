@@ -41,10 +41,10 @@ logToTrace verbosity = runOutputSem go
     go (LogDisconnected node) = trace $ printf "%s disconnected" (logShowNode node)
     go (LogError node err) = trace $ printf "%s error: %s" (logShowNode node) err
 
-ioToLog :: (Member (Output Log) r) => Node chan -> Sem (Append (Transport ByteString ByteString) r) a -> Sem (Append (Transport ByteString ByteString) r) a
+ioToLog :: (Member (Output Log) r) => Node chan -> Sem (Append ByteTransport r) a -> Sem (Append ByteTransport r) a
 ioToLog node =
   intercept @(Output ByteString) (\(Output o) -> output (LogSend node o) >> output o)
     . intercept @(InputWithEOF ByteString) (\Input -> input >>= \i -> whenJust i (output . LogRecv node) >> pure i)
 
-ioToNodeBusChanLogged :: (Member (Bus chan ByteString) r, Member (Output Log) r) => Node chan -> InterpretersFor (Transport ByteString ByteString) r
+ioToNodeBusChanLogged :: (Member (Bus chan ByteString) r, Member (Output Log) r) => Node chan -> InterpretersFor ByteTransport r
 ioToNodeBusChanLogged node = ioToChan (nodeChan node) . ioToLog node

@@ -82,11 +82,11 @@ r2dIO verbosity fork self socketPath = do
       pure $ Just exit
     forkIf False m = Nothing <$ m
 
-    runScopedSocket :: (Member (Embed IO) r, Member Trace r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle (Transport ByteString ByteString))) r
+    runScopedSocket :: (Member (Embed IO) r, Member Trace r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle ByteTransport)) r
     runScopedSocket bufferSize =
-      runScopedBundle @(Transport ByteString ByteString) (runSocketIO bufferSize)
+      runScopedBundle @ByteTransport (runSocketIO bufferSize)
 
-    runServerSocket :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor '[Scoped IO.Socket (Bundle (Transport ByteString ByteString)), Accept IO.Socket] r
+    runServerSocket :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor '[Scoped IO.Socket (Bundle ByteTransport), Accept IO.Socket] r
     runServerSocket bufferSize s = acceptToIO s . runScopedSocket bufferSize
 
     run verbosity s =

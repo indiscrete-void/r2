@@ -18,7 +18,7 @@ type Stream stream =
      Tagged stream Close
    ]
 
-ioToStream :: forall stream r. (Members (Transport ByteString ByteString) r) => InterpretersFor (Stream stream) r
+ioToStream :: forall stream r. (Members ByteTransport r) => InterpretersFor (Stream stream) r
 ioToStream =
   (subsume . untag @stream @Close)
     . (subsume . untag @stream @ByteOutput)
