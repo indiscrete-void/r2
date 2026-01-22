@@ -251,7 +251,7 @@ resolveConnectionCmd verbosity socketPath daemonConnAddress daemonConnProcess =
             where
               r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
               actionOpts :: String = case daemonConnAddress of Just (Addr addr) -> printf "-n %s" addr; Nothing -> ""
-          partialCmd = replace actionCmdPattern actionCmd daemonConnProcess
+          partialCmd = replace negativeCmdPattern actionCmd daemonConnProcess
        in ResolvedNegativeConnectionCmd partialCmd
     else PositiveConnectionCmd daemonConnProcess
 
