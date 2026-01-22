@@ -75,4 +75,3 @@ lenPrefixOutput = interpret \case
   Output o -> do
     let size = binaryEncodeStrict $ B.length o
     output $ size <> o
-

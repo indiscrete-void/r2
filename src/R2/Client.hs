@@ -23,6 +23,7 @@ import R2
 import R2.Bus
 import R2.Client.Stream
 import R2.Encoding
+import R2.Encoding.LengthPrefix
 import R2.Options
 import R2.Peer
 import R2.Peer.Conn
@@ -140,7 +141,7 @@ connectNode self transport (Just addr) = do
     routerAddr <- exchangeSelves self Nothing
     procConnChan@Bidirectional {outboundChan = Outbound -> routerOutboundChan} <- makeConnectedNode routerAddr (Pipe transport)
     _ <- makeR2ConnectedNode addr routerAddr routerOutboundChan
-    chanToIO procConnChan
+    lenDecodeInput $ lenPrefixOutput $ chanToIO procConnChan
 connectNode _ _ Nothing = fail "node without addr unsupported"
 
 connectTransport ::
@@ -148,8 +149,7 @@ connectTransport ::
     Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
     Member Async r,
-    Member (Output Log) r,
-    Member Fail r
+    Member (Output Log) r
   ) =>
   ProcessTransport ->
   Sem r ()
