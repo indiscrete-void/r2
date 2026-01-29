@@ -16,16 +16,30 @@
   └───────────────────────────────────────────────────┘                                          
 ```
 
-**r2** is a minimalist networking framework that unifies local inter-process communication (IPC) and remote network connectivity through a single, elegant protocol. It enables seamless resource sharing, tunneling, and multiplexing across both local and distributed systems.
+r2 is a minimalist networking framework that unifies local inter-process communication (IPC) and remote network connectivity through a single, elegant model. It enables seamless resource sharing, tunneling, and multiplexing across both local and distributed systems.
+
+Like Wireguard and Yggdrasil it provides binaries, but composable like `socat`  
+Like ZeroMQ and libp2p - a library for communication  
+
+[=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
 
 ## Key Features
 
-- **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface
-- **Simple Routing Protocol**: Single-hop routing that can be composed for complex topologies
-- **Transparent Multiplexing**: Multiple virtual connections over single physical links
-- **Flexible Transport**: Works over any transport layer (TCP/IP, UDP, Bluetooth, Unix sockets, serial, etc.)
-- **Service Discovery**: Automatic resource advertisement and discovery across the network
-- **Minimal Dependencies**: Small footprint with maximal flexibility
+- **Unified Networking** ✅: Treat local processes and remote nodes identically through a consistent interface
+
+- **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
+
+- **Simple Core Protocol**: Single-hop routing that can be composed for complex topologies ✅
+
+- **Flexible Transport**: Works over any transport layer (TCP/IP, UDP, Bluetooth, Unix sockets, serial, etc.) that can be reduced to stdio ✅
+
+- **Multiplexing**: Multiple virtual connections over single physical links ✅
+
+- **Multipathing**: Combine multiple underlying links into single connection ⏳
+
+- **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
+
+- **Multiplatform** Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
 
 ## The Route-to Protocol
 
@@ -37,21 +51,19 @@ r2 f n0 (RouteTo n1 msg) = f n1 (RoutedFrom n0 msg)
 This minimalist design supports:
 - **Routing**: Single-hop routing that can be recursively composed
 - **Multiplexing**: Virtual nodes for shared channel communication
-- **Tunneling**: Raw data streams through virtual node occupation
+- **Services**: Raw data streams through virtual node occupation
 - **Ping**: Built-in connectivity testing (when n0 = n1)
 
-## Components
+## Binaries
 
 ### Core Daemon (`r2d`)
-The background service that manages node connections, routing, and resource exposure. Each daemon instance represents a node in the network.
+The background service that manages topology. Each daemon instance represents a node in the network.
 
 ### Management CLI (`r2`)
-Command-line interface for interacting with local daemons, connecting to remote nodes, and managing network resources.
+Command-line interface for interacting with local daemons: connecting to remote nodes, and exposing network resources.
 
-### Connection Handlers
-- **`r2-connect`**: Establishes connections between daemons over various transports
-- **`r2-tunnel`**: Creates application-layer tunnels through the network
-- **`r2-serve`**: Exposes local services to the network
+### High Level Manager (`r2dm`)
+Declare networks and daemons in a single config which is then implemented by `r2d` and `r2` composition
 
 ## Getting Started
 
@@ -143,7 +155,7 @@ socat udp-l:47210,fork exec:"r2 connect -"
 ## Installation & Usage
 
 ### As a Super-Server
-Run r2d as a system service to provide network connectivity to all local applications.
+Run r2dm as a system service to provide network connectivity to all local applications.
 
 ### As a Library
 Embed r2 functionality directly into your applications.
@@ -151,12 +163,8 @@ Embed r2 functionality directly into your applications.
 ### As Standalone Binaries
 Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 
-### Via Adapters
-Connect existing protocols and applications through r2 adapters.
-
-## Project Status
-
-Actively developed with a focus on stability and performance. The protocol is designed to be extensible while maintaining backward compatibility.
+### Via Adapters ⏳
+Connect existing protocols and applications through r2 adapters. TCP/IP (via TUN), REST and proxy-site are planned 
 
 ---
 
