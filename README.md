@@ -25,7 +25,7 @@ Like ZeroMQ and libp2p - a library for communication
 
 ## Key Features
 
-- **Unified Networking** ✅: Treat local processes and remote nodes identically through a consistent interface
+- **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
 
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
 
