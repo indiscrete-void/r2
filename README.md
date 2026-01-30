@@ -25,21 +25,13 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 [=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
 
 ## Key Features
-
 - **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
-
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
-
 - **Simple Core Protocol**: Single-hop routing that can be composed for complex topologies ✅
-
 - **Flexible Transport**: Works over any transport layer (TCP/IP, UDP, Bluetooth, Unix sockets, serial, etc.) that can be reduced to stdio ✅
-
 - **Multiplexing**: Multiple virtual connections over single physical links ✅
-
 - **Multipathing**: Combine multiple underlying links into single connection ⏳
-
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
-
 - **Multiplatform** Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
 
 ## The Route-to Protocol
