@@ -18,8 +18,9 @@
 
 r2 is a minimalist networking framework that unifies local inter-process communication (IPC) and remote network connectivity through a single, elegant model. It enables seamless resource sharing, tunneling, and multiplexing across both local and distributed systems.
 
-Like Wireguard and Yggdrasil it provides binaries, but composable like `socat`  
-Like ZeroMQ and libp2p - a library for communication  
+Composable like [socat](https://linux.die.net/man/1/socat)
+Ready to use like [Wireguard](https://www.wireguard.com/) and [Yggdrasil](https://yggdrasil-network.github.io/)
+Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 
 [=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
 
