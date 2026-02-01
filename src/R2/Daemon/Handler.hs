@@ -20,26 +20,26 @@ listNodes :: (Member (Reader [Node chan]) r, Member (Output DaemonToClientMessag
 listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 
 connectNode ::
-  ( Member (MakeNode q) r,
-    Member (Bus q ByteString) r,
+  ( Member (MakeNode chan) r,
+    Member (Bus chan ByteString) r,
     Member Fail r,
-    Member Async r,
-    Member (LookupChan EstablishedConnection (Bidirectional q)) r
+    Member Async r
   ) =>
-  Address ->
-  ProcessTransport ->
+  Connection chan ->
   Maybe Address ->
   Sem r ()
-connectNode router _ (Just addr) = do
-  Just (Bidirectional {outboundChan = Outbound -> routerOutboundChan}) <- lookupChan (EstablishedConnection router)
-  void $ makeR2ConnectedNode addr router routerOutboundChan
-connectNode _ _ Nothing = fail "node without addr unsupported"
+connectNode
+  Connection
+    { connChan = Bidirectional {outboundChan = Outbound -> routerOutboundChan},
+      connAddr = router
+    }
+  (Just addr) = void $ makeR2ConnectedNode addr router routerOutboundChan
+connectNode _ Nothing = fail "node without addr unsupported"
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,
     Members ByteTransport r,
     Member (MakeNode chan) r,
-    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
     Member (Bus chan ByteString) r,
     Member Fail r,
     Member Async r
@@ -47,8 +47,8 @@ handleMsg ::
   Connection chan ->
   ByteString ->
   Sem r ()
-handleMsg Connection {..} bs =
+handleMsg conn bs =
   decodeStrictSem bs >>= \case
     ReqListNodes -> encodeOutput listNodes
-    (ReqConnectNode transport maybeNodeID) -> connectNode connAddr transport maybeNodeID
+    (ReqConnectNode _ maybeNodeID) -> connectNode conn maybeNodeID
     msg -> fail $ "unexpected message: " <> show msg
