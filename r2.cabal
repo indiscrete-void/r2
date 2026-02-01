@@ -36,6 +36,7 @@ library
       R2.Client.Stream
       R2.Encoding
       R2.Encoding.LengthPrefix
+      R2.Peer.Routing
       Paths_r2
   hs-source-dirs:
       src

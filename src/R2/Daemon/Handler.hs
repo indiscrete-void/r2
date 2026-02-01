@@ -1,4 +1,4 @@
-module R2.Daemon.Handler (OverlayConnection (..), EstablishedConnection (..), listNodes, connectNode, routeTo, routedFrom, handleMsg) where
+module R2.Daemon.Handler (OverlayConnection (..), EstablishedConnection (..), listNodes, connectNode, handleMsg) where
 
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -11,7 +11,6 @@ import Polysemy.Transport
 import R2
 import R2.Bus
 import R2.Encoding
-import R2.Peer
 import R2.Peer.Conn
 import R2.Peer.MakeNode
 import R2.Peer.Proto
