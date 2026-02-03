@@ -40,7 +40,6 @@ import R2.Options
 import R2.Peer
 import R2.Peer.Conn
 import R2.Peer.Log qualified as Peer
-import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Random
@@ -107,7 +106,9 @@ mkNodes ::
     Member Sem.Async r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member Resource r,
-    Member (Storages chan) r
+    Member (Storages chan) r,
+    Member (Bus connQueue (Connection chan)) r,
+    Member Fail r
   ) =>
   [NetworkLink] ->
   Map (NetworkNode, NetworkNode) (Bidirectional chan) ->
@@ -120,14 +121,15 @@ mkNodes link links serveMap = do
     async $
       scoped @_ @(Output Peer.Log) myId $
         scoped @_ @(Storage _) myId $
-          r2d myId do
+          runPeer myId do
             let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
             forM_ myLinks \them -> do
               let chan = links ! (me, them)
-              makeNode $ AcceptedNode (NewConnection (Just $ nodeId them) Socket chan)
+              superviseNode (Just $ nodeId them) Socket chan
+            processClients
 
 mkActor ::
-  forall chan r.
+  forall connQueue chan r.
   ( Member Sem.Async r,
     Member (Bus chan ByteString) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -137,7 +139,8 @@ mkActor ::
     Member (Storages chan) r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped Address (Output Client.Log)) r,
-    Member Random r
+    Member Random r,
+    Member (Bus connQueue (Connection chan)) r
   ) =>
   Map NetworkNode Service ->
   NetworkRoute ->
@@ -152,8 +155,9 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   let (ServiceCommand cmd) = serveMap ! firstNode
   scoped @_ @(Storage _) firstNodeId $
     scoped @_ @(Output Peer.Log) firstNodeId $
-      r2d firstNodeId do
-        makeNode $ AcceptedNode (NewConnection (Just randAddress) Socket msgLinkA)
+      runPeer firstNodeId do
+        _ <- superviseNode (Just randAddress) Socket msgLinkA
+        processClients
 
   let command = Command (map nodeId path) action
   client <-
@@ -170,13 +174,14 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   pure result
 mkActor _ path _ _ = fail $ "invalid path " <> show path
 
-type NetworkEffects chan =
+type NetworkEffects =
   '[ Random,
      Scoped CreateProcess Sem.Process,
-     Bus chan ByteString,
+     Bus (TBMQueue (Connection (TBMQueue ByteString))) (Connection (TBMQueue ByteString)),
+     Bus (TBMQueue ByteString) ByteString,
      Scoped Address (Output Peer.Log),
      Scoped Address (Output Client.Log),
-     Storages chan,
+     Storages (TBMQueue ByteString),
      Fail,
      Output String,
      Trace,
@@ -189,7 +194,7 @@ type NetworkEffects chan =
      Final IO
    ]
 
-mkNet :: (Members (NetworkEffects chan) r) => NetworkDescription -> Sem r (Network r)
+mkNet :: (Members NetworkEffects r) => NetworkDescription -> Sem r (Network r)
 mkNet NetworkDescription {..} = do
   let serveMap = Map.fromList serve
   links <- mkLinks link
@@ -202,7 +207,7 @@ mkNet NetworkDescription {..} = do
         join = forM_ handles await
       }
 
-dslToIO :: forall a. Verbosity -> ServeList -> Sem (NetworkEffects (TBMQueue ByteString)) a -> IO a
+dslToIO :: forall a. Verbosity -> ServeList -> Sem NetworkEffects a -> IO a
 dslToIO verbosity serveList =
   runFinal
     . interpretMaskFinal
@@ -217,7 +222,8 @@ dslToIO verbosity serveList =
     . storagesToIO
     . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
     . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity . raiseUnder @Trace)
-    . interpretBusTBM @_ @ByteString queueSize
+    . interpretBusTBM @ByteString queueSize
+    . interpretBusTBM @(Connection _) queueSize
     . scopedProcToIOFinal bufferSize
     . randomToIO
 

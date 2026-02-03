@@ -15,7 +15,6 @@ module R2.Peer.Storage
 where
 
 import Control.Concurrent.STM.TBMQueue
-import Data.ByteString (ByteString)
 import Data.IORef
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -28,20 +27,19 @@ import Polysemy.Resource
 import Polysemy.Scoped
 import R2
 import R2.Peer.Conn
-import R2.Peer.Proto
 
 type NodeState chan = [Node chan]
 
 data Storage chan m a where
   StorageAddNode :: Node chan -> Storage chan m ()
-  StorageRmNode :: Node chan -> Storage chan m ()
+  StorageRmNode :: Maybe Address -> Storage chan m ()
   StorageLookupNode :: Address -> Storage chan m (Maybe (Node chan))
   StorageNodes :: Storage chan m (NodeState chan)
 
 makeSem ''Storage
 
 storageLockNode :: (Member (Storage chan) r, Member Resource r) => Node chan -> Sem r c -> Sem r c
-storageLockNode node = bracket_ (storageAddNode node) (storageRmNode node)
+storageLockNode node = bracket_ (storageAddNode node) (storageRmNode $ nodeAddr node)
 
 nodesReaderToStorage :: (Member (Storage chan) r) => InterpreterFor (Reader (NodeState chan)) r
 nodesReaderToStorage = go id
@@ -57,7 +55,7 @@ storageToAtomicState :: (Member (AtomicState (NodeState chan)) r) => Interpreter
 storageToAtomicState =
   interpret \case
     StorageAddNode node -> atomicModify' (node :)
-    StorageRmNode node -> atomicModify' $ List.delete node
+    StorageRmNode addr -> atomicModify' $ List.filter ((/= addr) . nodeAddr)
     StorageLookupNode addr -> List.find ((Just addr ==) . nodeAddr) <$> atomicGet
     StorageNodes -> atomicGet @(NodeState _)
 

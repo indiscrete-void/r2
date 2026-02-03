@@ -7,14 +7,9 @@ module R2.Bus
     busTakeData,
     busPutData,
     busChan,
-    Bidirectional (..),
-    LookupChan (..),
-    AddressChan,
-    OverlayConnection (..),
-    EstablishedConnection (..),
     Inbound (..),
     Outbound (..),
-    lookupChan,
+    Bidirectional (..),
     chanToIO,
     interpretBusTBM,
     closeToChan,
@@ -25,8 +20,6 @@ module R2.Bus
     outputToBusChan,
     ioToChan,
     makeBidirectionalChan,
-    interpretLookupChanSem,
-    reinterpretLookupChan,
     linkChansOneWay,
     linkChansBidirectional,
   )
@@ -40,7 +33,6 @@ import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Transport
-import R2
 
 data Chan d m a where
   TakeChan :: Chan d m (Maybe d)
@@ -68,6 +60,10 @@ busChan :: (Member (Bus chan d) r) => chan -> InterpreterFor (Chan d) r
 busChan chan = interpret \case
   TakeChan -> busTakeData chan
   PutChan d -> busPutData chan d
+
+newtype Inbound chan = Inbound chan
+
+newtype Outbound chan = Outbound chan
 
 data Bidirectional chan = Bidirectional
   { inboundChan :: chan,
@@ -124,32 +120,7 @@ linkChansBidirectional
         linkChansOneWay inboundB outboundA
       ]
 
-type family AddressChan addr chan
-
-data LookupChan addr chan m a where
-  LookupChan :: addr -> LookupChan addr chan m (AddressChan addr chan)
-
-makeSem ''LookupChan
-
-newtype OverlayConnection = OverlayConnection Address
-
-type instance AddressChan OverlayConnection chan = chan
-
-newtype EstablishedConnection = EstablishedConnection Address
-
-type instance AddressChan EstablishedConnection chan = Maybe chan
-
-newtype Inbound chan = Inbound chan
-
-newtype Outbound chan = Outbound chan
-
-interpretLookupChanSem :: (addr -> Sem r (AddressChan addr chan)) -> InterpreterFor (LookupChan addr chan) r
-interpretLookupChanSem f = interpret \(LookupChan addr) -> f addr
-
-reinterpretLookupChan :: (Member (LookupChan addr chan) r) => (AddressChan addr chan -> AddressChan addr chan') -> InterpreterFor (LookupChan addr chan') r
-reinterpretLookupChan f = interpretLookupChanSem (fmap f . lookupChan)
-
-interpretBusTBM :: (Member (Embed IO) r) => Int -> InterpreterFor (Bus (TBMQueue d) d) r
+interpretBusTBM :: forall d r. (Member (Embed IO) r) => Int -> InterpreterFor (Bus (TBMQueue d) d) r
 interpretBusTBM bufferSize = interpret \case
   BusMakeChan -> embed $ newTBMQueueIO bufferSize
   BusTakeData chan -> embed (atomically $ readTBMQueue chan)

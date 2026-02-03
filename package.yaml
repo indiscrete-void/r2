@@ -91,7 +91,6 @@ library:
     - R2.Peer.Proto
     - R2.Peer.Log
     - R2.Peer.Conn
-    - R2.Peer.MakeNode
     - R2.Peer.Storage
     - R2.Client
     - R2.Daemon

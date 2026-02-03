@@ -2,8 +2,8 @@ module R2.Client (Log (..), Command (..), Action (..), listNodes, connectNode, r
 
 import Control.Exception (IOException)
 import Control.Monad
-import Control.Monad.Extra
 import Data.ByteString (ByteString)
+import Debug.Trace (traceM)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
@@ -28,8 +28,8 @@ import R2.Options
 import R2.Peer
 import R2.Peer.Conn
 import R2.Peer.Log qualified as Peer
-import R2.Peer.MakeNode
 import R2.Peer.Proto
+import R2.Peer.Routing
 import R2.Peer.Storage
 import R2.Random
 import System.Process.Extra
@@ -125,7 +125,7 @@ connectNode ::
     Member (Output Log) r,
     Member (Bus chan ByteString) r,
     Member Fail r,
-    Member (MakeNode chan) r
+    Member (Peer chan) r
   ) =>
   Address ->
   ProcessTransport ->
@@ -135,7 +135,8 @@ connectNode self transport (Just addr) = do
   tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just addr
   procToProcStream transport $ do
     routerAddr <- exchangeSelves self Nothing
-    procConnChan@Bidirectional {outboundChan = Outbound -> routerOutboundChan} <- makeConnectedNode routerAddr (Pipe transport)
+    procConnChan <- makeBidirectionalChan
+    Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- superviseNode (Just routerAddr) (Pipe transport) procConnChan
     _ <- makeR2ConnectedNode addr routerAddr routerOutboundChan
     lenDecodeInput $ lenPrefixOutput $ chanToIO procConnChan
 connectNode _ _ Nothing = fail "node without addr unsupported"
@@ -162,27 +163,26 @@ serviceMsgHandler ::
     Member Async r
   ) =>
   ProcessTransport ->
-  Connection chan ->
-  Maybe ByteString ->
+  ByteString ->
   Sem r ()
-serviceMsgHandler transport _ mIn =
-  ioToStream @'ServerStream $
-    whenJust mIn $
-      decodeStrictSem >=> \case
-        ReqTunnelProcess -> procToMsg transport
-        msg -> fail $ "unexpected message received from service " <> show msg
+serviceMsgHandler transport bs =
+  decodeStrictSem bs >>= \case
+    ReqTunnelProcess -> ioToStream @'ServerStream $ procToMsg transport
+    msg -> fail $ "unexpected message received from service " <> show msg
 
 serveTransport ::
   ( Members (Stream 'ProcStream) r,
     Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
+    Member (Bus connQueue (Connection chan)) r,
     Member (Bus chan ByteString) r,
     Member Async r,
     Member (Output Log) r,
-    Member (MakeNode chan) r,
+    Member (Peer chan) r,
     Member (Storages chan) r,
     Member (Output Peer.Log) r,
-    Member Resource r
+    Member Resource r,
+    Member Fail r
   ) =>
   Address ->
   Maybe Address ->
@@ -195,12 +195,17 @@ serveTransport self mAddr transport = do
           Stdio -> Addr "stdio"
           Process cmd -> Addr $ head $ words cmd
   let serviceAddr = "service" /> serviceAddrPart
-  serviceChan <- makeConnectedNode serviceAddr (Pipe transport)
+  serviceChan <- makeBidirectionalChan
+  _ <- superviseNode (Just serviceAddr) (Pipe transport) serviceChan
   tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just serviceAddr
   scoped @_ @(Storage _) serviceAddr $
-    runPeer serviceAddr (handleR2MsgDefaultAndRestWith $ serviceMsgHandler transport) do
-      selfChan <- makeConnectedNode self (Pipe transport)
-      linkChansBidirectional selfChan serviceChan
+    runPeer serviceAddr do
+      selfChan <- makeBidirectionalChan
+      _ <- superviseNode (Just self) (Pipe transport) selfChan
+      async_ $ linkChansBidirectional selfChan serviceChan
+      forever $ do
+        Connection {connHighLevelChan = unHighLevel -> highLevelChan} <- acceptNode
+        async_ $ ioToChan @_ @ByteString highLevelChan $ handle (serviceMsgHandler transport)
 
 handleAction ::
   ( Members (Stream 'ProcStream) r,
@@ -211,7 +216,8 @@ handleAction ::
     Member Async r,
     Member (Output Log) r,
     Member (Bus chan ByteString) r,
-    Member (MakeNode chan) r,
+    Member (Bus connQueue (Connection chan)) r,
+    Member (Peer chan) r,
     Member (Output Peer.Log) r,
     Member Resource r,
     Member (Storages chan) r
@@ -227,17 +233,16 @@ handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transpor
 
 makeChain ::
   ( Member (Bus chan ByteString) r,
-    Member (MakeNode chan) r,
+    Member (Peer chan) r,
     Member Async r
   ) =>
-  Address ->
-  Outbound chan ->
+  Connection chan ->
   [Address] ->
-  Sem r (Outbound chan)
-makeChain _ routerOutboundChan [] = pure routerOutboundChan
-makeChain router routerOutboundChan (target : rest) = do
-  nextChan <- makeR2ConnectedNode target router routerOutboundChan
-  makeChain target (Outbound $ outboundChan nextChan) rest
+  Sem r (Connection chan)
+makeChain baseConn [] = pure baseConn
+makeChain Connection {connAddr = router, connHighLevelChan = fmap (Outbound . outboundChan) -> baseOutboundConn} (target : rest) = do
+  nextConn <- makeR2ConnectedNode target router baseOutboundConn
+  makeChain nextConn rest
 
 meetServerAssignSelf ::
   ( Members (Stream 'ServerStream) r,
@@ -266,6 +271,7 @@ r2c ::
     Member (Output Log) r,
     Member (Output String) r,
     Member (Bus chan ByteString) r,
+    Member (Bus connQueue (Connection chan)) r,
     Member (Output Peer.Log) r,
     Member (Storages chan) r,
     Member Resource r,
@@ -280,17 +286,12 @@ r2c mSelf (Command targetChain action) = do
         [] -> server
         nodes -> last nodes
   output $ LogAction target action
-  targetInboundChan <- busMakeChan
-  let msgHandler Connection {connAddr} msg
-        | connAddr == target = busChan targetInboundChan $ putChan msg
-        | otherwise = fail $ printf "unexpected message %s from %s" (show msg) (show connAddr)
-  scoped @_ @(Storage _) me $ runPeer me (handleR2MsgDefaultAndRestWith msgHandler) $ do
-    serverChan <- makeConnectedNode server Socket
+  scoped @_ @(Storage _) me $ runPeer me $ do
+    serverChan <- makeBidirectionalChan
+    serverConn <- superviseNode (Just server) Socket serverChan
     async_ $ tagStream @'ServerStream $ chanToIO serverChan
-    Outbound targetOutboundChan <- makeChain server (Outbound $ outboundChan serverChan) targetChain
-    let targetChan = Bidirectional targetInboundChan targetOutboundChan
+    targetConn@Connection {connHighLevelChan = unHighLevel -> targetChan} <- makeChain serverConn targetChain
     streamToChan @'ServerStream targetChan do
-      let targetConn = Connection {connAddr = target, connChan = targetChan, connTransport = Socket}
       handleAction me targetConn action
 
 tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append ByteTransport r) a -> Sem r a
@@ -330,5 +331,6 @@ r2cIO verbosity mSelf socketPath command = do
         . Peer.logToTrace verbosity
         . interpretLockReentrant
         . storagesToIO
-        . interpretBusTBM queueSize
+        . interpretBusTBM @ByteString queueSize
+        . interpretBusTBM @(Connection _) queueSize
         . randomToIO

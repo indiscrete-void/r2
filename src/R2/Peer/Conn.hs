@@ -1,16 +1,27 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 module R2.Peer.Conn
-  ( ConnTransport (..),
+  ( HighLevel (..),
+    ConnTransport (..),
     NewConnection (..),
     Connection (..),
     Node (..),
     nodeAddr,
     nodeChan,
+    Peer (..),
+    superviseNode,
+    acceptNode,
+    highLevelNodeChan,
   )
 where
 
+import Polysemy
 import R2
 import R2.Bus
 import R2.Peer.Proto
+
+newtype HighLevel chan = HighLevel {unHighLevel :: chan}
+  deriving stock (Functor)
 
 data ConnTransport = R2 Address | Pipe ProcessTransport | Socket
   deriving stock (Show)
@@ -24,7 +35,8 @@ data NewConnection chan = NewConnection
 data Connection chan = Connection
   { connAddr :: Address,
     connTransport :: ConnTransport,
-    connChan :: Bidirectional chan
+    connChan :: Bidirectional chan,
+    connHighLevelChan :: HighLevel (Bidirectional chan)
   }
 
 data Node chan
@@ -41,3 +53,13 @@ nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
 nodeChan :: Node chan -> Bidirectional chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
 nodeChan (ConnectedNode (Connection {connChan})) = connChan
+
+highLevelNodeChan :: Node chan -> Maybe (HighLevel (Bidirectional chan))
+highLevelNodeChan (AcceptedNode _) = Nothing
+highLevelNodeChan (ConnectedNode Connection {connHighLevelChan}) = Just connHighLevelChan
+
+data Peer chan m a where
+  SuperviseNode :: Maybe Address -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
+  AcceptNode :: Peer chan m (Connection chan)
+
+makeSem ''Peer

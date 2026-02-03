@@ -7,18 +7,16 @@ module R2.Peer
     processTransport,
     address,
     exchangeSelves,
-    OverlayConnection (..),
-    EstablishedConnection (..),
     Peer,
     runPeer,
-    handleR2MsgDefaultAndRestWith,
-    runRouter,
   )
 where
 
 import Control.Exception qualified as IO
 import Control.Monad.Extra
+import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.Functor ((<&>))
 import Data.Maybe
 import Debug.Trace qualified as Debug
 import Network.Socket (Family (..), Socket, socket)
@@ -28,7 +26,6 @@ import Polysemy
 import Polysemy.Async
 import Polysemy.Extra.Async
 import Polysemy.Fail
-import Polysemy.Internal.Kind
 import Polysemy.Resource
 import Polysemy.Transport
 import R2
@@ -36,7 +33,6 @@ import R2.Bus
 import R2.Encoding
 import R2.Peer.Conn
 import R2.Peer.Log
-import R2.Peer.MakeNode
 import R2.Peer.Proto
 import R2.Peer.Routing
 import R2.Peer.Storage
@@ -99,108 +95,171 @@ exchangeSelves self maybeKnownAddr = runEncoding do
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr
 
-type MakeNodeEffects chan =
-  '[ Fail,
-     MakeNode chan
-   ]
+interlayConnAddLogging :: (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) => Address -> Bidirectional chan -> Sem r (Bidirectional chan)
+interlayConnAddLogging addr chan = do
+  newChan <- makeBidirectionalChan
+  async_ $ ioToNodeChanLogged (Just addr) chan $ chanToIO newChan
+  pure newChan
 
-type ConnHandler chan r = Connection chan -> Sem r ()
+interlayConnAddCleanup :: (Member (Storage chan) r, Member (Bus chan d) r, Member Async r, Member (Output Log) r) => Address -> Bidirectional chan -> Sem r (Bidirectional chan)
+interlayConnAddCleanup addr Bidirectional {..} = do
+  let go = storageRmNode (Just addr) >> output (LogDisconnected (Just addr))
+  newChan <- makeBidirectionalChan
+  async_
+    $ ( (closeToBusChan outboundChan . runClose (go >> close))
+          . outputToBusChan outboundChan
+          . inputToBusChan inboundChan
+      )
+    $ chanToIO newChan
+  pure newChan
 
-makeNodes ::
-  forall chan r.
-  ( Member Async r,
-    Member (Output Log) r,
+interlayInput :: (Member (InputWithEOF ByteString) r, FromJSON a) => (a -> Sem r x) -> Sem r (Maybe ByteString)
+interlayInput handle = do
+  mi <- input
+  case mi of
+    Nothing -> pure mi
+    Just bs -> do
+      result <- runFail $ decodeStrictSem bs
+      case result of
+        Right msg -> handle msg >> interlayInput handle
+        Left _ -> pure mi
+
+interlayConnAddRouting ::
+  ( Member (Peer chan) r,
+    Member (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r,
+    Member (Bus chan ByteString) r,
+    Member Fail r,
+    Member Async r,
+    Member (Storage chan) r
+  ) =>
+  Address ->
+  Bidirectional chan ->
+  Sem r (Bidirectional chan)
+interlayConnAddRouting addr chan = do
+  let go = interlayInput (handleR2Msg addr)
+  newChan <- makeBidirectionalChan
+  async_ $
+    ioToChan chan $
+      runInputSem go $
+        chanToIO newChan
+  pure newChan
+
+superviseConn ::
+  ( Member (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r,
     Member (Bus chan ByteString) r,
     Member (Storage chan) r,
-    Member Resource r
+    Member (Peer chan) r,
+    Member (Output Log) r,
+    Member Fail r,
+    Member Async r
   ) =>
   Address ->
-  ConnHandler chan (Append (MakeNodeEffects chan) r) ->
-  InterpreterFor (MakeNode chan) r
-makeNodes self handler = runMakeNode (async_ . go)
-  where
-    go :: Node chan -> Sem r ()
-    go node@(AcceptedNode NewConnection {..}) = do
+  ConnTransport ->
+  Bidirectional chan ->
+  Sem r (Connection chan)
+superviseConn addr transport chan = do
+  let interlayChan =
+        interlayConnAddLogging addr
+          >=> interlayConnAddCleanup addr
+          >=> interlayConnAddRouting addr
+  highLevelChan <- HighLevel <$> interlayChan chan
+  pure $
+    Connection
+      { connAddr = addr,
+        connTransport = transport,
+        connChan = chan,
+        connHighLevelChan = highLevelChan
+      }
+
+determinePeerAddr ::
+  ( Member (Storage chan) r,
+    Member Fail r,
+    Member (Bus chan ByteString) r,
+    Member Resource r,
+    Member (Output Log) r
+  ) =>
+  Maybe Address ->
+  Address ->
+  Node chan ->
+  Sem r Address
+determinePeerAddr Nothing self node = storageLockNode node $ ioToNodeChanLogged Nothing (nodeChan node) (exchangeSelves self $ nodeAddr node)
+determinePeerAddr (Just addr) _ _ = pure addr
+
+lookupChanToStorage :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r
+lookupChanToStorage =
+  interpretLookupChanSem
+    ( \(EstablishedConnection addr) -> do
+        storageLookupNode addr <&> \case
+          Just (ConnectedNode Connection {connHighLevelChan}) -> Just connHighLevelChan
+          _ -> Nothing
+    )
+
+makePeerNode ::
+  ( Member Fail r,
+    Member (Bus connQueue (Connection chan)) r,
+    Member Resource r,
+    Member (Bus chan ByteString) r,
+    Member (Output Log) r,
+    Member Async r,
+    Member (Storage chan) r
+  ) =>
+  connQueue ->
+  Address ->
+  Maybe Address ->
+  ConnTransport ->
+  Bidirectional chan ->
+  Sem r (Connection chan)
+makePeerNode connQueue self mAddr transport chan = do
+  let acceptedNode = AcceptedNode (NewConnection mAddr transport chan)
+  output (LogConnected acceptedNode)
+  result <- runFail $ determinePeerAddr mAddr self acceptedNode
+  case result of
+    Left err -> do
+      output (LogError mAddr err)
+      fail err
+    Right addr -> do
+      conn <-
+        runPeerWithConnQueue connQueue self $
+          lookupChanToStorage $
+            superviseConn addr transport chan
+      let node = ConnectedNode conn
+      storageAddNode node
+      busPutData connQueue (Just conn)
       output (LogConnected node)
-      result <- runFail $ storageLockNode node $ ioToNodeBusChanLogged node (exchangeSelves self newConnAddr)
-      case result of
-        Right addr -> go (ConnectedNode $ Connection addr newConnTransport newConnChan)
-        Left err -> output (LogError node err)
-    go node@(ConnectedNode conn) = storageLockNode node do
-      output (LogConnected node)
-      result <-
-        makeNodes self handler $
-          runFail $
-            handler conn
-      output $ case result of
-        Right () -> LogDisconnected node
-        Left err -> LogError node err
+      pure conn
 
-runLookupChan :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (Bidirectional chan)) r
-runLookupChan = interpretLookupChanSem (\(EstablishedConnection addr) -> fmap nodeChan <$> storageLookupNode addr)
-
-type ConnHandlerEffects chan =
-  Append
-    '[ LookupChan OverlayConnection (Inbound chan),
-       LookupChan EstablishedConnection (Bidirectional chan)
-     ]
-    (MakeNodeEffects chan)
-
-type Peer chan =
-  '[ LookupChan EstablishedConnection (Bidirectional chan),
-     MakeNode chan
-   ]
-
-runPeer ::
+runPeerWithConnQueue ::
+  forall connQueue chan r.
   ( Member (Bus chan ByteString) r,
+    Member (Bus connQueue (Connection chan)) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
-    Member Resource r
-  ) =>
-  Address ->
-  ConnHandler chan (Append (ConnHandlerEffects chan) r) ->
-  InterpretersFor (Peer chan) r
-runPeer self userHandler = makeNodes self handler . runLookupChan
-  where
-    handler conn@Connection {connAddr} = runLookupChan . runOverlayLookupChan connAddr $ userHandler conn
-
-type MsgHandler chan r = Connection chan -> Maybe ByteString -> Sem r ()
-
-type MsgHandlerEffects chan = Transport ByteString ByteString
-
-handleR2MsgDefaultAndRestWith ::
-  ( Member (Bus chan ByteString) r,
-    Member (Output Log) r,
-    Member (LookupChan EstablishedConnection (Bidirectional chan)) r,
-    Member (LookupChan OverlayConnection (Inbound chan)) r,
+    Member Resource r,
     Member Fail r
   ) =>
-  MsgHandler chan (Append (MsgHandlerEffects chan) r) ->
-  Connection chan ->
-  Sem r ()
-handleR2MsgDefaultAndRestWith handleNonR2Msg conn = ioToNodeBusChanLogged (ConnectedNode conn) go
-  where
-    go = do
-      mIn <- input
-      case mIn of
-        Just bs -> do
-          result <- runFail $ decodeStrictSem bs
-          case result of
-            Right msg -> handleR2Msg (connAddr conn) msg
-            Left _ -> handleNonR2Msg conn (Just bs)
-          go
-        Nothing -> handleNonR2Msg conn Nothing
+  connQueue ->
+  Address ->
+  InterpreterFor (Peer chan) r
+runPeerWithConnQueue connQueue self =
+  interpret
+    ( \case
+        SuperviseNode mAddr transport chan -> makePeerNode connQueue self mAddr transport chan
+        AcceptNode -> busTakeData connQueue >>= maybe (fail "connection queue closed") pure
+    )
 
-runRouter ::
+runPeer ::
+  forall connQueue chan r.
   ( Member (Bus chan ByteString) r,
+    Member (Bus connQueue (Connection chan)) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
-    Member Resource r
+    Member Resource r,
+    Member Fail r
   ) =>
   Address ->
-  InterpretersFor (Peer chan) r
-runRouter self = runPeer self (handleR2MsgDefaultAndRestWith nonR2MsgHandler)
-  where
-    nonR2MsgHandler conn msg = fail $ printf "unexpected msg from %s: %s" (show $ connAddr conn) (show msg)
+  InterpreterFor (Peer chan) r
+runPeer self m = do
+  connQueue <- busMakeChan @connQueue
+  runPeerWithConnQueue connQueue self m

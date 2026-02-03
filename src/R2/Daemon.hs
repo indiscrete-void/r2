@@ -1,14 +1,16 @@
-module R2.Daemon (acceptSockets, logToTrace, r2d, r2Socketd, r2dIO) where
+module R2.Daemon (processClients, logToTrace, r2d, r2dIO) where
 
 import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
 import Control.Exception (IOException, finally)
-import Control.Monad.Extra
+import Control.Monad
 import Data.ByteString (ByteString)
+import Debug.Trace (traceM)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
 import Polysemy.Bundle
 import Polysemy.Conc.Interpreter.Race
+import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Process
@@ -26,46 +28,53 @@ import R2.Options
 import R2.Peer
 import R2.Peer.Conn
 import R2.Peer.Log
-import R2.Peer.MakeNode
 import R2.Peer.Storage
 import R2.Socket
+import Text.Printf (printf)
 
 acceptSockets ::
   ( Member (Accept sock) r,
     Member (Sockets ByteString ByteString sock) r,
     Member (Bus chan ByteString) r,
     Member Async r,
-    Member (MakeNode chan) r
+    Member (Peer chan) r
   ) =>
   Sem r ()
-acceptSockets =
+acceptSockets = do
   foreverAcceptAsync \s -> do
-    chan <- makeAcceptedNode Nothing Socket
-    socket s $ chanToIO chan
+    chan <- makeBidirectionalChan
+    async_ $ socket s $ chanToIO chan
+    _ <- superviseNode Nothing Socket chan
+    pure ()
+
+processClients ::
+  ( Member (Bus chan ByteString) r,
+    Member Async r,
+    Member (Peer chan) r,
+    Member (Storage chan) r
+  ) =>
+  Sem r ()
+processClients =
+  nodesReaderToStorage $ forever do
+    conn@Connection {connHighLevelChan = HighLevel connHighLevelChan} <- acceptNode
+    async_ $ runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
 
 r2d ::
   ( Member (Bus chan ByteString) r,
+    Member (Bus connQueue (Connection chan)) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
-    Member Resource r
-  ) =>
-  Address ->
-  InterpretersFor (Peer chan) r
-r2d self = runPeer self (handleR2MsgDefaultAndRestWith $ \conn msg -> nodesReaderToStorage $ whenJust msg $ handleMsg conn)
-
-r2Socketd ::
-  ( Member (Accept sock) r,
-    Member (Storage chan) r,
-    Member (Sockets ByteString ByteString sock) r,
-    Member (Bus chan ByteString) r,
     Member Resource r,
-    Member Async r,
-    Member (Output Log) r
+    Member Fail r,
+    Member (Sockets ByteString ByteString sock) r,
+    Member (Accept sock) r
   ) =>
   Address ->
   Sem r ()
-r2Socketd self = r2d self acceptSockets
+r2d self = runPeer self do
+  async_ acceptSockets
+  processClients
 
 r2dIO :: Verbosity -> Bool -> Address -> FilePath -> IO (Maybe (MVar ()))
 r2dIO verbosity fork self socketPath = do
@@ -73,7 +82,7 @@ r2dIO verbosity fork self socketPath = do
   IO.bind s (IO.SockAddrUnix socketPath)
   IO.listen s 5
   forkIf fork $
-    run verbosity s (r2Socketd self) `finally` IO.close s
+    run verbosity s (r2d self) `finally` IO.close s
   where
     forkIf :: Bool -> IO () -> IO (Maybe (MVar ()))
     forkIf True m = do
@@ -96,7 +105,8 @@ r2dIO verbosity fork self socketPath = do
         . resourceToIOFinal
         . embedToFinal @IO
         . traceIOExceptions @IOException
-        . interpretBusTBM queueSize
+        . interpretBusTBM @(Connection _) queueSize
+        . interpretBusTBM @ByteString queueSize
         . failToEmbed @IO
         -- ignore interpreter logs
         . ignoreTrace
