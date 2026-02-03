@@ -3,7 +3,6 @@ module R2.Client (Log (..), Command (..), Action (..), listNodes, connectNode, r
 import Control.Exception (IOException)
 import Control.Monad
 import Data.ByteString (ByteString)
-import Debug.Trace (traceM)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
@@ -86,14 +85,14 @@ listNodes = do
   (ResNodeList list) <- inputOrFail
   output $ show list
 
-procToProcStream ::
+ioToProc ::
   ( Members (Stream 'ProcStream) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r
   ) =>
   ProcessTransport ->
   InterpretersFor '[Input (Maybe ByteString), Output ByteString, Close] r
-procToProcStream transport m =
+ioToProc transport m =
   go transport $
     inToLog (LogInput transport) $
       outToLog (LogOutput transport) m
@@ -101,7 +100,7 @@ procToProcStream transport m =
     go Stdio = tagStream @'ProcStream
     go (Process cmd) = execIO (ioShell cmd) . raise3Under @Wait
 
-procToMsg ::
+procToServer ::
   ( Members (Stream 'ProcStream) r,
     Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
@@ -110,8 +109,8 @@ procToMsg ::
   ) =>
   ProcessTransport ->
   Sem r ()
-procToMsg transport =
-  procToProcStream transport $
+procToServer transport =
+  ioToProc transport $
     sequenceConcurrently_
       [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF inputToOutput,
         tag @'ServerStream @(Output ByteString) inputToOutput
@@ -133,7 +132,7 @@ connectNode ::
   Sem r ()
 connectNode self transport (Just addr) = do
   tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just addr
-  procToProcStream transport $ do
+  ioToProc transport $ do
     routerAddr <- exchangeSelves self Nothing
     procConnChan <- makeBidirectionalChan
     Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- superviseNode (Just routerAddr) (Pipe transport) procConnChan
@@ -152,7 +151,7 @@ connectTransport ::
   Sem r ()
 connectTransport transport = do
   tag @'ServerStream $ output $ encodeStrict ReqTunnelProcess
-  procToMsg transport
+  procToServer transport
 
 serviceMsgHandler ::
   ( Members (Stream 'ProcStream) r,
@@ -167,7 +166,7 @@ serviceMsgHandler ::
   Sem r ()
 serviceMsgHandler transport bs =
   decodeStrictSem bs >>= \case
-    ReqTunnelProcess -> ioToStream @'ServerStream $ procToMsg transport
+    ReqTunnelProcess -> ioToStream @'ServerStream $ procToServer transport
     msg -> fail $ "unexpected message received from service " <> show msg
 
 serveTransport ::
