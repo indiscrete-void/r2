@@ -30,7 +30,6 @@ import R2.Peer.Conn
 import R2.Peer.Log
 import R2.Peer.Storage
 import R2.Socket
-import Text.Printf (printf)
 
 acceptSockets ::
   ( Member (Accept sock) r,
@@ -51,13 +50,18 @@ processClients ::
   ( Member (Bus chan ByteString) r,
     Member Async r,
     Member (Peer chan) r,
-    Member (Storage chan) r
+    Member (Storage chan) r,
+    Member (Output Log) r
   ) =>
   Sem r ()
 processClients =
   nodesReaderToStorage $ forever do
     conn@Connection {connHighLevelChan = HighLevel connHighLevelChan} <- acceptNode
-    async_ $ runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
+    async_ do
+      result <- runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
+      case result of
+        Left err -> output (LogError (Just $ connAddr conn) err)
+        Right _ -> pure ()
 
 r2d ::
   ( Member (Bus chan ByteString) r,
