@@ -103,12 +103,12 @@ interlayConnAddLogging addr chan = do
 
 interlayConnAddCleanup :: (Member (Storage chan) r, Member (Bus chan d) r, Member Async r, Member (Output Log) r) => Address -> Bidirectional chan -> Sem r (Bidirectional chan)
 interlayConnAddCleanup addr Bidirectional {..} = do
-  let go = storageRmNode (Just addr) >> output (LogDisconnected (Just addr))
+  let cleanup = storageRmNode (Just addr) >> output (LogDisconnected (Just addr))
   newChan <- makeBidirectionalChan
   async_
-    $ ( (closeToBusChan outboundChan . runClose (go >> close))
+    $ ( closeToBusChan outboundChan
+          . (inputToBusChan inboundChan . runInputSem (input >>= \mi -> when (isNothing mi) cleanup >> pure mi))
           . outputToBusChan outboundChan
-          . inputToBusChan inboundChan
       )
     $ chanToIO newChan
   pure newChan
