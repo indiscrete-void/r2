@@ -15,7 +15,8 @@ import Data.Time.Units
 import Polysemy
 import Polysemy.Async (async, await)
 import Polysemy.Async qualified as Sem
-import Polysemy.Conc (interpretMaskFinal)
+import Polysemy.Bundle
+import Polysemy.Conc (EventConsumer, Events, interpretEventsChan, interpretMaskFinal)
 import Polysemy.Conc.Effect.Lock
 import Polysemy.Conc.Effect.Mask
 import Polysemy.Conc.Effect.Race
@@ -28,6 +29,7 @@ import Polysemy.Process (scopedProcToIOFinal)
 import Polysemy.Process qualified as Sem
 import Polysemy.Resource
 import Polysemy.Scoped
+import Polysemy.ScopedBundle
 import Polysemy.Trace
 import Polysemy.Transport
 import R2
@@ -101,13 +103,20 @@ mkLinks link =
               ]
       )
 
+type EventEffects e = '[Events e, EventConsumer e]
+
+bundleEvents :: (Member (Bundle (EventEffects e)) r) => InterpretersFor (EventEffects e) r
+bundleEvents =
+  sendBundle @(EventConsumer _)
+    . sendBundle @(Events _)
+
 mkNodes ::
   ( Member (Bus chan ByteString) r,
     Member Sem.Async r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member Resource r,
     Member (Storages chan) r,
-    Member (Bus connQueue (Connection chan)) r,
+    Member (Scoped Address (Bundle (EventEffects (Event chan)))) r,
     Member Fail r
   ) =>
   [NetworkLink] ->
@@ -121,15 +130,17 @@ mkNodes link links serveMap = do
     async $
       scoped @_ @(Output Peer.Log) myId $
         scoped @_ @(Storage _) myId $
-          runPeer myId do
-            let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
-            forM_ myLinks \them -> do
-              let chan = links ! (me, them)
-              superviseNode (Just $ nodeId them) Socket chan
-            processClients
+          scoped @_ @(Storage _) myId $
+            (scoped @_ @(Bundle (EventEffects _)) myId . bundleEvents) $
+              runPeer myId do
+                let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
+                forM_ myLinks \them -> do
+                  let chan = links ! (me, them)
+                  superviseNode (Just $ nodeId them) Socket chan
+                processClients
 
 mkActor ::
-  forall connQueue chan r.
+  forall chan r.
   ( Member Sem.Async r,
     Member (Bus chan ByteString) r,
     Member (Scoped CreateProcess Sem.Process) r,
@@ -139,8 +150,8 @@ mkActor ::
     Member (Storages chan) r,
     Member (Scoped Address (Output Peer.Log)) r,
     Member (Scoped Address (Output Client.Log)) r,
-    Member Random r,
-    Member (Bus connQueue (Connection chan)) r
+    Member (Scoped Address (Bundle (EventEffects (Event chan)))) r,
+    Member Random r
   ) =>
   Map NetworkNode Service ->
   NetworkRoute ->
@@ -155,19 +166,21 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   let (ServiceCommand cmd) = serveMap ! firstNode
   scoped @_ @(Storage _) firstNodeId $
     scoped @_ @(Output Peer.Log) firstNodeId $
-      runPeer firstNodeId do
-        _ <- superviseNode (Just randAddress) Socket msgLinkA
-        processClients
+      (scoped @_ @(Bundle (EventEffects _)) firstNodeId . bundleEvents) $
+        runPeer firstNodeId do
+          _ <- superviseNode (Just randAddress) Socket msgLinkA
+          processClients
 
   let command = Command (map nodeId path) action
   client <-
     async $
       scoped @_ @(Output Client.Log) randAddress $
         scoped @_ @(Output Peer.Log) randAddress $
-          scoped @_ @(Storage _) randAddress $
-            streamToChan @'ProcStream stdioLinkA $
-              streamToChan @'ServerStream msgLinkB $
-                r2c (Just randAddress) command
+          (scoped @_ @(Bundle (EventEffects _)) randAddress . bundleEvents) $
+            scoped @_ @(Storage _) randAddress $
+              streamToChan @'ProcStream stdioLinkA $
+                streamToChan @'ServerStream msgLinkB $
+                  r2c (Just randAddress) command
 
   result <- ioToChan stdioLinkB m
   await_ client
@@ -177,7 +190,7 @@ mkActor _ path _ _ = fail $ "invalid path " <> show path
 type NetworkEffects =
   '[ Random,
      Scoped CreateProcess Sem.Process,
-     Bus (TBMQueue (Connection (TBMQueue ByteString))) (Connection (TBMQueue ByteString)),
+     Scoped Address (Bundle (EventEffects (Event (TBMQueue ByteString)))),
      Bus (TBMQueue ByteString) ByteString,
      Scoped Address (Output Peer.Log),
      Scoped Address (Output Client.Log),
@@ -223,7 +236,7 @@ dslToIO verbosity serveList =
     . runScopedNew @_ @(Output Client.Log) (\addr -> traceTagged (show addr) . Client.logToTrace verbosity . raiseUnder @Trace)
     . runScopedNew @_ @(Output Peer.Log) (\addr -> traceTagged (show addr) . Peer.logToTrace verbosity . raiseUnder @Trace)
     . interpretBusTBM @ByteString queueSize
-    . interpretBusTBM @(Connection _) queueSize
+    . runScopedBundle (const interpretEventsChan)
     . scopedProcToIOFinal bufferSize
     . randomToIO
 

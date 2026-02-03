@@ -4,11 +4,12 @@ import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
 import Control.Exception (IOException, finally)
 import Control.Monad
 import Data.ByteString (ByteString)
-import Debug.Trace (traceM)
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
 import Polysemy.Bundle
+import Polysemy.Conc.Effect.Events
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
@@ -51,34 +52,40 @@ processClients ::
     Member Async r,
     Member (Peer chan) r,
     Member (Storage chan) r,
-    Member (Output Log) r
+    Member (Output Log) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Sem r ()
 processClients =
-  nodesReaderToStorage $ forever do
-    conn@Connection {connHighLevelChan = HighLevel connHighLevelChan} <- acceptNode
-    async_ do
-      result <- runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
-      case result of
-        Left err -> output (LogError (Just $ connAddr conn) err)
-        Right _ -> pure ()
+  nodesReaderToStorage $
+    subscribe $
+      forever $
+        consume >>= \case
+          ConnFullyInitialized conn@Connection {connHighLevelChan = HighLevel connHighLevelChan} ->
+            async_ do
+              result <- runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
+              case result of
+                Left err -> output (LogError (Just $ connAddr conn) err)
+                Right _ -> pure ()
+          _ -> pure ()
 
 r2d ::
   ( Member (Bus chan ByteString) r,
-    Member (Bus connQueue (Connection chan)) r,
     Member (Output Log) r,
     Member (Storage chan) r,
     Member Async r,
     Member Resource r,
     Member Fail r,
     Member (Sockets ByteString ByteString sock) r,
-    Member (Accept sock) r
+    Member (Accept sock) r,
+    Member (Events (Event chan)) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   Sem r ()
 r2d self = runPeer self do
-  async_ acceptSockets
-  processClients
+  async_ processClients
+  acceptSockets
 
 r2dIO :: Verbosity -> Bool -> Address -> FilePath -> IO (Maybe (MVar ()))
 r2dIO verbosity fork self socketPath = do
@@ -109,7 +116,7 @@ r2dIO verbosity fork self socketPath = do
         . resourceToIOFinal
         . embedToFinal @IO
         . traceIOExceptions @IOException
-        . interpretBusTBM @(Connection _) queueSize
+        . interpretEventsChan
         . interpretBusTBM @ByteString queueSize
         . failToEmbed @IO
         -- ignore interpreter logs

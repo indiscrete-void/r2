@@ -10,7 +10,6 @@ module R2.Peer.Conn
     nodeChan,
     Peer (..),
     superviseNode,
-    acceptNode,
     highLevelNodeChan,
   )
 where
@@ -60,6 +59,5 @@ highLevelNodeChan (ConnectedNode Connection {connHighLevelChan}) = Just connHigh
 
 data Peer chan m a where
   SuperviseNode :: Maybe Address -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
-  AcceptNode :: Peer chan m (Connection chan)
 
 makeSem ''Peer

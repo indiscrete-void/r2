@@ -1,5 +1,6 @@
 module R2.Peer
-  ( resolveSocketPath,
+  ( Event (..),
+    resolveSocketPath,
     r2Socket,
     withR2Socket,
     bufferSize,
@@ -24,6 +25,7 @@ import Network.Socket qualified as Socket
 import Options.Applicative
 import Polysemy
 import Polysemy.Async
+import Polysemy.Conc.Effect.Events
 import Polysemy.Extra.Async
 import Polysemy.Fail
 import Polysemy.Resource
@@ -39,6 +41,10 @@ import R2.Peer.Storage
 import System.Environment
 import System.Posix.User
 import Text.Printf (printf)
+
+data Event chan where
+  ConnFullyInitialized :: Connection chan -> Event chan
+  ConnDestroyed :: Address -> Event chan
 
 bufferSize :: Int
 bufferSize = 8192
@@ -101,9 +107,18 @@ interlayConnAddLogging addr chan = do
   async_ $ ioToNodeChanLogged (Just addr) chan $ chanToIO newChan
   pure newChan
 
-interlayConnAddCleanup :: (Member (Storage chan) r, Member (Bus chan d) r, Member Async r, Member (Output Log) r) => Address -> Bidirectional chan -> Sem r (Bidirectional chan)
+interlayConnAddCleanup ::
+  ( Member (Storage chan) r,
+    Member (Bus chan d) r,
+    Member Async r,
+    Member (Output Log) r,
+    Member (Events (Event chan)) r
+  ) =>
+  Address ->
+  Bidirectional chan ->
+  Sem r (Bidirectional chan)
 interlayConnAddCleanup addr Bidirectional {..} = do
-  let cleanup = storageRmNode (Just addr) >> output (LogDisconnected (Just addr))
+  let cleanup = storageRmNode (Just addr) >> publish (ConnDestroyed addr) >> output (LogDisconnected (Just addr))
   newChan <- makeBidirectionalChan
   async_
     $ ( closeToBusChan outboundChan
@@ -151,7 +166,8 @@ superviseConn ::
     Member (Peer chan) r,
     Member (Output Log) r,
     Member Fail r,
-    Member Async r
+    Member Async r,
+    Member (Events (Event chan)) r
   ) =>
   Address ->
   ConnTransport ->
@@ -196,20 +212,19 @@ lookupChanToStorage =
 
 makePeerNode ::
   ( Member Fail r,
-    Member (Bus connQueue (Connection chan)) r,
+    Member (Events (Event chan)) r,
     Member Resource r,
     Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member Async r,
     Member (Storage chan) r
   ) =>
-  connQueue ->
   Address ->
   Maybe Address ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
-makePeerNode connQueue self mAddr transport chan = do
+makePeerNode self mAddr transport chan = do
   let acceptedNode = AcceptedNode (NewConnection mAddr transport chan)
   output (LogConnected acceptedNode)
   result <- runFail $ determinePeerAddr mAddr self acceptedNode
@@ -219,47 +234,26 @@ makePeerNode connQueue self mAddr transport chan = do
       fail err
     Right addr -> do
       conn <-
-        runPeerWithConnQueue connQueue self $
+        runPeer self $
           lookupChanToStorage $
             superviseConn addr transport chan
       let node = ConnectedNode conn
       storageAddNode node
-      busPutData connQueue (Just conn)
+      publish $ ConnFullyInitialized conn
       output (LogConnected node)
       pure conn
 
-runPeerWithConnQueue ::
-  forall connQueue chan r.
-  ( Member (Bus chan ByteString) r,
-    Member (Bus connQueue (Connection chan)) r,
-    Member (Output Log) r,
-    Member (Storage chan) r,
-    Member Async r,
-    Member Resource r,
-    Member Fail r
-  ) =>
-  connQueue ->
-  Address ->
-  InterpreterFor (Peer chan) r
-runPeerWithConnQueue connQueue self =
-  interpret
-    ( \case
-        SuperviseNode mAddr transport chan -> makePeerNode connQueue self mAddr transport chan
-        AcceptNode -> busTakeData connQueue >>= maybe (fail "connection queue closed") pure
-    )
-
 runPeer ::
-  forall connQueue chan r.
+  forall chan r.
   ( Member (Bus chan ByteString) r,
-    Member (Bus connQueue (Connection chan)) r,
     Member (Output Log) r,
     Member (Storage chan) r,
+    Member (Events (Event chan)) r,
     Member Async r,
     Member Resource r,
     Member Fail r
   ) =>
   Address ->
   InterpreterFor (Peer chan) r
-runPeer self m = do
-  connQueue <- busMakeChan @connQueue
-  runPeerWithConnQueue connQueue self m
+runPeer self = interpret \case
+  SuperviseNode mAddr transport chan -> makePeerNode self mAddr transport chan

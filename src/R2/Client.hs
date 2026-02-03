@@ -7,6 +7,9 @@ import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc (interpretLockReentrant, interpretMaskFinal, interpretRace)
+import Polysemy.Conc.Effect.Events
+import Polysemy.Conc.Events
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
@@ -173,7 +176,8 @@ serveTransport ::
   ( Members (Stream 'ProcStream) r,
     Members (Stream 'ServerStream) r,
     Member (Scoped CreateProcess Process) r,
-    Member (Bus connQueue (Connection chan)) r,
+    Member (Events (Event chan)) r,
+    Member (EventConsumer (Event chan)) r,
     Member (Bus chan ByteString) r,
     Member Async r,
     Member (Output Log) r,
@@ -201,10 +205,11 @@ serveTransport self mAddr transport = do
     runPeer serviceAddr do
       selfChan <- makeBidirectionalChan
       _ <- superviseNode (Just self) (Pipe transport) selfChan
-      async_ $ linkChansBidirectional selfChan serviceChan
-      forever $ do
-        Connection {connHighLevelChan = unHighLevel -> highLevelChan} <- acceptNode
-        async_ $ ioToChan @_ @ByteString highLevelChan $ handle (serviceMsgHandler transport)
+      async_ $ subscribeLoop $ \case
+        ConnFullyInitialized Connection {connHighLevelChan = HighLevel highLevelChan} ->
+          async_ $ ioToChan @_ @ByteString highLevelChan $ handle (serviceMsgHandler transport)
+        _ -> pure ()
+      linkChansBidirectional selfChan serviceChan
 
 handleAction ::
   ( Members (Stream 'ProcStream) r,
@@ -215,11 +220,12 @@ handleAction ::
     Member Async r,
     Member (Output Log) r,
     Member (Bus chan ByteString) r,
-    Member (Bus connQueue (Connection chan)) r,
     Member (Peer chan) r,
     Member (Output Peer.Log) r,
     Member Resource r,
-    Member (Storages chan) r
+    Member (Storages chan) r,
+    Member (EventConsumer (Event chan)) r,
+    Member (Events (Event chan)) r
   ) =>
   Address ->
   Connection chan ->
@@ -270,11 +276,12 @@ r2c ::
     Member (Output Log) r,
     Member (Output String) r,
     Member (Bus chan ByteString) r,
-    Member (Bus connQueue (Connection chan)) r,
     Member (Output Peer.Log) r,
     Member (Storages chan) r,
     Member Resource r,
-    Member Random r
+    Member Random r,
+    Member (EventConsumer (Event chan)) r,
+    Member (Events (Event chan)) r
   ) =>
   Maybe Address ->
   Command ->
@@ -331,5 +338,5 @@ r2cIO verbosity mSelf socketPath command = do
         . interpretLockReentrant
         . storagesToIO
         . interpretBusTBM @ByteString queueSize
-        . interpretBusTBM @(Connection _) queueSize
+        . interpretEventsChan
         . randomToIO
