@@ -5,6 +5,7 @@ import Data.ByteString (ByteString)
 import Data.Maybe
 import Polysemy
 import Polysemy.Async
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Fail
 import Polysemy.Reader
 import Polysemy.Transport
@@ -21,6 +22,7 @@ listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
 connectNode ::
   ( Member (Bus chan ByteString) r,
     Member Fail r,
+    Member (EventConsumer (Event chan)) r,
     Member Async r,
     Member (Peer chan) r
   ) =>
@@ -39,6 +41,7 @@ handleMsg ::
   ( Member (Reader [Node chan]) r,
     Members ByteTransport r,
     Member (Bus chan ByteString) r,
+    Member (EventConsumer (Event chan)) r,
     Member Fail r,
     Member Async r,
     Member (Peer chan) r

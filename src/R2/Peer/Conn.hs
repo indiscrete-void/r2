@@ -8,6 +8,7 @@ module R2.Peer.Conn
     Node (..),
     nodeAddr,
     nodeChan,
+    Event (..),
     Peer (..),
     superviseNode,
     highLevelNodeChan,
@@ -37,6 +38,10 @@ data Connection chan = Connection
     connChan :: Bidirectional chan,
     connHighLevelChan :: HighLevel (Bidirectional chan)
   }
+
+data Event chan where
+  ConnFullyInitialized :: Connection chan -> Event chan
+  ConnDestroyed :: Address -> Event chan
 
 data Node chan
   = AcceptedNode (NewConnection chan)

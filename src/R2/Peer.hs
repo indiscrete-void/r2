@@ -26,6 +26,7 @@ import Options.Applicative
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Effect.Events
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Extra.Async
 import Polysemy.Fail
 import Polysemy.Resource
@@ -41,10 +42,6 @@ import R2.Peer.Storage
 import System.Environment
 import System.Posix.User
 import Text.Printf (printf)
-
-data Event chan where
-  ConnFullyInitialized :: Connection chan -> Event chan
-  ConnDestroyed :: Address -> Event chan
 
 bufferSize :: Int
 bufferSize = 8192
@@ -145,7 +142,8 @@ interlayConnAddRouting ::
     Member (Bus chan ByteString) r,
     Member Fail r,
     Member Async r,
-    Member (Storage chan) r
+    Member (Storage chan) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   Bidirectional chan ->
@@ -167,7 +165,8 @@ superviseConn ::
     Member (Output Log) r,
     Member Fail r,
     Member Async r,
-    Member (Events (Event chan)) r
+    Member (Events (Event chan)) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   ConnTransport ->
@@ -217,7 +216,8 @@ makePeerNode ::
     Member (Bus chan ByteString) r,
     Member (Output Log) r,
     Member Async r,
-    Member (Storage chan) r
+    Member (Storage chan) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   Maybe Address ->
@@ -249,6 +249,7 @@ runPeer ::
     Member (Output Log) r,
     Member (Storage chan) r,
     Member (Events (Event chan)) r,
+    Member (EventConsumer (Event chan)) r,
     Member Async r,
     Member Resource r,
     Member Fail r

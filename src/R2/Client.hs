@@ -123,6 +123,7 @@ connectNode ::
   ( Member Async r,
     Members (Stream 'ServerStream) r,
     Members (Stream 'ProcStream) r,
+    Member (EventConsumer (Event chan)) r,
     Member (Scoped CreateProcess Process) r,
     Member (Output Log) r,
     Member (Bus chan ByteString) r,
@@ -238,6 +239,7 @@ handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transpor
 
 makeChain ::
   ( Member (Bus chan ByteString) r,
+    Member (EventConsumer (Event chan)) r,
     Member (Peer chan) r,
     Member Async r
   ) =>

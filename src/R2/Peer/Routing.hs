@@ -5,6 +5,9 @@ import Control.Monad.Loops
 import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
+import Polysemy.Conc.Effect.Events
+import Polysemy.Conc.Events
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Extra.Async
 import Polysemy.Fail
 import Polysemy.Transport
@@ -78,17 +81,35 @@ outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
     (busChan chan takeChan)
     (busChan routerChan . outputToChan . encodeOutput . output . MsgRouteTo . RouteTo addr . bsToBase64)
 
+closeOnDisconnect ::
+  ( Member (EventConsumer (Event chan)) r,
+    Member (Bus chan ByteString) r
+  ) =>
+  chan ->
+  Address ->
+  Sem r ()
+chan `closeOnDisconnect` router = subscribe go
+  where
+    go =
+      consume >>= \case
+        ConnDestroyed destroyedAddr
+          | destroyedAddr == router -> closeToBusChan chan close
+        _ -> go
+
 makeR2ConnectedNode ::
   ( Member (Bus chan ByteString) r,
     Member (Peer chan) r,
-    Member Async r
+    Member Async r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   Address ->
   HighLevel (Outbound chan) ->
   Sem r (Connection chan)
 makeR2ConnectedNode addr router (HighLevel routerOutboundChan) = do
-  chan@Bidirectional {outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
+  chan@Bidirectional {inboundChan = clientInboundChan, outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
+  async_ $ clientInboundChan `closeOnDisconnect` router
+
   async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
   superviseNode (Just addr) (R2 router) chan
 
@@ -97,7 +118,8 @@ runOverlayLookupChan ::
     Member (Storage chan) r,
     Member (Peer chan) r,
     Member Fail r,
-    Member Async r
+    Member Async r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   InterpreterFor (LookupChan OverlayConnection (Inbound chan)) r
@@ -116,7 +138,8 @@ handleR2Msg ::
     Member Fail r,
     Member (Peer chan) r,
     Member Async r,
-    Member (Storage chan) r
+    Member (Storage chan) r,
+    Member (EventConsumer (Event chan)) r
   ) =>
   Address ->
   R2Message Base64Text ->
