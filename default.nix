@@ -1,7 +1,8 @@
 let
   pkgs = import <nixpkgs> {};
+  haskellPkgs = pkgs.haskell.packages.ghc96;
 in
-pkgs.haskellPackages.developPackage {
+haskellPkgs.developPackage {
   root = ./.;
   source-overrides = {
     polysemy-transport = fetchGit {
@@ -16,8 +17,9 @@ pkgs.haskellPackages.developPackage {
   };
 
   modifier = drv:
-    pkgs.haskell.lib.addBuildTools drv (with pkgs.haskellPackages;
-      [ cabal-install
+    pkgs.haskell.lib.addBuildTools drv (with haskellPkgs;
+      [
+        cabal-install
         haskell-language-server
       ]);
 }
