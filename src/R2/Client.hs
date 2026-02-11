@@ -260,11 +260,11 @@ meetServerAssignSelf ::
   Maybe Address ->
   Sem r (Address, Address)
 meetServerAssignSelf mSelf = do
-  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
+  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ lenDecodeInput $ decodeInput inputOrFail)
   me <- case mSelf of
     Just self -> pure self
     Nothing -> childAddr server
-  tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
+  tag @'ServerStream @ByteOutput $ lenPrefixOutput $ output (encodeStrict $ Self me)
   output $ LogMe me
   output $ LogLocalDaemon server
   pure (me, server)
@@ -297,7 +297,7 @@ r2c mSelf (Command targetChain action) = do
   scoped @_ @(Storage _) me $ runPeer me $ do
     serverChan <- makeBidirectionalChan
     serverConn <- superviseNode (Just server) Socket serverChan
-    async_ $ tagStream @'ServerStream $ chanToIO serverChan
+    async_ $ tagStream @'ServerStream $ lenDecodeInput . lenPrefixOutput $ chanToIO serverChan
     targetConn@Connection {connHighLevelChan = unHighLevel -> targetChan} <- makeChain serverConn targetChain
     streamToChan @'ServerStream targetChan do
       handleAction me targetConn action

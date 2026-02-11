@@ -25,6 +25,7 @@ import R2.Bus
 import R2.Daemon.Handler
 import R2.Daemon.Sockets
 import R2.Daemon.Sockets.Accept
+import R2.Encoding.LengthPrefix
 import R2.Options
 import R2.Peer
 import R2.Peer.Conn
@@ -43,7 +44,7 @@ acceptSockets ::
 acceptSockets = do
   foreverAcceptAsync \s -> do
     chan <- makeBidirectionalChan
-    async_ $ socket s $ chanToIO chan
+    async_ $ socket s $ lenDecodeInput . lenPrefixOutput $ chanToIO chan
     _ <- superviseNode Nothing Socket chan
     pure ()
 
