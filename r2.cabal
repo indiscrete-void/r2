@@ -90,6 +90,7 @@ library
     , stm-chans
     , text
     , time-units
+    , tomland
     , transformers
     , unix
   default-language: Haskell2010
@@ -153,6 +154,7 @@ executable r2
     , stm-chans
     , text
     , time-units
+    , tomland
     , transformers
     , unix
   default-language: Haskell2010
@@ -215,6 +217,7 @@ executable r2-simple-example
     , stm-chans
     , text
     , time-units
+    , tomland
     , transformers
     , unix
   default-language: Haskell2010
@@ -278,6 +281,7 @@ executable r2d
     , stm-chans
     , text
     , time-units
+    , tomland
     , transformers
     , unix
   default-language: Haskell2010
@@ -407,6 +411,7 @@ test-suite tests
     , tasty-hunit
     , text
     , time-units
+    , tomland
     , transformers
     , unix
   default-language: Haskell2010

@@ -3,6 +3,8 @@ module R2.Client (Log (..), Command (..), Action (..), listNodes, connectNode, r
 import Control.Exception (IOException)
 import Control.Monad
 import Data.ByteString (ByteString)
+import Data.Maybe
+import Data.Text qualified as Text
 import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
@@ -15,6 +17,7 @@ import Polysemy.Extra.Trace
 import Polysemy.Fail
 import Polysemy.Internal.Kind
 import Polysemy.Process
+import Polysemy.Reader
 import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.Tagged
@@ -36,10 +39,14 @@ import R2.Peer.Storage
 import R2.Random
 import System.Process.Extra
 import Text.Printf
+import Toml qualified as Toml
+import Toml.Codec (TomlCodec, (.=))
+
+newtype LocalDaemon = LocalDaemon {unLocalDaemon :: Address}
 
 data Log where
   LogMe :: Address -> Log
-  LogLocalDaemon :: Address -> Log
+  LogLocalDaemon :: LocalDaemon -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogOutput :: ProcessTransport -> ByteString -> Log
   LogAction :: Address -> Action -> Log
@@ -47,7 +54,7 @@ data Log where
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
 logToTrace verbosity = runOutputSem \case
   (LogMe me) -> when (verbosity > 0) $ trace $ printf "me: %s" (show me)
-  (LogLocalDaemon them) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
+  (LogLocalDaemon (LocalDaemon them)) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
   (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
   (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
   (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
@@ -77,16 +84,70 @@ data Command = Command
     commandAction :: Action
   }
 
+newtype NodeListDaemon = NodeListDaemon
+  { nodeListDaemonAddr :: Address
+  }
+  deriving stock (Show)
+
+data NodeListDaemonPeer = NodeListDaemonPeer
+  { nodeListDaemonPeerAddr :: Maybe Address,
+    nodeListDaemonPeerRouter :: Address
+  }
+  deriving stock (Show)
+
+data NodeList = NodeList
+  { nodeListLocalDaemon :: NodeListDaemon,
+    nodeListTarget :: NodeListDaemon,
+    nodeListPeers :: [NodeListDaemonPeer]
+  }
+
+daemonToNodeListPeer :: Address -> DaemonPeerInfo -> Maybe NodeListDaemonPeer
+daemonToNodeListPeer target DaemonPeerInfo {..} =
+  case daemonPeerTransport of
+    R2 router -> Just NodeListDaemonPeer {nodeListDaemonPeerAddr = daemonPeerAddr, nodeListDaemonPeerRouter = router}
+    Socket -> Just NodeListDaemonPeer {nodeListDaemonPeerAddr = daemonPeerAddr, nodeListDaemonPeerRouter = target}
+    Pipe _ -> Nothing
+
+tomlAddr :: Toml.Key -> TomlCodec Address
+tomlAddr key = Addr <$> Toml.string key .= unAddr
+
+nodeListDaemonCodec :: TomlCodec NodeListDaemon
+nodeListDaemonCodec =
+  NodeListDaemon
+    <$> tomlAddr "addr" .= nodeListDaemonAddr
+
+nodeListDaemonPeerCodec :: TomlCodec NodeListDaemonPeer
+nodeListDaemonPeerCodec =
+  NodeListDaemonPeer
+    <$> Toml.dioptional (tomlAddr "addr") .= nodeListDaemonPeerAddr
+    <*> tomlAddr "router" .= nodeListDaemonPeerRouter
+
+nodeListPeerCodec :: TomlCodec NodeList
+nodeListPeerCodec =
+  NodeList
+    <$> Toml.table nodeListDaemonCodec "local" .= nodeListLocalDaemon
+    <*> Toml.table nodeListDaemonCodec "target" .= nodeListTarget
+    <*> Toml.list nodeListDaemonPeerCodec "peer" .= nodeListPeers
+
 listNodes ::
   ( Members (Transport DaemonToClientMessage ClientToDaemonMessage) r,
     Member (Output String) r,
-    Member Fail r
+    Member Fail r,
+    Member (Reader LocalDaemon) r
   ) =>
+  Address ->
   Sem r ()
-listNodes = do
+listNodes target = do
+  localDaemon <- unLocalDaemon <$> ask
   output ReqListNodes
   (ResNodeList list) <- inputOrFail
-  output $ show list
+  let nodeList =
+        NodeList
+          { nodeListLocalDaemon = NodeListDaemon {nodeListDaemonAddr = localDaemon},
+            nodeListTarget = NodeListDaemon {nodeListDaemonAddr = target},
+            nodeListPeers = mapMaybe (daemonToNodeListPeer target) list
+          }
+  output . Text.unpack $ Toml.encode nodeListPeerCodec nodeList
 
 ioToProc ::
   ( Members (Stream 'ProcStream) r,
@@ -226,13 +287,14 @@ handleAction ::
     Member Resource r,
     Member (Storages chan) r,
     Member (EventConsumer (Event chan)) r,
-    Member (Events (Event chan)) r
+    Member (Events (Event chan)) r,
+    Member (Reader LocalDaemon) r
   ) =>
   Address ->
   Connection chan ->
   Action ->
   Sem r ()
-handleAction _ _ Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage listNodes
+handleAction _ targetConn Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage (listNodes $ connAddr targetConn)
 handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
 handleAction _ _ (Tunnel transport) = connectTransport transport
 handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
@@ -258,12 +320,12 @@ meetServerAssignSelf ::
     Member (Output Log) r
   ) =>
   Maybe Address ->
-  Sem r (Address, Address)
+  Sem r (Address, LocalDaemon)
 meetServerAssignSelf mSelf = do
-  server <- unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
+  server <- LocalDaemon . unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
   me <- case mSelf of
     Just self -> pure self
-    Nothing -> childAddr server
+    Nothing -> childAddr (unLocalDaemon server)
   tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
   output $ LogMe me
   output $ LogLocalDaemon server
@@ -294,13 +356,13 @@ r2c mSelf (Command targetChain action) = do
   (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf mSelf
   scoped @_ @(Storage _) me $ runPeer me $ do
     let target = case targetChain of
-          [] -> server
+          [] -> unLocalDaemon server
           nodes -> last nodes
     output $ LogAction target action
-    serverConn <- superviseNode (Just server) Socket serverChan
+    serverConn <- superviseNode (Just $ unLocalDaemon server) Socket serverChan
     targetConn@Connection {connHighLevelChan = unHighLevel -> targetChan} <- makeChain serverConn targetChain
     streamToChan @'ServerStream targetChan do
-      handleAction me targetConn action
+      runReader server $ handleAction me targetConn action
 
 tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append ByteTransport r) a -> Sem r a
 tagStream =

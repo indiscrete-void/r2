@@ -2,7 +2,7 @@ module R2.Daemon.Handler (listNodes, connectNode, handleMsg) where
 
 import Control.Monad
 import Data.ByteString (ByteString)
-import Data.Maybe
+import Data.Functor
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Interpreter.Events
@@ -17,7 +17,14 @@ import R2.Peer.Proto
 import R2.Peer.Routing
 
 listNodes :: (Member (Reader [Node chan]) r, Member (Output DaemonToClientMessage) r) => Sem r ()
-listNodes = ask >>= output . ResNodeList . mapMaybe nodeAddr
+listNodes = do
+  peerList <-
+    ask <&> map \node ->
+      DaemonPeerInfo
+        { daemonPeerAddr = nodeAddr node,
+          daemonPeerTransport = nodeTransport node
+        }
+  output $ ResNodeList peerList
 
 connectNode ::
   ( Member (Bus chan ByteString) r,

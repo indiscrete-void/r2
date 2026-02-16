@@ -1,9 +1,11 @@
 module R2.Peer.Proto
   ( Raw (..),
     Self (..),
+    ConnTransport (..),
     ProcessTransport (..),
     R2Message (..),
     ClientToDaemonMessage (..),
+    DaemonPeerInfo (..),
     DaemonToClientMessage (..),
   )
 where
@@ -24,6 +26,11 @@ data ProcessTransport
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''ProcessTransport)
+
+data ConnTransport = R2 Address | Pipe ProcessTransport | Socket
+  deriving stock (Eq, Show)
+
+$(deriveJSON aesonOptions ''ConnTransport)
 
 newtype Raw = Raw {unRaw :: ByteString}
   deriving stock (Eq, Show, Generic)
@@ -56,9 +63,17 @@ data ClientToDaemonMessage where
 
 $(deriveJSON aesonOptions ''ClientToDaemonMessage)
 
+data DaemonPeerInfo = DaemonPeerInfo
+  { daemonPeerAddr :: Maybe Address,
+    daemonPeerTransport :: ConnTransport
+  }
+  deriving stock (Eq, Show, Generic)
+
+$(deriveJSON aesonOptions ''DaemonPeerInfo)
+
 data DaemonToClientMessage where
   ResTunnelProcess :: Address -> DaemonToClientMessage
-  ResNodeList :: [Address] -> DaemonToClientMessage
+  ResNodeList :: [DaemonPeerInfo] -> DaemonToClientMessage
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''DaemonToClientMessage)

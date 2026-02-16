@@ -7,6 +7,7 @@ module R2.Peer.Conn
     Connection (..),
     Node (..),
     nodeAddr,
+    nodeTransport,
     nodeChan,
     Event (..),
     Peer (..),
@@ -22,9 +23,6 @@ import R2.Peer.Proto
 
 newtype HighLevel chan = HighLevel {unHighLevel :: chan}
   deriving stock (Functor)
-
-data ConnTransport = R2 Address | Pipe ProcessTransport | Socket
-  deriving stock (Show)
 
 data NewConnection chan = NewConnection
   { newConnAddr :: Maybe Address,
@@ -53,6 +51,10 @@ instance Eq (Node chan) where
 nodeAddr :: Node chan -> Maybe Address
 nodeAddr (AcceptedNode (NewConnection {newConnAddr})) = newConnAddr
 nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
+
+nodeTransport :: Node chan -> ConnTransport
+nodeTransport (AcceptedNode (NewConnection {newConnTransport})) = newConnTransport
+nodeTransport (ConnectedNode (Connection {connTransport})) = connTransport
 
 nodeChan :: Node chan -> Bidirectional chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
