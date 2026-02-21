@@ -16,7 +16,7 @@ import R2.Peer.Conn
 import R2.Peer.Proto
 import R2.Peer.Routing
 
-listNodes :: (Member (Reader [Node chan]) r, Member (Output DaemonToClientMessage) r) => Sem r ()
+listNodes :: (Member (Reader [Node chan]) r, Member (OutputWithEOF DaemonToClientMessage) r) => Sem r ()
 listNodes = do
   peerList <-
     ask <&> map \node ->
@@ -24,7 +24,7 @@ listNodes = do
         { daemonPeerAddr = nodeAddr node,
           daemonPeerTransport = nodeTransport node
         }
-  output $ ResNodeList peerList
+  output $ Just $ ResNodeList peerList
 
 connectNode ::
   ( Member (Bus chan ByteString) r,

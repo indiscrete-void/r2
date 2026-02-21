@@ -14,30 +14,25 @@ data ClientStream = ProcStream | ServerStream
 
 type Stream stream =
   '[ Tagged stream ByteInputWithEOF,
-     Tagged stream ByteOutput,
-     Tagged stream Close
+     Tagged stream ByteOutputWithEOF
    ]
 
 ioToStream :: forall stream r. (Members ByteTransport r) => InterpretersFor (Stream stream) r
 ioToStream =
-  (subsume . untag @stream @Close)
-    . (subsume . untag @stream @ByteOutput)
+  (subsume . untag @stream @ByteOutputWithEOF)
     . (subsume . untag @stream @ByteInputWithEOF)
 
 streamToChan :: forall stream chan r. (Member (Bus chan ByteString) r) => Bidirectional chan -> InterpretersFor (Stream stream) r
 streamToChan Bidirectional {..} =
-  (closeToBusChan outboundChan . untag @stream)
-    . (outputToBusChan outboundChan . untag @stream)
+    (outputToBusChan outboundChan . untag @stream)
     . (inputToBusChan inboundChan . untag @stream)
 
 procStreamToStdio :: (Member (Embed IO) r) => Int -> InterpretersFor (Stream 'ProcStream) r
 procStreamToStdio bufferSize =
-  (closeToIO stdout . untag @'ProcStream)
-    . (outputToIO stdout . untag @'ProcStream)
+    (outputToIO stdout . untag @'ProcStream)
     . (inputToIO bufferSize stdin . untag @'ProcStream)
 
 serverStreamToSocket :: (Member (Embed IO) r, Member Trace r) => Int -> IO.Socket -> InterpretersFor (Stream 'ServerStream) r
 serverStreamToSocket bufferSize s =
-  (closeToSocket s . untag @'ServerStream @Close)
-    . (outputToSocket s . untag @'ServerStream @ByteOutput)
+  (outputToSocket s . untag @'ServerStream @ByteOutputWithEOF)
     . (inputToSocket bufferSize s . untag @'ServerStream @ByteInputWithEOF)

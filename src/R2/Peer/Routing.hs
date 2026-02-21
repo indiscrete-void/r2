@@ -6,7 +6,6 @@ import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Effect.Events
-import Polysemy.Conc.Events
 import Polysemy.Conc.Interpreter.Events
 import Polysemy.Extra.Async
 import Polysemy.Fail
@@ -41,7 +40,7 @@ reinterpretLookupChan f = interpretLookupChanSem (fmap f . lookupChan)
 
 routeTo ::
   ( Member (Bus chan ByteString) r,
-    Member (Output ByteString) r,
+    Member (OutputWithEOF ByteString) r,
     Member (LookupChan EstablishedConnection (HighLevel (Outbound chan))) r
   ) =>
   Address ->
@@ -51,7 +50,7 @@ routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan (EstablishedConnection routeToAddr)
   case mChan of
     Just (HighLevel (Outbound chan)) -> busChan chan $ putChan (Just $ encodeStrict $ MsgRoutedFrom routedFrom)
-    Nothing -> output $ encodeStrict $ MsgRouteToErr @Base64Text $ RouteToErr routeToAddr "unreachable"
+    Nothing -> output $ Just $ encodeStrict $ MsgRouteToErr @Base64Text $ RouteToErr routeToAddr "unreachable"
 
 routeToError ::
   ( Member (Bus chan ByteString) r,
@@ -79,7 +78,7 @@ outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outboun
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   whileJust_
     (busChan chan takeChan)
-    (busChan routerChan . outputToChan . encodeOutput . output . MsgRouteTo . RouteTo addr . bsToBase64)
+    (busChan routerChan . outputToChan . encodeOutput . output . Just . MsgRouteTo . RouteTo addr . bsToBase64)
 
 closeOnDisconnect ::
   ( Member (EventConsumer (Event chan)) r,
@@ -93,7 +92,7 @@ chan `closeOnDisconnect` router = subscribe go
     go =
       consume >>= \case
         ConnDestroyed destroyedAddr
-          | destroyedAddr == router -> closeToBusChan chan close
+          | destroyedAddr == router -> outputToBusChan chan (output Nothing)
         _ -> go
 
 makeR2ConnectedNode ::
@@ -134,7 +133,7 @@ runOverlayLookupChan router = interpretLookupChanSem \(OverlayConnection addr) -
 handleR2Msg ::
   ( Member (Bus chan ByteString) r,
     Member (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r,
-    Member (Output ByteString) r,
+    Member (OutputWithEOF ByteString) r,
     Member Fail r,
     Member (Peer chan) r,
     Member Async r,

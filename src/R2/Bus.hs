@@ -12,10 +12,8 @@ module R2.Bus
     Bidirectional (..),
     chanToIO,
     interpretBusTBM,
-    closeToChan,
     inputToChan,
     outputToChan,
-    closeToBusChan,
     inputToBusChan,
     outputToBusChan,
     ioToChan,
@@ -43,11 +41,8 @@ makeSem ''Chan
 inputToChan :: (Member (Chan d) r) => InterpreterFor (InputWithEOF d) r
 inputToChan = runInputSem takeChan
 
-outputToChan :: (Member (Chan d) r) => InterpreterFor (Output d) r
-outputToChan = runOutputSem (putChan . Just)
-
-closeToChan :: (Member (Chan d) r) => InterpreterFor Close r
-closeToChan = runClose (putChan Nothing)
+outputToChan :: (Member (Chan d) r) => InterpreterFor (OutputWithEOF d) r
+outputToChan = runOutputSem putChan
 
 data Bus chan d m a where
   BusMakeChan :: Bus chan d m chan
@@ -77,10 +72,7 @@ makeBidirectionalChan = Bidirectional <$> busMakeChan <*> busMakeChan
 inputToBusChan :: (Member (Bus chan d) r) => chan -> Sem (InputWithEOF d ': r) a -> Sem r a
 inputToBusChan chan = busChan chan . inputToChan . raiseUnder @(Chan _)
 
-closeToBusChan :: (Member (Bus chan d) r) => chan -> Sem (Close ': r) a -> Sem r a
-closeToBusChan chan = busChan chan . closeToChan . raiseUnder @(Chan _)
-
-outputToBusChan :: (Member (Bus chan d) r) => chan -> Sem (Output d ': r) a -> Sem r a
+outputToBusChan :: (Member (Bus chan d) r) => chan -> Sem (OutputWithEOF d ': r) a -> Sem r a
 outputToBusChan chan = busChan chan . outputToChan . raiseUnder @(Chan _)
 
 ioToChan ::
@@ -88,9 +80,14 @@ ioToChan ::
   Bidirectional chan ->
   InterpretersFor (Transport d d) r
 ioToChan Bidirectional {..} =
-  closeToBusChan outboundChan
-    . outputToBusChan outboundChan
+  outputToBusChan outboundChan
     . inputToBusChan inboundChan
+
+drainMaybeM :: (Monad m) => m (Maybe a) -> (Maybe a -> m b) -> m b
+drainMaybeM m f =
+  m >>= \case
+    ma@(Just _) -> f ma >> drainMaybeM m f
+    Nothing -> f Nothing
 
 chanToIO ::
   ( Members (Transport d d) r,
@@ -101,8 +98,8 @@ chanToIO ::
   Sem r ()
 chanToIO Bidirectional {..} =
   sequenceConcurrently_
-    [ busChan inboundChan $ whileJust_ input (busChan inboundChan . putChan . Just) >> putChan Nothing,
-      busChan outboundChan $ whileJust_ takeChan output >> close
+    [ busChan inboundChan $ drainMaybeM input putChan,
+      busChan outboundChan $ drainMaybeM takeChan output
     ]
 
 linkChansOneWay :: (Member (Bus chan d) r) => chan -> chan -> Sem r ()

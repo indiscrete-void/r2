@@ -85,14 +85,14 @@ address = Addr <$> str
 
 exchangeSelves ::
   ( Member (InputWithEOF ByteString) r,
-    Member (Output ByteString) r,
+    Member (OutputWithEOF ByteString) r,
     Member Fail r
   ) =>
   Address ->
   Maybe Address ->
   Sem r Address
 exchangeSelves self maybeKnownAddr = runEncoding do
-  output (Self self)
+  output $ Just (Self self)
   (Self addr) <- inputOrFail
   whenJust maybeKnownAddr \knownNodeAddr ->
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
@@ -118,8 +118,7 @@ interlayConnAddCleanup addr Bidirectional {..} = do
   let cleanup = storageRmNode (Just addr) >> publish (ConnDestroyed addr) >> output (LogDisconnected (Just addr))
   newChan <- makeBidirectionalChan
   async_
-    $ ( closeToBusChan outboundChan
-          . (inputToBusChan inboundChan . runInputSem (input >>= \mi -> when (isNothing mi) cleanup >> pure mi))
+    $ ( (inputToBusChan inboundChan . runInputSem (input >>= \mi -> when (isNothing mi) cleanup >> pure mi))
           . outputToBusChan outboundChan
       )
     $ chanToIO newChan

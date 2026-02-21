@@ -46,16 +46,16 @@ decodeBase64Sem = eitherToFail . decodeBase64
 decodeInput :: (Member ByteInputWithEOF r, Member Fail r, FromJSON i) => InterpreterFor (InputWithEOF i) r
 decodeInput = contramapInputSem (mapM decodeStrictSem)
 
-encodeOutput :: (Member ByteOutput r, ToJSON o) => InterpreterFor (Output o) r
-encodeOutput = mapOutput encodeStrict
+encodeOutput :: (Member ByteOutputWithEOF r, ToJSON o) => InterpreterFor (OutputWithEOF o) r
+encodeOutput = mapOutput $ fmap encodeStrict
 
 runEncoding ::
   forall i o r.
   ( Member ByteInputWithEOF r,
-    Member ByteOutput r,
+    Member ByteOutputWithEOF r,
     Member Fail r,
     FromJSON i,
     ToJSON o
   ) =>
-  InterpretersFor '[InputWithEOF i, Output o] r
+  InterpretersFor '[InputWithEOF i, OutputWithEOF o] r
 runEncoding = encodeOutput . decodeInput

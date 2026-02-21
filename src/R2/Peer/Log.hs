@@ -37,10 +37,22 @@ logToTrace verbosity = runOutputSem go
     go (LogDisconnected mAddr) = trace $ printf "%s disconnected" $ logShowOptionalAddr mAddr
     go (LogError mAddr err) = trace $ printf "%s error: %s" (logShowOptionalAddr mAddr) err
 
+logOut :: (Member (OutputWithEOF ByteString) r, Member (Output Log) r) => Maybe Address -> Sem r a -> Sem r a
+logOut mAddr =
+  intercept @(OutputWithEOF ByteString)
+    ( \(Output o) ->
+        whenJust o (output . LogSend mAddr) >> output o
+    )
+
+logIn :: (Member (InputWithEOF ByteString) r, Member (Output Log) r) => Maybe Address -> Sem r a -> Sem r a
+logIn mAddr =
+  intercept @(InputWithEOF ByteString)
+    ( \Input ->
+        input >>= \i -> whenJust i (output . LogRecv mAddr) >> pure i
+    )
+
 ioToLog :: (Member (Output Log) r) => Maybe Address -> Sem (Append ByteTransport r) a -> Sem (Append ByteTransport r) a
-ioToLog mAddr =
-  intercept @(Output ByteString) (\(Output o) -> output (LogSend mAddr o) >> output o)
-    . intercept @(InputWithEOF ByteString) (\Input -> input >>= \i -> whenJust i (output . LogRecv mAddr) >> pure i)
+ioToLog mAddr = logOut mAddr . logIn mAddr
 
 ioToNodeChanLogged :: (Member (Bus chan ByteString) r, Member (Output Log) r) => Maybe Address -> Bidirectional chan -> InterpretersFor ByteTransport r
 ioToNodeChanLogged mAddr chan = ioToChan chan . ioToLog mAddr

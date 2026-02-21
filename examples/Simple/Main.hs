@@ -58,9 +58,9 @@ main = do
 
     let lainMsgViaCarl = "lain greets spongebob"
     spongebobRes <- conn [lain, carl, spongebob] (Tunnel Stdio) $ do
-      output (BC.pack lainMsgViaCarl)
+      output (Just $ BC.pack lainMsgViaCarl)
       echo <- BC.unpack <$> inputOrFail
-      close
+      output Nothing
       pure echo
     trace spongebobRes
 

@@ -70,8 +70,9 @@ lenDecodeInput = State.evalState (Nothing :: Maybe ByteString) . go . raiseUnder
         size <- hoistMaybe $ binaryDecodeStrict sizeRaw
         MaybeT $ inputN size
 
-lenPrefixOutput :: (Member ByteOutput r) => InterpreterFor ByteOutput r
+lenPrefixOutput :: (Member ByteOutputWithEOF r) => InterpreterFor ByteOutputWithEOF r
 lenPrefixOutput = interpret \case
-  Output o -> do
+  Output (Just o) -> do
     let size = binaryEncodeStrict $ B.length o
-    output $ size <> o
+    output $ Just $ size <> o
+  Output Nothing -> output Nothing

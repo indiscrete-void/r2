@@ -39,7 +39,7 @@ import R2.Peer.Storage
 import R2.Random
 import System.Process.Extra
 import Text.Printf
-import Toml qualified as Toml
+import Toml qualified
 import Toml.Codec (TomlCodec, (.=))
 
 newtype LocalDaemon = LocalDaemon {unLocalDaemon :: Address}
@@ -48,7 +48,7 @@ data Log where
   LogMe :: Address -> Log
   LogLocalDaemon :: LocalDaemon -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
-  LogOutput :: ProcessTransport -> ByteString -> Log
+  LogOutput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogAction :: Address -> Action -> Log
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
@@ -139,7 +139,7 @@ listNodes ::
   Sem r ()
 listNodes target = do
   localDaemon <- unLocalDaemon <$> ask
-  output ReqListNodes
+  output $ Just ReqListNodes
   (ResNodeList list) <- inputOrFail
   let nodeList =
         NodeList
@@ -155,14 +155,14 @@ ioToProc ::
     Member (Output Log) r
   ) =>
   ProcessTransport ->
-  InterpretersFor '[Input (Maybe ByteString), Output ByteString, Close] r
+  InterpretersFor '[InputWithEOF ByteString, OutputWithEOF ByteString] r
 ioToProc transport m =
   go transport $
     inToLog (LogInput transport) $
       outToLog (LogOutput transport) m
   where
     go Stdio = tagStream @'ProcStream
-    go (Process cmd) = execIO (ioShell cmd) . raise3Under @Wait
+    go (Process cmd) = execIO (ioShell cmd) . raise2Under @Wait
 
 procToServer ::
   ( Members (Stream 'ProcStream) r,
@@ -176,8 +176,8 @@ procToServer ::
 procToServer transport =
   ioToProc transport $
     sequenceConcurrently_
-      [ tag @'ServerStream @Close $ tag @'ServerStream @ByteInputWithEOF inputToOutput,
-        tag @'ServerStream @(Output ByteString) inputToOutput
+      [ tag @'ServerStream @ByteInputWithEOF inputToOutput,
+        tag @'ServerStream @ByteOutputWithEOF inputToOutput
       ]
 
 connectNode ::
@@ -196,7 +196,7 @@ connectNode ::
   Maybe Address ->
   Sem r ()
 connectNode self transport (Just addr) = do
-  tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just addr
+  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport $ Just addr
   ioToProc transport $ do
     routerAddr <- exchangeSelves self Nothing
     procConnChan <- makeBidirectionalChan
@@ -215,7 +215,7 @@ connectTransport ::
   ProcessTransport ->
   Sem r ()
 connectTransport transport = do
-  tag @'ServerStream $ output $ encodeStrict ReqTunnelProcess
+  tag @'ServerStream $ output $ Just $ encodeStrict ReqTunnelProcess
   procToServer transport
 
 serviceMsgHandler ::
@@ -262,7 +262,7 @@ serveTransport self mAddr transport = do
   let serviceAddr = "service" /> serviceAddrPart
   serviceChan <- makeBidirectionalChan
   _ <- superviseNode (Just serviceAddr) (Pipe transport) serviceChan
-  tag @'ServerStream $ output $ encodeStrict $ ReqConnectNode transport $ Just serviceAddr
+  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport $ Just serviceAddr
   scoped @_ @(Storage _) serviceAddr $
     runPeer serviceAddr do
       selfChan <- makeBidirectionalChan
@@ -326,7 +326,7 @@ meetServerAssignSelf mSelf = do
   me <- case mSelf of
     Just self -> pure self
     Nothing -> childAddr (unLocalDaemon server)
-  tag @'ServerStream @ByteOutput $ output (encodeStrict $ Self me)
+  tag @'ServerStream @ByteOutputWithEOF $ output (Just $ encodeStrict $ Self me)
   output $ LogMe me
   output $ LogLocalDaemon server
   pure (me, server)
@@ -366,8 +366,7 @@ r2c mSelf (Command targetChain action) = do
 
 tagStream :: forall stream r a. (Members (Stream stream) r) => Sem (Append ByteTransport r) a -> Sem r a
 tagStream =
-  tag @stream @Close
-    . tag @stream @ByteOutput
+  tag @stream @ByteOutputWithEOF
     . tag @stream @ByteInputWithEOF
 
 r2cIO :: Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
