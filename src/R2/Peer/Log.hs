@@ -28,7 +28,7 @@ logShowOptionalAddr Nothing = "unknown node"
 
 logShowOptionalMsg :: Maybe ByteString -> String
 logShowOptionalMsg (Just msg) = show $ BC.unpack msg
-logShowOptionalMsg Nothing = "EOF"
+logShowOptionalMsg Nothing = "Nothing"
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
 logToTrace verbosity = runOutputSem go
