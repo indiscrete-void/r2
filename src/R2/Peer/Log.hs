@@ -17,8 +17,8 @@ import Text.Printf (printf)
 
 data Log where
   LogConnected :: Node chan -> Log
-  LogRecv :: Maybe Address -> ByteString -> Log
-  LogSend :: Maybe Address -> ByteString -> Log
+  LogRecv :: Maybe Address -> Maybe ByteString -> Log
+  LogSend :: Maybe Address -> Maybe ByteString -> Log
   LogDisconnected :: Maybe Address -> Log
   LogError :: Maybe Address -> String -> Log
 
@@ -26,14 +26,18 @@ logShowOptionalAddr :: Maybe Address -> String
 logShowOptionalAddr (Just addr) = show addr
 logShowOptionalAddr Nothing = "unknown node"
 
+logShowOptionalMsg :: Maybe ByteString -> String
+logShowOptionalMsg (Just msg) = show $ BC.unpack msg
+logShowOptionalMsg Nothing = "EOF"
+
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
 logToTrace verbosity = runOutputSem go
   where
     go (LogConnected node) = case node of
       ConnectedNode Connection {connAddr, connTransport} -> trace $ printf "connection established with %s over %s" (show connAddr) (show connTransport)
       AcceptedNode NewConnection {newConnTransport, newConnAddr} -> trace $ printf "accepted %s over %s" (logShowOptionalAddr newConnAddr) (show newConnTransport)
-    go (LogRecv mAddr msg) = traceTagged (printf "<-%s" $ logShowOptionalAddr mAddr) $ when (verbosity > 0) $ trace (BC.unpack msg)
-    go (LogSend mAddr msg) = traceTagged (printf "->%s" $ logShowOptionalAddr mAddr) $ when (verbosity > 1) $ trace (BC.unpack msg)
+    go (LogRecv mAddr msg) = traceTagged (printf "<-%s" $ logShowOptionalAddr mAddr) $ when (verbosity > 0) $ trace (logShowOptionalMsg msg)
+    go (LogSend mAddr msg) = traceTagged (printf "->%s" $ logShowOptionalAddr mAddr) $ when (verbosity > 1) $ trace (logShowOptionalMsg msg)
     go (LogDisconnected mAddr) = trace $ printf "%s disconnected" $ logShowOptionalAddr mAddr
     go (LogError mAddr err) = trace $ printf "%s error: %s" (logShowOptionalAddr mAddr) err
 
@@ -41,14 +45,14 @@ logOut :: (Member (OutputWithEOF ByteString) r, Member (Output Log) r) => Maybe 
 logOut mAddr =
   intercept @(OutputWithEOF ByteString)
     ( \(Output o) ->
-        whenJust o (output . LogSend mAddr) >> output o
+        output (LogSend mAddr o) >> output o
     )
 
 logIn :: (Member (InputWithEOF ByteString) r, Member (Output Log) r) => Maybe Address -> Sem r a -> Sem r a
 logIn mAddr =
   intercept @(InputWithEOF ByteString)
     ( \Input ->
-        input >>= \i -> whenJust i (output . LogRecv mAddr) >> pure i
+        input >>= \i -> output (LogRecv mAddr i) >> pure i
     )
 
 ioToLog :: (Member (Output Log) r) => Maybe Address -> Sem (Append ByteTransport r) a -> Sem (Append ByteTransport r) a
