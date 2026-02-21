@@ -48,9 +48,9 @@ newtype Self = Self {unSelf :: Address}
 $(deriveJSON (aesonRemovePrefix "un") ''Self)
 
 data R2Message msg where
-  MsgRouteTo :: RouteTo msg -> R2Message msg
+  MsgRouteTo :: RouteTo (Maybe msg) -> R2Message msg
   MsgRouteToErr :: RouteToErr -> R2Message msg
-  MsgRoutedFrom :: RoutedFrom msg -> R2Message msg
+  MsgRoutedFrom :: RoutedFrom (Maybe msg) -> R2Message msg
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON aesonOptions ''R2Message)

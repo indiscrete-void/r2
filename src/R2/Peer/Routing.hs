@@ -1,7 +1,6 @@
 module R2.Peer.Routing (LookupChan (..), EstablishedConnection (..), OverlayConnection (..), interpretLookupChanSem, routeTo, routeToError, routedFrom, handleR2Msg, makeR2ConnectedNode, runOverlayLookupChan) where
 
 import Control.Monad.Extra
-import Control.Monad.Loops
 import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
@@ -44,7 +43,7 @@ routeTo ::
     Member (LookupChan EstablishedConnection (HighLevel (Outbound chan))) r
   ) =>
   Address ->
-  RouteTo Base64Text ->
+  RouteTo (Maybe Base64Text) ->
   Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
   mChan <- lookupChan (EstablishedConnection routeToAddr)
@@ -67,18 +66,18 @@ routedFrom ::
     Member (LookupChan OverlayConnection (Inbound chan)) r,
     Member Fail r
   ) =>
-  RoutedFrom Base64Text ->
+  RoutedFrom (Maybe Base64Text) ->
   Sem r ()
 routedFrom (RoutedFrom routedFromNode routedFromData) = do
-  decoded <- base64ToBsSem routedFromData
+  decoded <- mapM base64ToBsSem routedFromData
   Inbound chan <- lookupChan (OverlayConnection routedFromNode)
-  busChan chan $ putChan (Just decoded)
+  busChan chan $ putChan decoded
 
 outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
-  whileJust_
+  mapEOF
     (busChan chan takeChan)
-    (busChan routerChan . outputToChan . encodeOutput . output . Just . MsgRouteTo . RouteTo addr . bsToBase64)
+    (busChan routerChan . outputToChan . encodeOutput . output . Just . MsgRouteTo . RouteTo addr . fmap bsToBase64)
 
 closeOnDisconnect ::
   ( Member (EventConsumer (Event chan)) r,
