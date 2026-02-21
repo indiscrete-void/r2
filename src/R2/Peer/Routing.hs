@@ -108,7 +108,6 @@ makeR2ConnectedNode ::
 makeR2ConnectedNode addr router (HighLevel routerOutboundChan) = do
   chan@Bidirectional {inboundChan = clientInboundChan, outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
   async_ $ clientInboundChan `closeOnDisconnect` router
-
   async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
   superviseNode (Just addr) (R2 router) chan
 
