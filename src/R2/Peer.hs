@@ -9,6 +9,10 @@ module R2.Peer
     address,
     exchangeSelves,
     Peer,
+    ChanOverlay,
+    PeerChanOverlay,
+    runOverlayWith,
+    defaultChanOverlay,
     runOverlay,
   )
 where
@@ -156,27 +160,36 @@ interlayConnAddRouting addr chan = do
         chanToIO newChan
   pure newChan
 
-superviseConn ::
-  ( Member (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r,
-    Member (Bus chan ByteString) r,
+type ChanOverlay chan r =
+  Address ->
+  Bidirectional chan ->
+  Sem r (Bidirectional chan)
+
+defaultChanOverlay ::
+  ( Member (Bus chan ByteString) r,
+    Member (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r,
+    Member (Output Log) r,
     Member (Storage chan) r,
     Member (Peer chan) r,
-    Member (Output Log) r,
     Member Fail r,
-    Member Async r,
+    Member (EventConsumer (Event chan)) r,
     Member (Events (Event chan)) r,
-    Member (EventConsumer (Event chan)) r
+    Member Async r
   ) =>
+  ChanOverlay chan r
+defaultChanOverlay addr =
+  interlayConnAddLogging addr
+    >=> interlayConnAddCleanup addr
+    >=> interlayConnAddRouting addr
+
+insertChanOverlay ::
+  ChanOverlay chan r ->
   Address ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
-superviseConn addr transport chan = do
-  let interlayChan =
-        interlayConnAddLogging addr
-          >=> interlayConnAddCleanup addr
-          >=> interlayConnAddRouting addr
-  highLevelChan <- HighLevel <$> interlayChan chan
+insertChanOverlay chanOverlay addr transport chan = do
+  highLevelChan <- HighLevel <$> chanOverlay addr chan
   pure $
     Connection
       { connAddr = addr,
@@ -208,6 +221,8 @@ lookupChanToStorage =
           _ -> Nothing
     )
 
+type PeerChanOverlay chan r = ChanOverlay chan (LookupChan EstablishedConnection (HighLevel (Bidirectional chan)) ': Peer chan ': r)
+
 makePeerNode ::
   ( Member Fail r,
     Member (Events (Event chan)) r,
@@ -218,12 +233,13 @@ makePeerNode ::
     Member (Storage chan) r,
     Member (EventConsumer (Event chan)) r
   ) =>
+  PeerChanOverlay chan r ->
   Address ->
   Maybe Address ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
-makePeerNode self mAddr transport chan = do
+makePeerNode chanOverlay self mAddr transport chan = do
   let acceptedNode = AcceptedNode (NewConnection mAddr transport chan)
   output (LogConnected acceptedNode)
   result <- runFail $ determinePeerAddr mAddr self acceptedNode
@@ -232,15 +248,29 @@ makePeerNode self mAddr transport chan = do
       output (LogError mAddr err)
       fail err
     Right addr -> do
-      conn <-
-        runOverlay self $
-          lookupChanToStorage $
-            superviseConn addr transport chan
+      conn <- runOverlay self $ lookupChanToStorage $ insertChanOverlay chanOverlay addr transport chan
       let node = ConnectedNode conn
       storageAddNode node
       publish $ ConnFullyInitialized conn
       output (LogConnected node)
       pure conn
+
+runOverlayWith ::
+  forall chan r.
+  ( Member (Bus chan ByteString) r,
+    Member (Output Log) r,
+    Member (Storage chan) r,
+    Member (Events (Event chan)) r,
+    Member (EventConsumer (Event chan)) r,
+    Member Async r,
+    Member Resource r,
+    Member Fail r
+  ) =>
+  PeerChanOverlay chan r ->
+  Address ->
+  InterpreterFor (Peer chan) r
+runOverlayWith chanOverlay self = interpret \case
+  SuperviseNode mAddr transport chan -> makePeerNode chanOverlay self mAddr transport chan
 
 runOverlay ::
   forall chan r.
@@ -255,5 +285,4 @@ runOverlay ::
   ) =>
   Address ->
   InterpreterFor (Peer chan) r
-runOverlay self = interpret \case
-  SuperviseNode mAddr transport chan -> makePeerNode self mAddr transport chan
+runOverlay = runOverlayWith defaultChanOverlay
