@@ -84,7 +84,7 @@ r2d ::
   ) =>
   Address ->
   Sem r ()
-r2d self = runPeer self do
+r2d self = runOverlay self do
   async_ processClients
   acceptSockets
 

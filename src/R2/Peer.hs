@@ -9,7 +9,7 @@ module R2.Peer
     address,
     exchangeSelves,
     Peer,
-    runPeer,
+    runOverlay,
   )
 where
 
@@ -233,7 +233,7 @@ makePeerNode self mAddr transport chan = do
       fail err
     Right addr -> do
       conn <-
-        runPeer self $
+        runOverlay self $
           lookupChanToStorage $
             superviseConn addr transport chan
       let node = ConnectedNode conn
@@ -242,7 +242,7 @@ makePeerNode self mAddr transport chan = do
       output (LogConnected node)
       pure conn
 
-runPeer ::
+runOverlay ::
   forall chan r.
   ( Member (Bus chan ByteString) r,
     Member (Output Log) r,
@@ -255,5 +255,5 @@ runPeer ::
   ) =>
   Address ->
   InterpreterFor (Peer chan) r
-runPeer self = interpret \case
+runOverlay self = interpret \case
   SuperviseNode mAddr transport chan -> makePeerNode self mAddr transport chan

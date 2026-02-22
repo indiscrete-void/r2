@@ -132,7 +132,7 @@ mkNodes link links serveMap = do
         scoped @_ @(Storage _) myId $
           scoped @_ @(Storage _) myId $
             (scoped @_ @(Bundle (EventEffects _)) myId . bundleEvents) $
-              runPeer myId do
+              runOverlay myId do
                 let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
                 forM_ myLinks \them -> do
                   let chan = links ! (me, them)
@@ -167,7 +167,7 @@ mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m 
   scoped @_ @(Storage _) firstNodeId $
     scoped @_ @(Output Peer.Log) firstNodeId $
       (scoped @_ @(Bundle (EventEffects _)) firstNodeId . bundleEvents) $
-        runPeer firstNodeId do
+        runOverlay firstNodeId do
           _ <- superviseNode (Just randAddress) Socket msgLinkA
           processClients
 

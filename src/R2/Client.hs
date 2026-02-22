@@ -264,7 +264,7 @@ serveTransport self mAddr transport = do
   _ <- superviseNode (Just serviceAddr) (Pipe transport) serviceChan
   tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport $ Just serviceAddr
   scoped @_ @(Storage _) serviceAddr $
-    runPeer serviceAddr do
+    runOverlay serviceAddr do
       selfChan <- makeBidirectionalChan
       _ <- superviseNode (Just self) (Pipe transport) selfChan
       async_ $ subscribeLoop $ \case
@@ -354,7 +354,7 @@ r2c mSelf (Command targetChain action) = do
   serverChan <- makeBidirectionalChan
   async_ $ tagStream @'ServerStream $ lenDecodeInput . lenPrefixOutput $ chanToIO serverChan
   (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf mSelf
-  scoped @_ @(Storage _) me $ runPeer me $ do
+  scoped @_ @(Storage _) me $ runOverlay me $ do
     let target = case targetChain of
           [] -> unLocalDaemon server
           nodes -> last nodes
