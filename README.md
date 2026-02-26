@@ -33,7 +33,32 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 - **Multipathing**: Combine multiple underlying links into single connection ⏳
 - **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
-- **Multiplatform** Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
+- **Multiplatform**: Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
+- **Advanced Application Layer**: Use built-in communication models getting service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) ⏳ semantics
+
+## Address Scheme ⏳
+r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns.
+- **Free identifiers**: Simple names like `iota` or `telegram-bot`
+- **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.:
+    * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity
+    * `service:cat` – a named service
+    * `child:1337` – a specific child process or virtual node
+    * `topic:chat` – a pub/sub topic
+- **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota
+- **Logical addresses for rules and patterns**:
+    * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
+    * Alternation: `(alice|bob)/service:cat` matches either Alice's or Bob's cat service
+    * Predicates: `?secure` to match nodes based on properties
+- **Sets**: Comma-separated lists like `bogdan, theodor, x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=`
+- **Self reference**: self always refers to the local node
+
+Complex examples:  
+- `alice/*/service:cat` – any cat service reachable via Alice
+- `?encrypted */service:chat` – any chat service that is encrypted (planned)
+
+Complex examples:  
+- `alice/*/service:cat` – any cat service reachable via Alice
+- `?encrypted */service:chat` – any chat service that is encrypted (planned)
 
 ## The Route-to Protocol
 
