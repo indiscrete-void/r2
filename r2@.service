@@ -1,0 +1,16 @@
+[Unit]
+Description=r2 manager for /etc/r2/%i.toml
+Documentation=man:r2dm(8)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /run/r2 /etc/r2
+ExecStartPre=/bin/chmod 0750 /run/r2 /etc/r2
+ExecStart=/bin/sh -c 'exec /usr/bin/r2dm -f /etc/r2/%i.toml'
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
