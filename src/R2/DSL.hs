@@ -1,6 +1,6 @@
 module R2.DSL where
 
-import Control.Concurrent (MVar, forkIO, threadDelay)
+import Control.Concurrent (MVar, forkIO, threadDelay, takeMVar)
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM.TBMQueue
 import Control.Exception (SomeException)
@@ -334,9 +334,9 @@ runDaemonService daemonVerbosity daemonSocketPath conn@(DaemonConnection linkCmd
   printf "starting service %s%s\n" (showLinkCmd linkCmd ConnServe) displayServiceAddr
   runDaemonConn ConnServe daemonVerbosity daemonSocketPath conn
 
-runManagedDaemon :: DaemonDescription -> IO (MVar ())
+runManagedDaemon :: DaemonDescription -> IO ()
 runManagedDaemon DaemonDescription {..} = do
   Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath
   forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
   forM_ daemonServices (forkIO . runDaemonService daemonVerbosity daemonSocketPath)
-  pure joinDaemon
+  takeMVar joinDaemon
