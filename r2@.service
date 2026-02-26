@@ -1,5 +1,5 @@
 [Unit]
-Description=r2 manager for /etc/r2/%i.toml
+Description=r2 manager /etc/r2/%i.toml
 Documentation=man:r2dm(8)
 After=network.target
 Wants=network.target
