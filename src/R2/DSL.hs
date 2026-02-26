@@ -1,6 +1,6 @@
 module R2.DSL where
 
-import Control.Concurrent (MVar, forkIO, threadDelay, takeMVar)
+import Control.Concurrent (MVar, forkIO, takeMVar, threadDelay)
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM.TBMQueue
 import Control.Exception (SomeException)
@@ -320,7 +320,7 @@ runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection lin
   let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
   printf "starting conn %s%s\n" (showLinkCmd linkCmd ConnAnnounce) displayConnAddr
   result <- IO.try @SomeException $ runDaemonConn ConnAnnounce daemonVerbosity daemonSocketPath conn
-  let displayDelay = show $ fromInteger @Second connRestartDelay
+  let displayDelay = show $ fromMicroseconds @Second connRestartDelay
   let displayCause :: String = case result of
         Right () -> "exited"
         Left err -> printf "exited unexpectedly: %s" (show err)
