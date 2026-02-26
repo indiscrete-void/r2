@@ -45,7 +45,7 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
     * `child:1337` – a specific child process or virtual node
     * `topic:chat` – a pub/sub topic
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ⏳
-- **Logical addresses for rules and patterns** ⏳:
+- **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
     * Alternation: `(alice|bob)/service:cat` matches either Alice's or Bob's cat service
     * Predicates: `?secure` to match nodes based on properties
