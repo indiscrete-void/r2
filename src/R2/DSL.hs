@@ -46,6 +46,7 @@ import R2.Peer.Proto
 import R2.Peer.Storage
 import R2.Random
 import System.Exit (ExitCode (..))
+import System.IO
 import System.Process.Extra
 import Text.Printf (printf)
 
@@ -292,8 +293,11 @@ data DaemonDescription = DaemonDescription
 connRestartDelay :: Integer
 connRestartDelay = toMicroseconds (2718 :: Millisecond)
 
+stdoutShell :: String -> CreateProcess
+stdoutShell cmd = (shell cmd) {std_err = UseHandle stdout}
+
 callCommandNoCtrlC :: String -> IO ()
-callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ shell cmd) cleanupProcess \(_, _, _, ph) -> do
+callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ stdoutShell cmd) cleanupProcess \(_, _, _, ph) -> do
   exitCode <- waitForProcess ph
   case exitCode of
     ExitSuccess -> return ()
@@ -302,7 +306,7 @@ callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ shell cmd) cleanupPr
 runDaemonConn :: ConnAction -> Verbosity -> FilePath -> DaemonConnection -> IO ()
 runDaemonConn action daemonVerbosity daemonSocketPath (DaemonConnection {daemonConnAddress, daemonConnProcess = PositiveConnectionCmd cmd}) =
   let resolvedAction = connActionToAction action cmd daemonConnAddress
-   in r2cIO daemonVerbosity Nothing daemonSocketPath $ Command [] resolvedAction
+   in r2cIO stdout daemonVerbosity Nothing daemonSocketPath $ Command [] resolvedAction
 runDaemonConn action _ _ (DaemonConnection {daemonConnProcess = NegativeConnectionCmdResolver resolve}) =
   let resolvedCmd = resolve action
    in callCommandNoCtrlC resolvedCmd

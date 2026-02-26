@@ -23,7 +23,6 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Functor ((<&>))
 import Data.Maybe
-import Debug.Trace qualified as Debug
 import Network.Socket (Family (..), Socket, socket)
 import Network.Socket qualified as Socket
 import Options.Applicative
@@ -70,7 +69,6 @@ resolveSocketPath customPath = do
   defaultPath <- defaultUserR2SocketPath
   extraCustomPath <- lookupEnv "R2_SOCKET"
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
-  Debug.traceM ("comunicating over \"" <> path <> "\"")
   pure path
 
 withR2Socket :: (Socket -> IO a) -> IO a

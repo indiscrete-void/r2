@@ -37,6 +37,7 @@ import R2.Peer.Proto
 import R2.Peer.Routing
 import R2.Peer.Storage
 import R2.Random
+import System.IO
 import System.Process.Extra
 import Text.Printf
 import Toml qualified
@@ -369,8 +370,8 @@ tagStream =
   tag @stream @ByteOutputWithEOF
     . tag @stream @ByteInputWithEOF
 
-r2cIO :: Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
-r2cIO verbosity mSelf socketPath command = do
+r2cIO :: Handle -> Verbosity -> Maybe Address -> FilePath -> Command -> IO ()
+r2cIO traceHandle verbosity mSelf socketPath command = do
   withR2Socket \s -> do
     IO.connect s (IO.SockAddrUnix socketPath)
     run verbosity s $ r2c mSelf command
@@ -385,7 +386,7 @@ r2cIO verbosity mSelf socketPath command = do
         . resourceToIOFinal
         . interpretRace
         . embedToFinal @IO
-        . traceIOExceptions @IOException
+        . traceIOExceptions @IOException traceHandle
         . failToEmbed @IO
         -- interpreter log is ignored
         . ignoreTrace
@@ -395,7 +396,7 @@ r2cIO verbosity mSelf socketPath command = do
         . scopedProcToIOFinal bufferSize
         -- log application events
         . outputToCLI
-        . traceToStderrBuffered
+        . traceToHandleBuffered traceHandle
         . logToTrace verbosity
         . Peer.logToTrace verbosity
         . interpretLockReentrant

@@ -1,6 +1,13 @@
 import Control.Concurrent (takeMVar)
-import R2.DSL (runManagedDaemon)
+import R2.DSL
 import R2.Manager.Options (parse)
+import System.IO
+import Text.Printf
 
 main :: IO ()
-main = parse >>= runManagedDaemon >>= takeMVar
+main = do
+  hSetBuffering stdout LineBuffering
+  config <- parse
+  printf "comunicating over %s" $ daemonSocketPath config
+  mvar <- runManagedDaemon config
+  takeMVar mvar

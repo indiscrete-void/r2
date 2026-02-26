@@ -32,6 +32,7 @@ import R2.Peer.Conn
 import R2.Peer.Log
 import R2.Peer.Storage
 import R2.Socket
+import System.IO
 
 acceptSockets ::
   ( Member (Accept sock) r,
@@ -116,7 +117,7 @@ r2dIO verbosity fork self socketPath = do
         . asyncToIOFinal
         . resourceToIOFinal
         . embedToFinal @IO
-        . traceIOExceptions @IOException
+        . traceIOExceptions @IOException stdout
         . interpretEventsChan
         . interpretBusTBM @ByteString queueSize
         . failToEmbed @IO

@@ -85,7 +85,7 @@ library
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , random
     , stm-chans
     , text
@@ -148,7 +148,7 @@ executable r2
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , r2
     , random
     , stm-chans
@@ -211,7 +211,7 @@ executable r2-simple-example
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , r2
     , random
     , stm-chans
@@ -275,7 +275,7 @@ executable r2d
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , r2
     , random
     , stm-chans
@@ -339,7 +339,7 @@ executable r2dm
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , r2
     , random
     , stm-chans
@@ -403,7 +403,7 @@ test-suite tests
     , polysemy-conc
     , polysemy-plugin
     , polysemy-scoped-process >=0.2.0.0
-    , polysemy-transport >=0.18.0.0
+    , polysemy-transport >=0.20.1.0
     , r2
     , random
     , stm-chans
