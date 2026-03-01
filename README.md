@@ -41,11 +41,11 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns.
 - **Free identifiers**: Simple names like `iota` or `telegram-bot` ✅
 - **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.: ⏳
-    * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity
+    * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity from global network
     * `service:cat` – a named service
     * `child:1337` – a specific child process or virtual node
     * `topic:chat` – a pub/sub topic
-    * `net:home:mainframe` - `mainframe` from network `home`
+    * `net:home:mainframe` - `mainframe` from domain-specific network `home`
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ⏳
 - **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
