@@ -27,7 +27,7 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 ## Key Features
 - **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
-- **Advanced Application Layer**: Use built-in communication models getting service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) ⏳ semantics
+- **Advanced Application Layer**: Use built-in DHT ⏳ and communication models for service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) semantics ⏳
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
 - **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
 - **Multipathing**: Combine multiple underlying links into single connection ⏳
