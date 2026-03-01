@@ -27,14 +27,14 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 ## Key Features
 - **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
-- **Simple Core Protocol**: Single-hop routing that can be composed for complex topologies ✅
-- **Flexible Transport**: Works over any transport layer (TCP/IP, UDP, Bluetooth, Unix sockets, serial, etc.) that can be reduced to stdio ✅
-- **Multiplexing**: Multiple virtual connections over single physical links ✅
-- **Multipathing**: Combine multiple underlying links into single connection ⏳
-- **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
-- **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
-- **Multiplatform**: Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
 - **Advanced Application Layer**: Use built-in communication models getting service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) ⏳ semantics
+- **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
+- **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
+- **Multipathing**: Combine multiple underlying links into single connection ⏳
+- **Multiplexing**: Multiple virtual connections over single physical links ✅
+- **Flexible Transport**: Works over any transport layer (TCP/IP, UDP, Bluetooth, Unix sockets, serial, etc.) that can be reduced to stdio ✅
+- **Simple Core Protocol**: Single-hop routing that can be composed for complex topologies ✅
+- **Multiplatform**: Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
 
 ## Address Scheme
 r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns.
