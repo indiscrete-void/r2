@@ -27,6 +27,7 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 ## Key Features
 - **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
+- **Scoped Networks**: Distinguish local ✅, domain-specific ⏳ and global resources ⏳ by address
 - **Advanced Application Layer**: Use built-in DHT ⏳ and communication models for service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) semantics ⏳
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
 - **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
@@ -44,6 +45,7 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
     * `service:cat` – a named service
     * `child:1337` – a specific child process or virtual node
     * `topic:chat` – a pub/sub topic
+    * `net:home:mainframe` - `mainframe` from network `home`
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ⏳
 - **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
