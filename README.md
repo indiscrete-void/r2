@@ -16,7 +16,7 @@
   └───────────────────────────────────────────────────┘                                          
 ```
 
-r2 is a network model that unifies local inter-process communication (IPC) and remote network connectivity  
+Weaves local resources and remote nodes into a seamless whole  
 
 Composable like [socat](https://linux.die.net/man/1/socat)  
 Ready to use like [Wireguard](https://www.wireguard.com/) and [Yggdrasil](https://yggdrasil-network.github.io/)  
