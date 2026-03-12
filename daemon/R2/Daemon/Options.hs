@@ -5,7 +5,7 @@ import R2
 import R2.Options
 import R2.Peer
 
-data Options = Options Verbosity (Maybe FilePath) Address
+data Options = Options Verbosity (Maybe FilePath) LabelAddr
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -24,4 +24,4 @@ opts =
   Options
     <$> verbosity
     <*> optional (strOption $ long "socket" <> short 's')
-    <*> argument address (metavar "ADDRESS")
+    <*> argument labelAddrP (metavar "ADDRESS")

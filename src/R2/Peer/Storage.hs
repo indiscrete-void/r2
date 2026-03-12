@@ -11,6 +11,7 @@ module R2.Peer.Storage
     storageLockNode,
     nodesReaderToStorage,
     storagesToIO,
+    storageLookupConn,
   )
 where
 
@@ -32,11 +33,14 @@ type NodeState chan = [Node chan]
 
 data Storage chan m a where
   StorageAddNode :: Node chan -> Storage chan m ()
-  StorageRmNode :: Maybe Address -> Storage chan m ()
-  StorageLookupNode :: Address -> Storage chan m (Maybe (Node chan))
+  StorageRmNode :: Maybe NetworkAddr -> Storage chan m ()
+  StorageLookupNode :: NetworkAddr -> Storage chan m (Maybe (Node chan))
   StorageNodes :: Storage chan m (NodeState chan)
 
 makeSem ''Storage
+
+storageLookupConn :: (Member (Storage chan) r) => NetworkAddr -> Sem r (Maybe (Connection chan))
+storageLookupConn addr = (nodeConn =<<) <$> storageLookupNode addr
 
 storageLockNode :: (Member (Storage chan) r, Member Resource r) => Node chan -> Sem r c -> Sem r c
 storageLockNode node = bracket_ (storageAddNode node) (storageRmNode $ nodeAddr node)
@@ -62,7 +66,7 @@ storageToAtomicState =
 storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
 storageToIO = fmap snd . atomicStateToIO ([] :: NodeState chan) . storageToAtomicState . raiseUnder
 
-type Storages chan = Scoped Address (Storage chan)
+type Storages chan = Scoped NameAddr (Storage chan)
 
 storagesToIO ::
   (Member (Embed IO) r, Member Lock r) =>

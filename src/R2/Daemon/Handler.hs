@@ -28,21 +28,19 @@ listNodes = do
 
 connectNode ::
   ( Member (Bus chan ByteString) r,
-    Member Fail r,
     Member (EventConsumer (Event chan)) r,
     Member Async r,
     Member (Peer chan) r
   ) =>
   Connection chan ->
-  Maybe Address ->
+  NetworkAddr ->
   Sem r ()
 connectNode
   Connection
     { connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan,
       connAddr = router
     }
-  (Just addr) = void $ makeR2ConnectedNode addr router routerOutboundChan
-connectNode _ Nothing = fail "node without addr unsupported"
+  addr = void $ makeR2ConnectedNode addr router routerOutboundChan
 
 handleMsg ::
   ( Member (Reader [Node chan]) r,

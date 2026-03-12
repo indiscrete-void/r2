@@ -19,7 +19,7 @@ randomToIO m = do
     go stdGen = interpret \case
       UniformlyRandom -> embed $ uniformM stdGen
 
-childAddr :: (Member Random r) => Address -> Sem r Address
-childAddr server = do
-  addr <- uniformlyRandom @Address
-  pure $ server /> "child" /> addr
+childAddr :: (Member Random r) => String -> Sem r NameAddr
+childAddr tag = do
+  addr <- labelAddr <$> uniformlyRandom
+  pure $ NameTagAddr (TagAddr tag addr)

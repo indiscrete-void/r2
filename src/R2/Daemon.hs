@@ -83,13 +83,13 @@ r2d ::
     Member (Events (Event chan)) r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  Address ->
+  NameAddr ->
   Sem r ()
 r2d self = runOverlay self do
   async_ processClients
   acceptSockets
 
-r2dIO :: Verbosity -> Bool -> Address -> FilePath -> IO (Maybe (MVar ()))
+r2dIO :: Verbosity -> Bool -> NameAddr -> FilePath -> IO (Maybe (MVar ()))
 r2dIO verbosity fork self socketPath = do
   s <- r2Socket
   IO.bind s (IO.SockAddrUnix socketPath)

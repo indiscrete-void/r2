@@ -27,7 +27,7 @@ data ProcessTransport
 
 $(deriveJSON aesonOptions ''ProcessTransport)
 
-data ConnTransport = R2 Address | Pipe ProcessTransport | Socket
+data ConnTransport = Overlay | Pipe ProcessTransport | Socket
   deriving stock (Eq, Show)
 
 $(deriveJSON aesonOptions ''ConnTransport)
@@ -42,7 +42,7 @@ instance FromJSON Raw where
   parseJSON (Value.String txt) = return $ Raw $ BC.pack $ Text.unpack txt
   parseJSON _ = fail "Expected a string value"
 
-newtype Self = Self {unSelf :: Address}
+newtype Self = Self {unSelf :: NameAddr}
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON (aesonRemovePrefix "un") ''Self)
@@ -56,7 +56,7 @@ data R2Message msg where
 $(deriveJSON aesonOptions ''R2Message)
 
 data ClientToDaemonMessage where
-  ReqConnectNode :: ProcessTransport -> Maybe Address -> ClientToDaemonMessage
+  ReqConnectNode :: ProcessTransport -> NetworkAddr -> ClientToDaemonMessage
   ReqTunnelProcess :: ClientToDaemonMessage
   ReqListNodes :: ClientToDaemonMessage
   deriving stock (Eq, Show, Generic)
@@ -64,7 +64,7 @@ data ClientToDaemonMessage where
 $(deriveJSON aesonOptions ''ClientToDaemonMessage)
 
 data DaemonPeerInfo = DaemonPeerInfo
-  { daemonPeerAddr :: Maybe Address,
+  { daemonPeerAddr :: Maybe NetworkAddr,
     daemonPeerTransport :: ConnTransport
   }
   deriving stock (Eq, Show, Generic)
@@ -72,7 +72,7 @@ data DaemonPeerInfo = DaemonPeerInfo
 $(deriveJSON aesonOptions ''DaemonPeerInfo)
 
 data DaemonToClientMessage where
-  ResTunnelProcess :: Address -> DaemonToClientMessage
+  ResTunnelProcess :: NameAddr -> DaemonToClientMessage
   ResNodeList :: [DaemonPeerInfo] -> DaemonToClientMessage
   deriving stock (Eq, Show, Generic)
 

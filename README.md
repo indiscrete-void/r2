@@ -27,7 +27,7 @@ Yet new and minimalist
 
 ## Key Features
 - **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
-- **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use constraints (patterns and predicates) for complex operations ⏳  
+- **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use combinators and constraints for operations ⏳  
 - **Scoped Networks**: Distinguish local ✅, domain-specific ⏳ and global resources ⏳ by address
 - **Advanced Application Layer**: Use built-in DHT ⏳ and communication models for service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) semantics ⏳
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳

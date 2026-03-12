@@ -6,6 +6,7 @@ import Control.Concurrent.STM.TBMQueue
 import Control.Exception (SomeException)
 import Control.Exception qualified as IO
 import Control.Monad
+import Control.Monad.Trans.RWS (local)
 import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Data.List.Extra
@@ -50,16 +51,9 @@ import System.IO
 import System.Process.Extra
 import Text.Printf (printf)
 
-newtype NetworkNode = NetworkNode
-  { nodeId :: Address
-  }
-  deriving stock (Show, Eq, Ord)
+type NetworkLink = (NameAddr, NameAddr)
 
-type NetworkRoute = [NetworkNode]
-
-type NetworkLink = (NetworkNode, NetworkNode)
-
-type ServeList = [(NetworkNode, Service)]
+type ServeList = [(NameAddr, Service)]
 
 newtype Service = ServiceCommand String
 
@@ -76,12 +70,9 @@ static = NetworkDescription {serve = [], link = []}
 
 data Network r = Network
   { join :: Sem r (),
-    conn :: NetworkRoute -> Action -> InterpretersFor ByteTransport r,
-    conn_ :: NetworkRoute -> Action -> Sem r ()
+    conn :: NetworkAddr -> Action -> InterpretersFor ByteTransport r,
+    conn_ :: NetworkAddr -> Action -> Sem r ()
   }
-
-node :: String -> NetworkNode
-node = NetworkNode . Addr
 
 makeLink :: forall chan d r. (Member (Bus chan d) r, Member Sem.Async r) => Sem r (Bidirectional chan, Bidirectional chan)
 makeLink = do
@@ -114,30 +105,30 @@ bundleEvents =
 mkNodes ::
   ( Member (Bus chan ByteString) r,
     Member Sem.Async r,
-    Member (Scoped Address (Output Peer.Log)) r,
+    Member (Scoped NameAddr (Output Peer.Log)) r,
     Member Resource r,
     Member (Storages chan) r,
-    Member (Scoped Address (Bundle (EventEffects (Event chan)))) r,
+    Member (Scoped NameAddr (Bundle (EventEffects (Event chan)))) r,
     Member Fail r
   ) =>
   [NetworkLink] ->
-  Map (NetworkNode, NetworkNode) (Bidirectional chan) ->
-  Map NetworkNode Service ->
+  Map (NameAddr, NameAddr) (Bidirectional chan) ->
+  Map NameAddr Service ->
   Sem r [Async (Maybe ())]
 mkNodes link links serveMap = do
   let linkNodes = List.nub $ concat [[a, b] | ((a, b), _) <- Map.toList links]
-  forM linkNodes \me@NetworkNode {nodeId = myId} -> do
+  forM linkNodes \me -> do
     let (ServiceCommand service) = serveMap ! me
     async $
-      scoped @_ @(Output Peer.Log) myId $
-        scoped @_ @(Storage _) myId $
-          scoped @_ @(Storage _) myId $
-            (scoped @_ @(Bundle (EventEffects _)) myId . bundleEvents) $
-              runOverlay myId do
+      scoped @_ @(Output Peer.Log) me $
+        scoped @_ @(Storage _) me $
+          scoped @_ @(Storage _) me $
+            (scoped @_ @(Bundle (EventEffects _)) me . bundleEvents) $
+              runOverlay me do
                 let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
                 forM_ myLinks \them -> do
                   let chan = links ! (me, them)
-                  superviseNode (Just $ nodeId them) Socket chan
+                  superviseNode (Just $ NetworkNameAddr them) Socket chan
                 processClients
 
 mkActor ::
@@ -149,30 +140,30 @@ mkActor ::
     Member Fail r,
     Member Resource r,
     Member (Storages chan) r,
-    Member (Scoped Address (Output Peer.Log)) r,
-    Member (Scoped Address (Output Client.Log)) r,
-    Member (Scoped Address (Bundle (EventEffects (Event chan)))) r,
+    Member (Scoped NameAddr (Output Peer.Log)) r,
+    Member (Scoped NameAddr (Output Client.Log)) r,
+    Member (Scoped NameAddr (Bundle (EventEffects (Event chan)))) r,
     Member Random r
   ) =>
-  Map NetworkNode Service ->
-  NetworkRoute ->
+  Map NameAddr Service ->
+  NetworkAddr ->
   Action ->
   InterpretersFor ByteTransport r
-mkActor serveMap (firstNode@NetworkNode {nodeId = firstNodeId} : path) action m = do
+mkActor serveMap target action m = do
   (stdioLinkA, stdioLinkB) <- makeLink
   (msgLinkA, msgLinkB) <- makeLink
 
-  randAddress <- childAddr firstNodeId
+  randAddress <- childAddr "child"
 
-  let (ServiceCommand cmd) = serveMap ! firstNode
+  let firstNodeId = netAddrHead target
   scoped @_ @(Storage _) firstNodeId $
     scoped @_ @(Output Peer.Log) firstNodeId $
       (scoped @_ @(Bundle (EventEffects _)) firstNodeId . bundleEvents) $
         runOverlay firstNodeId do
-          _ <- superviseNode (Just randAddress) Socket msgLinkA
+          _ <- superviseNode (Just $ NetworkNameAddr randAddress) Socket msgLinkA
           processClients
 
-  let command = Command (map nodeId path) action
+  let command = Command (TargetAddrNetwork target) action
   client <-
     async $
       scoped @_ @(Output Client.Log) randAddress $
@@ -191,10 +182,10 @@ mkActor _ path _ _ = fail $ "invalid path " <> show path
 type NetworkEffects =
   '[ Random,
      Scoped CreateProcess Sem.Process,
-     Scoped Address (Bundle (EventEffects (Event (TBMQueue ByteString)))),
+     Scoped NameAddr (Bundle (EventEffects (Event (TBMQueue ByteString)))),
      Bus (TBMQueue ByteString) ByteString,
-     Scoped Address (Output Peer.Log),
-     Scoped Address (Output Client.Log),
+     Scoped NameAddr (Output Peer.Log),
+     Scoped NameAddr (Output Client.Log),
      Storages (TBMQueue ByteString),
      Fail,
      Output String,
@@ -258,32 +249,32 @@ negativeCmdPattern = "-%"
 actionCmdPattern :: String
 actionCmdPattern = "%ACTION"
 
-connActionToAction :: ConnAction -> String -> Maybe Address -> Action
+connActionToAction :: ConnAction -> String -> Maybe LabelAddr -> Action
 connActionToAction ConnServe positiveCmd mAddr = Serve mAddr (Process positiveCmd)
-connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) mAddr
+connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) (NetworkNameAddr . NameLabelAddr <$> mAddr)
 
 resolveNegativeConnectionCmdAction :: String -> ConnAction -> String
 resolveNegativeConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
 
-resolveConnectionCmd :: Verbosity -> FilePath -> Maybe Address -> String -> DaemonConnectionCmd
+resolveConnectionCmd :: Verbosity -> FilePath -> Maybe LabelAddr -> String -> DaemonConnectionCmd
 resolveConnectionCmd verbosity socketPath daemonConnAddress daemonConnProcess =
   if negativeCmdPattern `isInfixOf` daemonConnProcess
     then
       let actionCmd :: String = printf "'r2 %s --socket %s %s %s -'" r2Opts socketPath actionCmdPattern actionOpts
             where
               r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
-              actionOpts :: String = case daemonConnAddress of Just (Addr addr) -> printf "-n %s" addr; Nothing -> ""
+              actionOpts :: String = case daemonConnAddress of Just addr -> printf "-n %s" (show addr); Nothing -> ""
           partialCmd = replace negativeCmdPattern actionCmd daemonConnProcess
        in NegativeConnectionCmdResolver (resolveNegativeConnectionCmdAction partialCmd)
     else PositiveConnectionCmd daemonConnProcess
 
 data DaemonConnection = DaemonConnection
   { daemonConnProcess :: DaemonConnectionCmd,
-    daemonConnAddress :: Maybe Address
+    daemonConnAddress :: Maybe LabelAddr
   }
 
 data DaemonDescription = DaemonDescription
-  { daemonAddress :: Address,
+  { daemonAddress :: LabelAddr,
     daemonSocketPath :: FilePath,
     daemonLinks :: [DaemonConnection],
     daemonServices :: [DaemonConnection],
@@ -306,7 +297,7 @@ callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ stdoutShell cmd) cle
 runDaemonConn :: ConnAction -> Verbosity -> FilePath -> DaemonConnection -> IO ()
 runDaemonConn action daemonVerbosity daemonSocketPath (DaemonConnection {daemonConnAddress, daemonConnProcess = PositiveConnectionCmd cmd}) =
   let resolvedAction = connActionToAction action cmd daemonConnAddress
-   in r2cIO stdout daemonVerbosity Nothing daemonSocketPath $ Command [] resolvedAction
+   in r2cIO stdout daemonVerbosity Nothing daemonSocketPath $ Command TargetAddrServer resolvedAction
 runDaemonConn action _ _ (DaemonConnection {daemonConnProcess = NegativeConnectionCmdResolver resolve}) =
   let resolvedCmd = resolve action
    in callCommandNoCtrlC resolvedCmd
@@ -336,7 +327,7 @@ runDaemonService daemonVerbosity daemonSocketPath conn@(DaemonConnection linkCmd
 
 runManagedDaemon :: DaemonDescription -> IO ()
 runManagedDaemon DaemonDescription {..} = do
-  Just joinDaemon <- r2dIO daemonVerbosity True daemonAddress daemonSocketPath
+  Just joinDaemon <- r2dIO daemonVerbosity True (NameLabelAddr daemonAddress) daemonSocketPath
   forM_ daemonLinks (forkIO . runManagedDaemonConn daemonVerbosity daemonSocketPath)
   forM_ daemonServices (forkIO . runDaemonService daemonVerbosity daemonSocketPath)
   takeMVar joinDaemon

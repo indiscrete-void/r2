@@ -13,6 +13,7 @@ module R2.Peer.Conn
     Peer (..),
     superviseNode,
     highLevelNodeChan,
+    nodeConn,
   )
 where
 
@@ -25,13 +26,13 @@ newtype HighLevel chan = HighLevel {unHighLevel :: chan}
   deriving stock (Functor)
 
 data NewConnection chan = NewConnection
-  { newConnAddr :: Maybe Address,
+  { newConnAddr :: Maybe NetworkAddr,
     newConnTransport :: ConnTransport,
     newConnChan :: Bidirectional chan
   }
 
 data Connection chan = Connection
-  { connAddr :: Address,
+  { connAddr :: NetworkAddr,
     connTransport :: ConnTransport,
     connChan :: Bidirectional chan,
     connHighLevelChan :: HighLevel (Bidirectional chan)
@@ -39,7 +40,7 @@ data Connection chan = Connection
 
 data Event chan where
   ConnFullyInitialized :: Connection chan -> Event chan
-  ConnDestroyed :: Address -> Event chan
+  ConnDestroyed :: NetworkAddr -> Event chan
 
 data Node chan
   = AcceptedNode (NewConnection chan)
@@ -48,7 +49,7 @@ data Node chan
 instance Eq (Node chan) where
   a == b = nodeAddr a == nodeAddr b
 
-nodeAddr :: Node chan -> Maybe Address
+nodeAddr :: Node chan -> Maybe NetworkAddr
 nodeAddr (AcceptedNode (NewConnection {newConnAddr})) = newConnAddr
 nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
 
@@ -60,11 +61,15 @@ nodeChan :: Node chan -> Bidirectional chan
 nodeChan (AcceptedNode (NewConnection {newConnChan})) = newConnChan
 nodeChan (ConnectedNode (Connection {connChan})) = connChan
 
+nodeConn :: Node chan -> Maybe (Connection chan)
+nodeConn (AcceptedNode _) = Nothing
+nodeConn (ConnectedNode conn) = Just conn
+
 highLevelNodeChan :: Node chan -> Maybe (HighLevel (Bidirectional chan))
 highLevelNodeChan (AcceptedNode _) = Nothing
 highLevelNodeChan (ConnectedNode Connection {connHighLevelChan}) = Just connHighLevelChan
 
 data Peer chan m a where
-  SuperviseNode :: Maybe Address -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
+  SuperviseNode :: Maybe NetworkAddr -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
 
 makeSem ''Peer

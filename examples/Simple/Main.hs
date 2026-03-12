@@ -1,8 +1,8 @@
 import Data.ByteString.Char8 qualified as BC
 import Options.Applicative
-import Polysemy
 import Polysemy.Trace
 import Polysemy.Transport
+import R2
 import R2.Client
 import R2.DSL
 import R2.Options
@@ -25,14 +25,14 @@ parserInfo =
 opts :: Parser Options
 opts = Options <$> verbosity
 
-lain :: NetworkNode
-lain = node "lain"
+lain :: NameAddr
+lain = "lain"
 
-spongebob :: NetworkNode
-spongebob = node "spongebob"
+spongebob :: NameAddr
+spongebob = "spongebob"
 
-carl :: NetworkNode
-carl = node "carl"
+carl :: NameAddr
+carl = "carl"
 
 catnet :: NetworkDescription
 catnet =
@@ -52,12 +52,12 @@ main = do
   dslToIO verbosity (serve catnet) $ do
     Network {conn, conn_} <- mkNet catnet
 
-    conn_ [lain] Ls
-    conn_ [lain, carl] Ls
-    conn_ [lain, carl, spongebob] Ls
+    conn_ (NetworkNameAddr lain) Ls
+    conn_ (NetworkNameAddr lain /> NetworkNameAddr carl) Ls
+    conn_ (NetworkNameAddr lain /> NetworkNameAddr carl /> NetworkNameAddr spongebob) Ls
 
     let lainMsgViaCarl = "lain greets spongebob"
-    spongebobRes <- conn [lain, carl, spongebob] (Tunnel Stdio) $ do
+    spongebobRes <- conn (NetworkNameAddr lain /> NetworkNameAddr carl /> NetworkNameAddr spongebob) (Tunnel Stdio) $ do
       output (Just $ BC.pack lainMsgViaCarl)
       echo <- BC.unpack <$> inputOrFail
       output Nothing

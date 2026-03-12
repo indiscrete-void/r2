@@ -1,5 +1,6 @@
 module R2.Client.Options (Options (..), ProcessTransport (..), parse) where
 
+import Data.Maybe
 import Options.Applicative
 import R2.Client
 import R2.Options
@@ -30,7 +31,7 @@ opts =
 commandOpts :: Parser Command
 commandOpts =
   Command
-    <$> many (option address $ long "target" <> short 't')
+    <$> option targetNetAddrP (long "target" <> short 't' <> value TargetAddrServer)
     <*> hsubparser
       ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
           <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
@@ -42,10 +43,10 @@ lsOpts :: Parser Action
 lsOpts = pure Ls
 
 connectOpts :: Parser Action
-connectOpts = Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option address $ long "node" <> short 'n')
+connectOpts = Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option netAddrP $ long "node" <> short 'n')
 
 tunnelOpts :: Parser Action
 tunnelOpts = Tunnel <$> argument processTransport (metavar "TRANSPORT")
 
 serveOpts :: Parser Action
-serveOpts = Serve <$> optional (option address $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT")
+serveOpts = Serve <$> optional (option labelAddrP $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT")

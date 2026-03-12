@@ -1,6 +1,9 @@
 module R2.Peer.Routing (LookupChan (..), EstablishedConnection (..), OverlayConnection (..), interpretLookupChanSem, routeTo, routeToError, routedFrom, handleR2Msg, makeR2ConnectedNode, runOverlayLookupChan) where
 
+import Control.Applicative
 import Control.Monad.Extra
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe
 import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
@@ -23,11 +26,11 @@ data LookupChan addr chan m a where
 
 makeSem ''LookupChan
 
-newtype OverlayConnection = OverlayConnection Address
+newtype OverlayConnection = OverlayConnection NetworkAddr
 
 type instance AddressChan OverlayConnection chan = chan
 
-newtype EstablishedConnection = EstablishedConnection Address
+newtype EstablishedConnection = EstablishedConnection NetworkAddr
 
 type instance AddressChan EstablishedConnection chan = Maybe chan
 
@@ -42,7 +45,7 @@ routeTo ::
     Member (OutputWithEOF ByteString) r,
     Member (LookupChan EstablishedConnection (HighLevel (Outbound chan))) r
   ) =>
-  Address ->
+  NetworkAddr ->
   RouteTo (Maybe Base64Text) ->
   Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
@@ -73,7 +76,7 @@ routedFrom (RoutedFrom routedFromNode routedFromData) = do
   Inbound chan <- lookupChan (OverlayConnection routedFromNode)
   busChan chan $ putChan decoded
 
-outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> Address -> Sem r ()
+outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> NetworkAddr -> Sem r ()
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   mapEOF
     (busChan chan takeChan)
@@ -84,7 +87,7 @@ closeOnDisconnect ::
     Member (Bus chan ByteString) r
   ) =>
   chan ->
-  Address ->
+  NetworkAddr ->
   Sem r ()
 chan `closeOnDisconnect` router = subscribe go
   where
@@ -100,15 +103,16 @@ makeR2ConnectedNode ::
     Member Async r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  Address ->
-  Address ->
+  NetworkAddr ->
+  NetworkAddr ->
   HighLevel (Outbound chan) ->
   Sem r (Connection chan)
 makeR2ConnectedNode addr router (HighLevel routerOutboundChan) = do
+  let connAddr = router /> addr
   chan@Bidirectional {inboundChan = clientInboundChan, outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
   async_ $ clientInboundChan `closeOnDisconnect` router
   async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
-  superviseNode (Just addr) (R2 router) chan
+  superviseNode (Just connAddr) Overlay chan
 
 runOverlayLookupChan ::
   ( Member (Bus chan ByteString) r,
@@ -118,10 +122,10 @@ runOverlayLookupChan ::
     Member Async r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  Address ->
+  NetworkAddr ->
   InterpreterFor (LookupChan OverlayConnection (Inbound chan)) r
 runOverlayLookupChan router = interpretLookupChanSem \(OverlayConnection addr) -> do
-  mStoredNode <- storageLookupNode addr
+  mStoredNode <- storageLookupNode (router /> addr)
   Inbound <$> case mStoredNode of
     Just node -> pure $ inboundChan $ nodeChan node
     Nothing -> do
@@ -138,7 +142,7 @@ handleR2Msg ::
     Member (Storage chan) r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  Address ->
+  NetworkAddr ->
   R2Message Base64Text ->
   Sem r ()
 handleR2Msg connAddr (MsgRouteTo msg) = reinterpretLookupChan (fmap . fmap $ Outbound . outboundChan) $ routeTo connAddr msg

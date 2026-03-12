@@ -6,19 +6,27 @@ module R2.Peer
     bufferSize,
     queueSize,
     processTransport,
-    address,
+    labelAddrP,
+    netAddrP,
     exchangeSelves,
     Peer,
     ChanOverlay,
     PeerChanOverlay,
     runOverlayWith,
+    lookupChanToStorage,
     defaultChanOverlay,
     runOverlay,
+    open,
+    taggedAddrP,
+    nameAddrP,
+    routedAddrP,
   )
 where
 
 import Control.Exception qualified as IO
 import Control.Monad.Extra
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Functor ((<&>))
@@ -82,17 +90,29 @@ processTransport = do
       then Stdio
       else Process arg
 
-address :: ReadM Address
-address = Addr <$> str
+labelAddrP :: ReadM LabelAddr
+labelAddrP = str
+
+taggedAddrP :: ReadM TagAddr
+taggedAddrP = maybeReader parseTagAddr
+
+nameAddrP :: ReadM NameAddr
+nameAddrP = maybeReader parseNameAddr
+
+routedAddrP :: ReadM (RoutedAddr NetworkAddr NetworkAddr)
+routedAddrP = maybeReader (parseRoutedAddr parseNetAddr parseNetAddr)
+
+netAddrP :: ReadM NetworkAddr
+netAddrP = maybeReader parseNetAddr
 
 exchangeSelves ::
   ( Member (InputWithEOF ByteString) r,
     Member (OutputWithEOF ByteString) r,
     Member Fail r
   ) =>
-  Address ->
-  Maybe Address ->
-  Sem r Address
+  NameAddr ->
+  Maybe NameAddr ->
+  Sem r NameAddr
 exchangeSelves self maybeKnownAddr = runEncoding do
   output $ Just (Self self)
   (Self addr) <- inputOrFail
@@ -100,7 +120,7 @@ exchangeSelves self maybeKnownAddr = runEncoding do
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr
 
-interlayConnAddLogging :: (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) => Address -> Bidirectional chan -> Sem r (Bidirectional chan)
+interlayConnAddLogging :: (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) => NetworkAddr -> Bidirectional chan -> Sem r (Bidirectional chan)
 interlayConnAddLogging addr chan = do
   newChan <- makeBidirectionalChan
   async_ $ ioToNodeChanLogged (Just addr) chan $ chanToIO newChan
@@ -113,7 +133,7 @@ interlayConnAddCleanup ::
     Member (Output Log) r,
     Member (Events (Event chan)) r
   ) =>
-  Address ->
+  NetworkAddr ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
 interlayConnAddCleanup addr Bidirectional {..} = do
@@ -146,7 +166,7 @@ interlayConnAddRouting ::
     Member (Storage chan) r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  Address ->
+  NetworkAddr ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
 interlayConnAddRouting addr chan = do
@@ -159,7 +179,7 @@ interlayConnAddRouting addr chan = do
   pure newChan
 
 type ChanOverlay chan r =
-  Address ->
+  NetworkAddr ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
 
@@ -182,7 +202,7 @@ defaultChanOverlay addr =
 
 insertChanOverlay ::
   ChanOverlay chan r ->
-  Address ->
+  NetworkAddr ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
@@ -203,12 +223,12 @@ determinePeerAddr ::
     Member Resource r,
     Member (Output Log) r
   ) =>
-  Maybe Address ->
-  Address ->
+  NameAddr ->
+  Maybe NetworkAddr ->
   Node chan ->
-  Sem r Address
-determinePeerAddr Nothing self node = storageLockNode node $ ioToNodeChanLogged Nothing (nodeChan node) (exchangeSelves self $ nodeAddr node)
-determinePeerAddr (Just addr) _ _ = pure addr
+  Sem r NetworkAddr
+determinePeerAddr self Nothing node = storageLockNode node $ ioToNodeChanLogged Nothing (nodeChan node) (NetworkNameAddr <$> exchangeSelves self Nothing)
+determinePeerAddr _ (Just addr) _ = pure addr
 
 lookupChanToStorage :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r
 lookupChanToStorage =
@@ -232,15 +252,15 @@ makePeerNode ::
     Member (EventConsumer (Event chan)) r
   ) =>
   PeerChanOverlay chan r ->
-  Address ->
-  Maybe Address ->
+  NameAddr ->
+  Maybe NetworkAddr ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
 makePeerNode chanOverlay self mAddr transport chan = do
   let acceptedNode = AcceptedNode (NewConnection mAddr transport chan)
   output (LogConnected acceptedNode)
-  result <- runFail $ determinePeerAddr mAddr self acceptedNode
+  result <- runFail $ determinePeerAddr self mAddr acceptedNode
   case result of
     Left err -> do
       output (LogError mAddr err)
@@ -252,6 +272,23 @@ makePeerNode chanOverlay self mAddr transport chan = do
       publish $ ConnFullyInitialized conn
       output (LogConnected node)
       pure conn
+
+open ::
+  ( Member (Bus chan ByteString) r,
+    Member (Peer chan) r,
+    Member (EventConsumer (Event chan)) r,
+    Member Async r,
+    Member (Storage chan) r
+  ) =>
+  NetworkAddr ->
+  Sem r (Maybe (Connection chan))
+open addr@(NetworkNameAddr _) = storageLookupConn addr
+open addr@(NetworkRoutedAddr (RoutedAddr router destination)) = do
+  let useExistingConn = MaybeT $ storageLookupConn addr
+  let establishSingleHopConn = do
+        Connection {connAddr = routerConnAddr, connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- MaybeT (open router)
+        lift $ makeR2ConnectedNode destination routerConnAddr routerOutboundChan
+  runMaybeT $ useExistingConn <|> establishSingleHopConn
 
 runOverlayWith ::
   forall chan r.
@@ -265,7 +302,7 @@ runOverlayWith ::
     Member Fail r
   ) =>
   PeerChanOverlay chan r ->
-  Address ->
+  NameAddr ->
   InterpreterFor (Peer chan) r
 runOverlayWith chanOverlay self = interpret \case
   SuperviseNode mAddr transport chan -> makePeerNode chanOverlay self mAddr transport chan
@@ -281,6 +318,6 @@ runOverlay ::
     Member Resource r,
     Member Fail r
   ) =>
-  Address ->
+  NameAddr ->
   InterpreterFor (Peer chan) r
 runOverlay = runOverlayWith defaultChanOverlay

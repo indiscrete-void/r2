@@ -28,7 +28,7 @@ opts =
     <*> strOption (long "config" <> short 'f')
 
 data TOMLDaemonOptions = TOMLDaemonOptions
-  { tomlDaemonAddress :: Address,
+  { tomlDaemonAddress :: LabelAddr,
     tomlDaemonSocketPath :: Maybe FilePath
   }
 
@@ -40,7 +40,7 @@ data TOMLDaemonDescription = TOMLDaemonDescription
 
 data TOMLDaemonConnection = TOMLDaemonConnection
   { tomlDaemonConnProcess :: String,
-    tomlDaemonConnAddress :: Maybe Address
+    tomlDaemonConnAddress :: Maybe LabelAddr
   }
 
 selfCodec :: TomlCodec TOMLDaemonOptions
