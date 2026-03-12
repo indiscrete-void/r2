@@ -21,7 +21,6 @@ r2 is a network stack that unifies local inter-process communication (IPC) and r
 Composable like [socat](https://linux.die.net/man/1/socat)  
 Ready to use like [Wireguard](https://www.wireguard.com/) and [Yggdrasil](https://yggdrasil-network.github.io/)  
 Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)  
-Yet new and minimalist
 
 [=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
 
@@ -41,13 +40,13 @@ Yet new and minimalist
 ## Address Scheme
 r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns.
 - **Free identifiers**: Simple names like `iota` or `telegram-bot` ✅
-- **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.: ⏳
+- **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.: ✅
     * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity from global network
     * `service:cat` – a named service
     * `child:1337` – a specific child process or virtual node
     * `topic:chat` – a pub/sub topic
     * `net:home:mainframe` - `mainframe` from domain-specific network `home`
-- **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ⏳
+- **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ✅
 - **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
     * Alternation: `(alice|bob)/service:cat` matches either Alice's or Bob's cat service
