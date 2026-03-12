@@ -57,7 +57,7 @@ main = do
     conn_ (NetworkNameAddr lain /> NetworkNameAddr carl /> NetworkNameAddr spongebob) Ls
 
     let lainMsgViaCarl = "lain greets spongebob"
-    spongebobRes <- conn (NetworkNameAddr lain /> NetworkNameAddr carl /> NetworkNameAddr spongebob) (Tunnel Stdio) $ do
+    spongebobRes <- conn (NetworkNameAddr lain /> NetworkNameAddr carl /> NetworkNameAddr spongebob) (Open Stdio) $ do
       output (Just $ BC.pack lainMsgViaCarl)
       echo <- BC.unpack <$> inputOrFail
       output Nothing

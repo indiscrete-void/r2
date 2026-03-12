@@ -89,8 +89,8 @@ outToLog f = intercept @(Output o) \case
 
 data Action
   = Ls
-  | Connect !ProcessTransport !(Maybe NetworkAddr)
-  | Tunnel !ProcessTransport
+  | Connect !ProcessTransport !(Maybe NameAddr)
+  | Open !ProcessTransport
   | Serve (Maybe LabelAddr) !ProcessTransport
   deriving stock (Show)
 
@@ -212,9 +212,9 @@ connectNode ::
   ) =>
   NameAddr ->
   ProcessTransport ->
-  Maybe NetworkAddr ->
+  Maybe NameAddr ->
   Sem r ()
-connectNode self transport (Just addr) = do
+connectNode self transport (Just (NetworkNameAddr -> addr)) = do
   tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addr
   ioToProc transport $ do
     routerAddr <- exchangeSelves self Nothing
@@ -315,7 +315,7 @@ handleAction ::
   Sem r ()
 handleAction _ targetConn Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage (listNodes $ connAddr targetConn)
 handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
-handleAction _ _ (Tunnel transport) = connectTransport transport
+handleAction _ _ (Open transport) = connectTransport transport
 handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
 
 meetServerAssignSelf ::

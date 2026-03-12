@@ -1,12 +1,12 @@
 name: r2
-version: 0.1.0.0
+version: 0.2.1.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
 license: BSD3
 
 language: Haskell2010
 
-ghc-options: 
+ghc-options:
   - -fdefer-typed-holes
   - -Weverything
   - -Wno-missing-safe-haskell-mode

@@ -28,25 +28,29 @@ opts =
     <*> commandOpts
     <*> optional (strOption $ long "socket" <> short 's')
 
+targetOpt :: Parser TargetAddr
+targetOpt = option targetNetAddrP (long "target" <> short 't' <> value TargetAddrServer)
+
+targetArg :: Parser TargetAddr
+targetArg = argument targetNetAddrP (metavar "TARGET")
+
 commandOpts :: Parser Command
 commandOpts =
-  Command
-    <$> option targetNetAddrP (long "target" <> short 't' <> value TargetAddrServer)
-    <*> hsubparser
-      ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
-          <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
-          <> command "tunnel" (info tunnelOpts $ progDesc "Provide transport for application layer")
-          <> command "serve" (info serveOpts $ progDesc "Serve application layer command")
-      )
+  hsubparser
+    ( command "ls" (info lsOpts $ progDesc "List nodes connected to daemon")
+        <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
+        <> command "open" (info openOpts $ progDesc "Provide transport for application layer")
+        <> command "serve" (info serveOpts $ progDesc "Serve application layer command")
+    )
 
-lsOpts :: Parser Action
-lsOpts = pure Ls
+lsOpts :: Parser Command
+lsOpts = Command <$> targetOpt <*> pure Ls
 
-connectOpts :: Parser Action
-connectOpts = Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option netAddrP $ long "node" <> short 'n')
+connectOpts :: Parser Command
+connectOpts = Command <$> targetOpt <*> (Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option nameAddrP $ long "node" <> short 'n'))
 
-tunnelOpts :: Parser Action
-tunnelOpts = Tunnel <$> argument processTransport (metavar "TRANSPORT")
+openOpts :: Parser Command
+openOpts = Command <$> targetArg <*> (Open <$> argument processTransport (metavar "TRANSPORT"))
 
-serveOpts :: Parser Action
-serveOpts = Serve <$> optional (option labelAddrP $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT")
+serveOpts :: Parser Command
+serveOpts = Command <$> targetOpt <*> (Serve <$> optional (option labelAddrP $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT"))

@@ -251,7 +251,7 @@ actionCmdPattern = "%ACTION"
 
 connActionToAction :: ConnAction -> String -> Maybe LabelAddr -> Action
 connActionToAction ConnServe positiveCmd mAddr = Serve mAddr (Process positiveCmd)
-connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) (NetworkNameAddr . NameLabelAddr <$> mAddr)
+connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) (NameLabelAddr <$> mAddr)
 
 resolveNegativeConnectionCmdAction :: String -> ConnAction -> String
 resolveNegativeConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
