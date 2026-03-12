@@ -183,7 +183,10 @@ Embed r2 functionality directly into your applications.
 Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 
 ### Via Adapters ⏳
-Connect existing protocols and applications through r2 adapters. TCP/IP (via TUN), REST and proxy-site are planned 
+Connect existing protocols and applications through r2 adapters:
+- Erlang  
+- TCP/IP (tun/tap)  
+- Web  
 
 ---
 
