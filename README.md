@@ -58,7 +58,7 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
 Complex examples:  
 - `net:home/*` - anything from home network
 - `alice/*/service:cat` – any cat service reachable via Alice
-- `?encrypted */service:chat` – any chat service that is encrypted (planned)
+- `?encrypted */service:chat` – any chat service that is encrypted
 
 ## The Route-to Protocol
 
