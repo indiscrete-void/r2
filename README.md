@@ -16,7 +16,7 @@
   └───────────────────────────────────────────────────┘                                          
 ```
 
-r2 is a network stack that unifies local inter-process communication (IPC) and remote network connectivity through a single, elegant model. It enables seamless resource sharing, tunneling, and multiplexing across both local and distributed systems.
+r2 is a network model that unifies local inter-process communication (IPC) and remote network connectivity through a single, elegant model. It enables seamless resource sharing, signaling, tunneling, and multiplexing across both local and distributed systems.
 
 Composable like [socat](https://linux.die.net/man/1/socat)  
 Ready to use like [Wireguard](https://www.wireguard.com/) and [Yggdrasil](https://yggdrasil-network.github.io/)  
@@ -25,7 +25,7 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 [=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
 
 ## Key Features
-- **Unified Networking**: Treat local processes and remote nodes identically through a consistent interface ✅
+- **Unified Networking**: Treat local and remote entities (nodes ✅, processes ✅, files ⏳) identically through a consistent interface
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use combinators ✅ and constraints ⏳ for operations 
 - **Scoped Networks**: Distinguish local ✅, domain-specific ⏳ and global resources ⏳ by address
 - **Advanced Application Layer**: Use built-in DHT ⏳ and communication models for service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) semantics ⏳
