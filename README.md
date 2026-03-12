@@ -56,11 +56,7 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
 - **Self reference**: self always refers to the local node ⏳
 
 Complex examples:  
-- `net:home/mainframe` - `mainframe` from network `home`
-- `alice/*/service:cat` – any cat service reachable via Alice
-- `?encrypted */service:chat` – any chat service that is encrypted (planned)
-
-Complex examples:  
+- `net:home/*` - anything from home network
 - `alice/*/service:cat` – any cat service reachable via Alice
 - `?encrypted */service:chat` – any chat service that is encrypted (planned)
 
