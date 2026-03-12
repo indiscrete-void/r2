@@ -173,13 +173,13 @@ socat udp-l:47210,fork exec:"r2 connect -"
 
 ## Installation & Usage
 
-### As a Super-Server
+### As a Super-Server ✅
 Run r2dm as a system service to provide network connectivity to all local applications.
 
-### As a Library
+### As a Library ✅
 Embed r2 functionality directly into your applications.
 
-### As Standalone Binaries
+### As Standalone Binaries ✅
 Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 
 ### Via Adapters ⏳
