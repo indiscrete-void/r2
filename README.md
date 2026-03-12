@@ -153,13 +153,13 @@ r2 -s /run/node.sock serve -n vpn "socat tun,iff-up,device-name=r20 -"
 ### Network Tunneling
 ```bash
 # Create network interface connected to remote node
-r2 -t <node-id> -t vpn tunnel "socat tun,iff-up,device-name=r20 -"
+r2 open <node-id>/vpn "socat tun,iff-up,device-name=r20 -"
 
 # Interactive shell through tunnel
-iosh "r2 -t <node-id> -t ioshd tunnel -" zsh -l
+iosh "r2 open <node-id>/ioshd -" zsh -l
 
 # SSH tunneling
-r2-ssh <node-id>  # Equivalent to: ssh -o ProxyCommand="r2 -t <node-id> -t service/sshd tunnel -" r2/<node-id>
+r2-ssh <node-id>  # Equivalent to: ssh -o ProxyCommand="r2 open <node-id>/service:sshd -" r2/<node-id>
 ```
 
 ### Connection Brokering
