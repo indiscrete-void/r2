@@ -42,10 +42,11 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
 - **Free identifiers**: Simple names like `iota` or `telegram-bot` ✅
 - **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.: ✅
     * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity from global network
+    * `sha256:ef66ac0e994ab54877743f5608847d835a116d61a97b1caa8fdfb74156922496` - content identity
     * `service:cat` – a named service
     * `child:1337` – a specific child process or virtual node
     * `topic:chat` – a pub/sub topic
-    * `net:home:mainframe` - `mainframe` from domain-specific network `home`
+    * `net:home` - domain-specific network `home`
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ✅
 - **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
@@ -55,6 +56,7 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
 - **Self reference**: self always refers to the local node ⏳
 
 Complex examples:  
+- `net:home/mainframe` - `mainframe` from network `home`
 - `alice/*/service:cat` – any cat service reachable via Alice
 - `?encrypted */service:chat` – any chat service that is encrypted (planned)
 
