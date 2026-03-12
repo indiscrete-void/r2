@@ -185,6 +185,8 @@ Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 ### Via Adapters ⏳
 Connect existing protocols and applications through r2 adapters:
 - Erlang  
+- Yggdrasil
+- Plan9
 - TCP/IP (tun/tap)  
 - Web  
 
