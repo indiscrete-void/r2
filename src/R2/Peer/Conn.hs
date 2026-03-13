@@ -6,7 +6,7 @@ module R2.Peer.Conn
     NewConnection (..),
     Connection (..),
     Node (..),
-    nodeAddr,
+    nodeAddrSet,
     nodeTransport,
     nodeChan,
     Event (..),
@@ -26,13 +26,13 @@ newtype HighLevel chan = HighLevel {unHighLevel :: chan}
   deriving stock (Functor)
 
 data NewConnection chan = NewConnection
-  { newConnAddr :: Maybe NetworkAddr,
+  { newConnAddrSet :: NetworkAddrSet,
     newConnTransport :: ConnTransport,
     newConnChan :: Bidirectional chan
   }
 
 data Connection chan = Connection
-  { connAddr :: NetworkAddr,
+  { connAddrSet :: NetworkAddrSet,
     connTransport :: ConnTransport,
     connChan :: Bidirectional chan,
     connHighLevelChan :: HighLevel (Bidirectional chan)
@@ -40,18 +40,21 @@ data Connection chan = Connection
 
 data Event chan where
   ConnFullyInitialized :: Connection chan -> Event chan
-  ConnDestroyed :: NetworkAddr -> Event chan
+  ConnDestroyed :: NetworkAddrSet -> Event chan
 
 data Node chan
   = AcceptedNode (NewConnection chan)
   | ConnectedNode (Connection chan)
 
 instance Eq (Node chan) where
-  a == b = nodeAddr a == nodeAddr b
+  a == b =
+    let (NetworkAddrSet aAddrs) = nodeAddrSet a
+        (NetworkAddrSet bAddrs) = nodeAddrSet b
+     in aAddrs == bAddrs
 
-nodeAddr :: Node chan -> Maybe NetworkAddr
-nodeAddr (AcceptedNode (NewConnection {newConnAddr})) = newConnAddr
-nodeAddr (ConnectedNode (Connection {connAddr})) = Just connAddr
+nodeAddrSet :: Node chan -> NetworkAddrSet
+nodeAddrSet (AcceptedNode (NewConnection {newConnAddrSet})) = newConnAddrSet
+nodeAddrSet (ConnectedNode (Connection {connAddrSet})) = connAddrSet
 
 nodeTransport :: Node chan -> ConnTransport
 nodeTransport (AcceptedNode (NewConnection {newConnTransport})) = newConnTransport
@@ -70,6 +73,6 @@ highLevelNodeChan (AcceptedNode _) = Nothing
 highLevelNodeChan (ConnectedNode Connection {connHighLevelChan}) = Just connHighLevelChan
 
 data Peer chan m a where
-  SuperviseNode :: Maybe NetworkAddr -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
+  SuperviseNode :: NetworkAddrSet -> ConnTransport -> Bidirectional chan -> Peer chan m (Connection chan)
 
 makeSem ''Peer

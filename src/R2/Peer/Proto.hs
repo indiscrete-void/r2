@@ -64,7 +64,7 @@ data ClientToDaemonMessage where
 $(deriveJSON aesonOptions ''ClientToDaemonMessage)
 
 data DaemonPeerInfo = DaemonPeerInfo
-  { daemonPeerAddr :: Maybe NetworkAddr,
+  { daemonPeerAddr :: NetworkAddrSet,
     daemonPeerTransport :: ConnTransport
   }
   deriving stock (Eq, Show, Generic)

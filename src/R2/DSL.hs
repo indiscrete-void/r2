@@ -128,7 +128,7 @@ mkNodes link links serveMap = do
                 let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
                 forM_ myLinks \them -> do
                   let chan = links ! (me, them)
-                  superviseNode (Just $ NetworkNameAddr them) Socket chan
+                  superviseNode (singleAddrSet $ NetworkNameAddr them) Socket chan
                 processClients
 
 mkActor ::
@@ -160,7 +160,7 @@ mkActor serveMap target action m = do
     scoped @_ @(Output Peer.Log) firstNodeId $
       (scoped @_ @(Bundle (EventEffects _)) firstNodeId . bundleEvents) $
         runOverlay firstNodeId do
-          _ <- superviseNode (Just $ NetworkNameAddr randAddress) Socket msgLinkA
+          _ <- superviseNode (singleAddrSet $ NetworkNameAddr randAddress) Socket msgLinkA
           processClients
 
   let command = Command (TargetAddrNetwork target) action

@@ -3,6 +3,7 @@ module R2.Daemon.Handler (listNodes, connectNode, handleMsg) where
 import Control.Monad
 import Data.ByteString (ByteString)
 import Data.Functor
+import Data.Set qualified as Set
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Interpreter.Events
@@ -21,7 +22,7 @@ listNodes = do
   peerList <-
     ask <&> map \node ->
       DaemonPeerInfo
-        { daemonPeerAddr = nodeAddr node,
+        { daemonPeerAddr = nodeAddrSet node,
           daemonPeerTransport = nodeTransport node
         }
   output $ Just $ ResNodeList peerList
@@ -38,7 +39,7 @@ connectNode ::
 connectNode
   Connection
     { connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan,
-      connAddr = router
+      connAddrSet = router
     }
   addr = void $ makeR2ConnectedNode addr router routerOutboundChan
 

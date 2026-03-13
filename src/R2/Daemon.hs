@@ -46,7 +46,7 @@ acceptSockets = do
   foreverAcceptAsync \s -> do
     chan <- makeBidirectionalChan
     async_ $ socket s $ lenDecodeInput . lenPrefixOutput $ chanToIO chan
-    _ <- superviseNode Nothing Socket chan
+    _ <- superviseNode emptyAddrSet Socket chan
     pure ()
 
 processClients ::
@@ -67,7 +67,7 @@ processClients =
             async_ do
               result <- runFail $ ioToChan connHighLevelChan $ handle (handleMsg conn)
               case result of
-                Left err -> output (LogError (Just $ connAddr conn) err)
+                Left err -> output (LogError (connAddrSet conn) err)
                 Right _ -> pure ()
           _ -> pure ()
 

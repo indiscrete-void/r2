@@ -31,6 +31,7 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Functor ((<&>))
 import Data.Maybe
+import Data.Set qualified as Set
 import Network.Socket (Family (..), Socket, socket)
 import Network.Socket qualified as Socket
 import Options.Applicative
@@ -120,10 +121,14 @@ exchangeSelves self maybeKnownAddr = runEncoding do
     when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
   pure addr
 
-interlayConnAddLogging :: (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) => NetworkAddr -> Bidirectional chan -> Sem r (Bidirectional chan)
-interlayConnAddLogging addr chan = do
+interlayConnAddLogging ::
+  (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) =>
+  NetworkAddrSet ->
+  Bidirectional chan ->
+  Sem r (Bidirectional chan)
+interlayConnAddLogging addrSet chan = do
   newChan <- makeBidirectionalChan
-  async_ $ ioToNodeChanLogged (Just addr) chan $ chanToIO newChan
+  async_ $ ioToNodeChanLogged addrSet chan $ chanToIO newChan
   pure newChan
 
 interlayConnAddCleanup ::
@@ -133,11 +138,14 @@ interlayConnAddCleanup ::
     Member (Output Log) r,
     Member (Events (Event chan)) r
   ) =>
-  NetworkAddr ->
+  NetworkAddrSet ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
-interlayConnAddCleanup addr Bidirectional {..} = do
-  let cleanup = storageRmNode (Just addr) >> publish (ConnDestroyed addr) >> output (LogDisconnected (Just addr))
+interlayConnAddCleanup addrSet Bidirectional {..} = do
+  let cleanup = do
+        storageRmNode addrSet
+        publish (ConnDestroyed addrSet)
+        output (LogDisconnected addrSet)
   newChan <- makeBidirectionalChan
   async_
     $ ( (inputToBusChan inboundChan . runInputSem (input >>= \mi -> when (isNothing mi) cleanup >> pure mi))
@@ -166,11 +174,11 @@ interlayConnAddRouting ::
     Member (Storage chan) r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  NetworkAddr ->
+  NetworkAddrSet ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
-interlayConnAddRouting addr chan = do
-  let go = interlayInput (handleR2Msg addr)
+interlayConnAddRouting addrSet chan = do
+  let go = interlayInput (handleR2Msg addrSet)
   newChan <- makeBidirectionalChan
   async_ $
     ioToChan chan $
@@ -179,7 +187,7 @@ interlayConnAddRouting addr chan = do
   pure newChan
 
 type ChanOverlay chan r =
-  NetworkAddr ->
+  NetworkAddrSet ->
   Bidirectional chan ->
   Sem r (Bidirectional chan)
 
@@ -202,7 +210,7 @@ defaultChanOverlay addr =
 
 insertChanOverlay ::
   ChanOverlay chan r ->
-  NetworkAddr ->
+  NetworkAddrSet ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
@@ -210,7 +218,7 @@ insertChanOverlay chanOverlay addr transport chan = do
   highLevelChan <- HighLevel <$> chanOverlay addr chan
   pure $
     Connection
-      { connAddr = addr,
+      { connAddrSet = addr,
         connTransport = transport,
         connChan = chan,
         connHighLevelChan = highLevelChan
@@ -224,17 +232,24 @@ determinePeerAddr ::
     Member (Output Log) r
   ) =>
   NameAddr ->
-  Maybe NetworkAddr ->
+  NetworkAddrSet ->
   Node chan ->
-  Sem r NetworkAddr
-determinePeerAddr self Nothing node = storageLockNode node $ ioToNodeChanLogged Nothing (nodeChan node) (NetworkNameAddr <$> exchangeSelves self Nothing)
-determinePeerAddr _ (Just addr) _ = pure addr
+  Sem r NetworkAddrSet
+determinePeerAddr self set node =
+  if Set.null (unNetAddrSet set)
+    then
+      storageLockNode node $
+        ioToNodeChanLogged
+          (NetworkAddrSet Set.empty)
+          (nodeChan node)
+          (NetworkAddrSet . Set.singleton . NetworkNameAddr <$> exchangeSelves self Nothing)
+    else pure set
 
 lookupChanToStorage :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r
 lookupChanToStorage =
   interpretLookupChanSem
     ( \(EstablishedConnection addr) -> do
-        storageLookupNode addr <&> \case
+        storageLookupNode (NetworkAddrSet $ Set.singleton addr) <&> \case
           Just (ConnectedNode Connection {connHighLevelChan}) -> Just connHighLevelChan
           _ -> Nothing
     )
@@ -253,20 +268,20 @@ makePeerNode ::
   ) =>
   PeerChanOverlay chan r ->
   NameAddr ->
-  Maybe NetworkAddr ->
+  NetworkAddrSet ->
   ConnTransport ->
   Bidirectional chan ->
   Sem r (Connection chan)
-makePeerNode chanOverlay self mAddr transport chan = do
-  let acceptedNode = AcceptedNode (NewConnection mAddr transport chan)
+makePeerNode chanOverlay self preAddrSet transport chan = do
+  let acceptedNode = AcceptedNode (NewConnection emptyAddrSet transport chan)
   output (LogConnected acceptedNode)
-  result <- runFail $ determinePeerAddr self mAddr acceptedNode
+  result <- runFail $ determinePeerAddr self preAddrSet acceptedNode
   case result of
     Left err -> do
-      output (LogError mAddr err)
+      output (LogError emptyAddrSet err)
       fail err
-    Right addr -> do
-      conn <- runOverlay self $ lookupChanToStorage $ insertChanOverlay chanOverlay addr transport chan
+    Right addrSet -> do
+      conn <- runOverlay self $ lookupChanToStorage $ insertChanOverlay chanOverlay addrSet transport chan
       let node = ConnectedNode conn
       storageAddNode node
       publish $ ConnFullyInitialized conn
@@ -280,15 +295,35 @@ open ::
     Member Async r,
     Member (Storage chan) r
   ) =>
-  NetworkAddr ->
+  NetworkAddrSet ->
   Sem r (Maybe (Connection chan))
-open addr@(NetworkNameAddr _) = storageLookupConn addr
-open addr@(NetworkRoutedAddr (RoutedAddr router destination)) = do
-  let useExistingConn = MaybeT $ storageLookupConn addr
-  let establishSingleHopConn = do
-        Connection {connAddr = routerConnAddr, connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- MaybeT (open router)
-        lift $ makeR2ConnectedNode destination routerConnAddr routerOutboundChan
-  runMaybeT $ useExistingConn <|> establishSingleHopConn
+open addrSet = do
+  mConn <- storageLookupConn addrSet
+  case mConn of
+    Just conn -> pure $ Just conn
+    Nothing -> openNew addrSet
+  where
+    openNew ::
+      ( Member (Bus chan ByteString) r,
+        Member (Peer chan) r,
+        Member (EventConsumer (Event chan)) r,
+        Member Async r,
+        Member (Storage chan) r
+      ) =>
+      NetworkAddrSet ->
+      Sem r (Maybe (Connection chan))
+    openNew addrSet = do
+      let addrList = Set.toList (unNetAddrSet addrSet)
+      let routableAddrs = mapMaybe (\case NetworkRoutedAddr routedAddr -> Just routedAddr; _ -> Nothing) addrList
+      case routableAddrs of
+        [] -> pure Nothing
+        (RoutedAddr router destination : _) -> do
+          let routerAddrSet = NetworkAddrSet $ Set.singleton router
+          mRouterConn <- open routerAddrSet
+          case mRouterConn of
+            Nothing -> pure Nothing
+            Just Connection {connAddrSet = routerConnAddr, connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} ->
+              Just <$> makeR2ConnectedNode destination routerConnAddr routerOutboundChan
 
 runOverlayWith ::
   forall chan r.
@@ -305,7 +340,7 @@ runOverlayWith ::
   NameAddr ->
   InterpreterFor (Peer chan) r
 runOverlayWith chanOverlay self = interpret \case
-  SuperviseNode mAddr transport chan -> makePeerNode chanOverlay self mAddr transport chan
+  SuperviseNode addrSet transport chan -> makePeerNode chanOverlay self addrSet transport chan
 
 runOverlay ::
   forall chan r.

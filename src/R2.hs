@@ -4,6 +4,7 @@ module R2
     RoutedAddr (..),
     NameAddr (..),
     NetworkAddr (..),
+    NetworkAddrSet (..),
     RouteTo (..),
     RoutedFrom (..),
     RouteToErr (..),
@@ -14,6 +15,11 @@ module R2
     parseNameAddr,
     parseNetAddr,
     netAddrHead,
+    emptyAddrSet,
+    bestAddrSetRepresentative,
+    singleAddrSet,
+    addrSetsReferToSameNode,
+    routedAddrSet,
   )
 where
 
@@ -26,6 +32,9 @@ import Data.ByteString.Base58.Internal
 import Data.ByteString.Char8 qualified as BC
 import Data.DoubleWord
 import Data.List.Extra
+import Data.List.NonEmpty (NonEmpty)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.String (IsString (..))
 import Data.Text qualified as Text
 import Data.Word
@@ -132,6 +141,32 @@ instance FromJSON NetworkAddr where
 
 (/>) :: NetworkAddr -> NetworkAddr -> NetworkAddr
 addr1 /> addr2 = NetworkRoutedAddr $ RoutedAddr addr1 addr2
+
+newtype NetworkAddrSet = NetworkAddrSet {unNetAddrSet :: Set NetworkAddr}
+  deriving stock (Ord, Eq, Generic)
+
+instance Show NetworkAddrSet where
+  show (NetworkAddrSet set) = printf "(%s)" $ unwords $ map show $ Set.toList set
+
+instance Semigroup NetworkAddrSet where
+  (NetworkAddrSet a) <> (NetworkAddrSet b) = NetworkAddrSet (a <> b)
+
+$(deriveJSON (aesonRemovePrefix "unNet") ''NetworkAddrSet)
+
+emptyAddrSet :: NetworkAddrSet
+emptyAddrSet = NetworkAddrSet Set.empty
+
+singleAddrSet :: NetworkAddr -> NetworkAddrSet
+singleAddrSet = NetworkAddrSet . Set.singleton
+
+bestAddrSetRepresentative :: NetworkAddrSet -> Maybe NetworkAddr
+bestAddrSetRepresentative = Set.lookupMin . unNetAddrSet
+
+addrSetsReferToSameNode :: NetworkAddrSet -> NetworkAddrSet -> Bool
+addrSetsReferToSameNode (NetworkAddrSet a) (NetworkAddrSet b) = not $ Set.null $ Set.intersection a b
+
+routedAddrSet :: NetworkAddr -> NetworkAddrSet -> NetworkAddrSet
+routedAddrSet addr (NetworkAddrSet set) = NetworkAddrSet $ Set.map (/> addr) set
 
 instance Uniform LabelAddr where
   uniformM g = LabelAddr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g
