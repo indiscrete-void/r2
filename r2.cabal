@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           r2
-version:        0.5.0.1
+version:        0.6.0.0
 author:         indiscrete_void
 maintainer:     indiscrete.void@gmail.com
 license:        BSD3
@@ -30,6 +30,7 @@ library
       R2.Daemon.Handler
       R2.Daemon.Sockets
       R2.Daemon.Sockets.Accept
+      R2.Manager
       Serial.Aeson.Options
   other-modules:
       R2.Client.Stream
@@ -84,7 +85,7 @@ library
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , random
     , stm-chans
@@ -147,7 +148,7 @@ executable r2
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , r2
     , random
@@ -210,7 +211,7 @@ executable r2-simple-example
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , r2
     , random
@@ -274,7 +275,7 @@ executable r2d
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , r2
     , random
@@ -338,7 +339,7 @@ executable r2dm
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , r2
     , random
@@ -402,7 +403,7 @@ test-suite tests
     , polysemy
     , polysemy-conc
     , polysemy-plugin
-    , polysemy-scoped-process >=0.2.0.0
+    , polysemy-scoped-process >=0.3.0.0
     , polysemy-transport >=0.20.1.0
     , r2
     , random

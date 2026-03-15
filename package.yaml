@@ -1,5 +1,5 @@
 name: r2
-version: 0.5.0.1
+version: 0.6.0.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
 license: BSD3
@@ -65,7 +65,7 @@ dependencies:
   - network
   - polysemy
   - polysemy-plugin
-  - polysemy-scoped-process >=0.2.0.0
+  - polysemy-scoped-process >=0.3.0.0
   - polysemy-transport >=0.20.1.0
   - polysemy-conc
   - stm-chans
@@ -98,6 +98,7 @@ library:
     - R2.Daemon.Handler
     - R2.Daemon.Sockets
     - R2.Daemon.Sockets.Accept
+    - R2.Manager
     - Serial.Aeson.Options
 
 executables:

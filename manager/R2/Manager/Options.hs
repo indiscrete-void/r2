@@ -4,6 +4,7 @@ import Data.Text qualified as Text
 import Options.Applicative
 import R2
 import R2.DSL
+import R2.Manager
 import R2.Options
 import R2.Peer
 import Toml (TomlCodec)

@@ -1,4 +1,3 @@
-import Control.Monad
 import R2
 import R2.Daemon
 import R2.Daemon.Options
@@ -10,4 +9,4 @@ main = do
   (Options verbosity maybeSocketPath self) <- parse
   socketPath <- resolveSocketPath maybeSocketPath
   printf "comunicating over %s" socketPath
-  void $ r2dIO verbosity False (NameLabelAddr self) socketPath
+  r2dToIO verbosity socketPath $ r2d (NameLabelAddr self)

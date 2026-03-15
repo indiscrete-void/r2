@@ -1,6 +1,7 @@
-module R2.Daemon (processClients, logToTrace, r2d, r2dIO) where
+module R2.Daemon (DaemonEffects, processClients, logToTrace, r2d, r2dToIO) where
 
 import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
+import Control.Concurrent.STM.TBMQueue (TBMQueue)
 import Control.Exception (IOException, finally)
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -8,13 +9,14 @@ import Network.Socket qualified as IO
 import Polysemy
 import Polysemy.Async
 import Polysemy.Bundle
+import Polysemy.Conc (Race)
 import Polysemy.Conc.Effect.Events
 import Polysemy.Conc.Interpreter.Events
 import Polysemy.Conc.Interpreter.Race
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace
 import Polysemy.Fail
-import Polysemy.Process
+import Polysemy.Internal.Kind (Append)
 import Polysemy.Resource (Resource, resourceToIOFinal)
 import Polysemy.Scoped
 import Polysemy.ScopedBundle
@@ -42,12 +44,11 @@ acceptSockets ::
     Member (Peer chan) r
   ) =>
   Sem r ()
-acceptSockets = do
-  foreverAcceptAsync \s -> do
-    chan <- makeBidirectionalChan
-    async_ $ socket s $ lenDecodeInput . lenPrefixOutput $ chanToIO chan
-    _ <- superviseNode emptyAddrSet Socket chan
-    pure ()
+acceptSockets = foreverAcceptAsync \s -> do
+  chan <- makeBidirectionalChan
+  async_ $ socket s $ lenDecodeInput . lenPrefixOutput $ chanToIO chan
+  _ <- superviseNode emptyAddrSet Socket chan
+  pure ()
 
 processClients ::
   ( Member (Bus chan ByteString) r,
@@ -71,39 +72,39 @@ processClients =
                 Right _ -> pure ()
           _ -> pure ()
 
-r2d ::
-  ( Member (Bus chan ByteString) r,
-    Member (Output Log) r,
-    Member (Storage chan) r,
-    Member Async r,
-    Member Resource r,
-    Member Fail r,
-    Member (Sockets ByteString ByteString sock) r,
-    Member (Accept sock) r,
-    Member (Events (Event chan)) r,
-    Member (EventConsumer (Event chan)) r
-  ) =>
-  NameAddr ->
-  Sem r ()
+type DaemonEffects chan sock =
+  '[ Output Log,
+     Storage chan,
+     Sockets ByteString ByteString sock,
+     Accept sock,
+     Fail,
+     Bus chan ByteString,
+     Events (Event chan),
+     EventConsumer (Event chan),
+     Async,
+     Resource
+   ]
+
+r2d :: (Members (DaemonEffects chan sock) r) => NameAddr -> Sem r ()
 r2d self = runOverlay self do
   async_ processClients
   acceptSockets
 
-r2dIO :: Verbosity -> Bool -> NameAddr -> FilePath -> IO (Maybe (MVar ()))
-r2dIO verbosity fork self socketPath = do
+type DaemonInterpreterEffects =
+  Append
+    (DaemonEffects (TBMQueue ByteString) IO.Socket)
+    '[ Embed IO,
+       Race,
+       Final IO
+     ]
+
+r2dToIO :: Verbosity -> FilePath -> Sem DaemonInterpreterEffects () -> IO ()
+r2dToIO verbosity socketPath m = do
   s <- r2Socket
   IO.bind s (IO.SockAddrUnix socketPath)
   IO.listen s 5
-  forkIf fork $
-    run verbosity s (r2d self) `finally` IO.close s
+  run verbosity s m `finally` IO.close s
   where
-    forkIf :: Bool -> IO () -> IO (Maybe (MVar ()))
-    forkIf True m = do
-      exit <- newEmptyMVar
-      _ <- forkIO (m >> putMVar exit ())
-      pure $ Just exit
-    forkIf False m = Nothing <$ m
-
     runScopedSocket :: (Member (Embed IO) r, Member Trace r) => Int -> InterpreterFor (Scoped IO.Socket (Bundle ByteTransport)) r
     runScopedSocket bufferSize =
       runScopedBundle @ByteTransport (runSocketIO bufferSize)
@@ -114,20 +115,13 @@ r2dIO verbosity fork self socketPath = do
     run verbosity s =
       runFinal @IO
         . interpretRace
-        . asyncToIOFinal
-        . resourceToIOFinal
-        . embedToFinal @IO
+        . (embedToFinal @IO)
         . traceIOExceptions @IOException stdout
+        . resourceToIOFinal
+        . asyncToIOFinal
         . interpretEventsChan
         . interpretBusTBM @ByteString queueSize
         . failToEmbed @IO
-        -- ignore interpreter logs
-        . ignoreTrace
-        -- process and socket io
-        . scopedProcToIOFinal bufferSize
-        . runServerSocket bufferSize s
-        -- AtomicRef storage
+        . (ignoreTrace . runServerSocket bufferSize s . raise2Under @Trace)
         . storageToIO
-        -- log application events
-        . traceToStdoutBuffered
-        . logToTrace verbosity
+        . (traceToStdoutBuffered . logToTrace verbosity . raiseUnder @Trace)
