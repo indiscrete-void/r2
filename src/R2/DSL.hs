@@ -239,9 +239,7 @@ connActionToCLI :: ConnAction -> String
 connActionToCLI ConnServe = "serve"
 connActionToCLI ConnAnnounce = "connect"
 
-data DaemonConnectionCmd
-  = PositiveConnectionCmd String
-  | NegativeConnectionCmdResolver (ConnAction -> String)
+newtype DaemonConnectionCmdResolver = DaemonConnectionCmdResolver (ConnAction -> String)
 
 negativeCmdPattern :: String
 negativeCmdPattern = "-%"
@@ -253,23 +251,27 @@ connActionToAction :: ConnAction -> String -> Maybe LabelAddr -> Action
 connActionToAction ConnServe positiveCmd mAddr = Serve mAddr (Process positiveCmd)
 connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) (NameLabelAddr <$> mAddr)
 
-resolveNegativeConnectionCmdAction :: String -> ConnAction -> String
-resolveNegativeConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
+resolveConnectionCmdAction :: String -> ConnAction -> String
+resolveConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
 
-resolveConnectionCmd :: Verbosity -> FilePath -> Maybe LabelAddr -> String -> DaemonConnectionCmd
-resolveConnectionCmd verbosity socketPath daemonConnAddress daemonConnProcess =
-  if negativeCmdPattern `isInfixOf` daemonConnProcess
-    then
-      let actionCmd :: String = printf "'r2 %s --socket %s %s %s -'" r2Opts socketPath actionCmdPattern actionOpts
-            where
-              r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
-              actionOpts :: String = case daemonConnAddress of Just addr -> printf "-n %s" (show addr); Nothing -> ""
-          partialCmd = replace negativeCmdPattern actionCmd daemonConnProcess
-       in NegativeConnectionCmdResolver (resolveNegativeConnectionCmdAction partialCmd)
-    else PositiveConnectionCmd daemonConnProcess
+mkConnectionCmdResolver :: Verbosity -> FilePath -> Maybe LabelAddr -> String -> DaemonConnectionCmdResolver
+mkConnectionCmdResolver verbosity socketPath daemonConnAddress daemonConnProcess =
+  let singleQuoteCmd = printf "'%s'"
+      actionCmd transport = printf "r2 %s --socket %s %s %s %s" r2Opts socketPath actionCmdPattern actionOpts transportArg
+        where
+          r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
+          actionOpts :: String = case daemonConnAddress of Just addr -> printf "-n %s" (show addr); Nothing -> ""
+          transportArg :: String = case transport of
+            Stdio -> "-"
+            Process cmd -> singleQuoteCmd cmd
+      partialCmd =
+        if negativeCmdPattern `isInfixOf` daemonConnProcess
+          then replace negativeCmdPattern (singleQuoteCmd $ actionCmd Stdio) daemonConnProcess
+          else actionCmd (Process daemonConnProcess)
+   in DaemonConnectionCmdResolver (resolveConnectionCmdAction partialCmd)
 
 data DaemonConnection = DaemonConnection
-  { daemonConnProcess :: DaemonConnectionCmd,
+  { daemonConnProcess :: DaemonConnectionCmdResolver,
     daemonConnAddress :: Maybe LabelAddr
   }
 
@@ -295,34 +297,27 @@ callCommandNoCtrlC cmd = IO.bracketOnError (createProcess $ stdoutShell cmd) cle
     ExitFailure r -> fail $ printf "%s: (exit %d)" cmd r
 
 runDaemonConn :: ConnAction -> Verbosity -> FilePath -> DaemonConnection -> IO ()
-runDaemonConn action daemonVerbosity daemonSocketPath (DaemonConnection {daemonConnAddress, daemonConnProcess = PositiveConnectionCmd cmd}) =
-  let resolvedAction = connActionToAction action cmd daemonConnAddress
-   in r2cIO stdout daemonVerbosity Nothing daemonSocketPath $ Command TargetAddrServer resolvedAction
-runDaemonConn action _ _ (DaemonConnection {daemonConnProcess = NegativeConnectionCmdResolver resolve}) =
+runDaemonConn action _ _ (DaemonConnection {daemonConnProcess = DaemonConnectionCmdResolver resolve}) =
   let resolvedCmd = resolve action
    in callCommandNoCtrlC resolvedCmd
 
-showLinkCmd :: DaemonConnectionCmd -> ConnAction -> String
-showLinkCmd (PositiveConnectionCmd cmd) _ = cmd
-showLinkCmd (NegativeConnectionCmdResolver resolve) action = resolve action
-
 runManagedDaemonConn :: Verbosity -> FilePath -> DaemonConnection -> IO ()
-runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection linkCmd mConnAddr) = do
+runManagedDaemonConn daemonVerbosity daemonSocketPath conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) mConnAddr) = do
   let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
-  printf "starting conn %s%s\n" (showLinkCmd linkCmd ConnAnnounce) displayConnAddr
+  printf "starting conn %s%s\n" (resolveLinkCmd ConnAnnounce) displayConnAddr
   result <- IO.try @SomeException $ runDaemonConn ConnAnnounce daemonVerbosity daemonSocketPath conn
   let displayDelay = show $ fromMicroseconds @Second connRestartDelay
   let displayCause :: String = case result of
         Right () -> "exited"
         Left err -> printf "exited unexpectedly: %s" (show err)
-  printf "conn %s%s %s. restarting in %s\n" (showLinkCmd linkCmd ConnAnnounce) displayConnAddr displayCause displayDelay
+  printf "conn %s%s %s. restarting in %s\n" (resolveLinkCmd ConnAnnounce) displayConnAddr displayCause displayDelay
   threadDelay $ fromInteger connRestartDelay
-  runManagedDaemonConn daemonVerbosity daemonSocketPath (DaemonConnection linkCmd mConnAddr)
+  runManagedDaemonConn daemonVerbosity daemonSocketPath conn
 
 runDaemonService :: Verbosity -> FilePath -> DaemonConnection -> IO ()
-runDaemonService daemonVerbosity daemonSocketPath conn@(DaemonConnection linkCmd mConnAddr) = do
+runDaemonService daemonVerbosity daemonSocketPath conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) mConnAddr) = do
   let displayServiceAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
-  printf "starting service %s%s\n" (showLinkCmd linkCmd ConnServe) displayServiceAddr
+  printf "starting service %s%s\n" (resolveLinkCmd ConnServe) displayServiceAddr
   runDaemonConn ConnServe daemonVerbosity daemonSocketPath conn
 
 runManagedDaemon :: DaemonDescription -> IO ()

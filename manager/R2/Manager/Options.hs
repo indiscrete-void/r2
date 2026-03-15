@@ -68,7 +68,7 @@ resolveTOMLConnections verbosity socketPath =
     ( \(TOMLDaemonConnection {..}) ->
         DaemonConnection
           { daemonConnProcess =
-              resolveConnectionCmd
+              mkConnectionCmdResolver
                 verbosity
                 socketPath
                 tomlDaemonConnAddress
