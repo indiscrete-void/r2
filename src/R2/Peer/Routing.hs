@@ -1,11 +1,7 @@
-module R2.Peer.Routing (LookupChan (..), EstablishedConnection (..), OverlayConnection (..), interpretLookupChanSem, routeTo, routeToError, routedFrom, handleR2Msg, makeR2ConnectedNode, runOverlayLookupChan) where
+module R2.Peer.Routing (LookupChan (..), EstablishedConnection (..), OverlayConnection (..), interpretLookupChanSem, routeTo, routeToError, routedFrom, handleR2Msg, makeR2ConnectedNode, runOverlayLookupChan, openR2ConnectedNode) where
 
-import Control.Applicative
 import Control.Monad.Extra
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Maybe
 import Data.ByteString (ByteString)
-import Data.Set qualified as Set
 import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Effect.Events
@@ -27,7 +23,7 @@ data LookupChan addr chan m a where
 
 makeSem ''LookupChan
 
-newtype OverlayConnection = OverlayConnection NetworkAddr
+newtype OverlayConnection = OverlayConnection NameAddr
 
 type instance AddressChan OverlayConnection chan = chan
 
@@ -46,11 +42,11 @@ routeTo ::
     Member (OutputWithEOF ByteString) r,
     Member (LookupChan EstablishedConnection (HighLevel (Outbound chan))) r
   ) =>
-  NetworkAddr ->
+  NameAddr ->
   RouteTo (Maybe Base64Text) ->
   Sem r ()
 routeTo = r2 \routeToAddr routedFrom -> do
-  mChan <- lookupChan (EstablishedConnection routeToAddr)
+  mChan <- lookupChan (EstablishedConnection $ NetworkNameAddr routeToAddr)
   case mChan of
     Just (HighLevel (Outbound chan)) -> busChan chan $ putChan (Just $ encodeStrict $ MsgRoutedFrom routedFrom)
     Nothing -> output $ Just $ encodeStrict $ MsgRouteToErr @Base64Text $ RouteToErr routeToAddr "unreachable"
@@ -62,7 +58,7 @@ routeToError ::
   RouteToErr ->
   Sem r ()
 routeToError (RouteToErr addr _) = do
-  mChan <- lookupChan (EstablishedConnection addr)
+  mChan <- lookupChan (EstablishedConnection $ NetworkNameAddr addr)
   whenJust mChan \(HighLevel (Inbound chan)) -> busChan chan (putChan Nothing)
 
 routedFrom ::
@@ -77,7 +73,7 @@ routedFrom (RoutedFrom routedFromNode routedFromData) = do
   Inbound chan <- lookupChan (OverlayConnection routedFromNode)
   busChan chan $ putChan decoded
 
-outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> NetworkAddr -> Sem r ()
+outboundChanToR2 :: (Member (Bus chan ByteString) r) => Outbound chan -> Outbound chan -> NameAddr -> Sem r ()
 outboundChanToR2 (Outbound routerChan) (Outbound chan) addr = do
   mapEOF
     (busChan chan takeChan)
@@ -104,17 +100,34 @@ makeR2ConnectedNode ::
     Member Async r,
     Member (EventConsumer (Event chan)) r
   ) =>
-  NetworkAddr ->
+  NameAddr ->
   NetworkAddrSet ->
   HighLevel (Outbound chan) ->
   Sem r (Connection chan)
 makeR2ConnectedNode addr routerAddrSet (HighLevel routerOutboundChan) = do
   let routerDerivedAddrSet = routedAddrSet addr routerAddrSet
-  let connAddrSet = singleAddrSet addr <> routerDerivedAddrSet
+  let connAddrSet = singleAddrSet (NetworkNameAddr addr) <> routerDerivedAddrSet
   chan@Bidirectional {inboundChan = clientInboundChan, outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
   async_ $ clientInboundChan `closeOnDisconnect` routerAddrSet
   async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
   superviseNode connAddrSet Overlay chan
+
+openR2ConnectedNode ::
+  ( Member (Bus chan ByteString) r,
+    Member (Storage chan) r,
+    Member (Peer chan) r,
+    Member (EventConsumer (Event chan)) r,
+    Member Async r
+  ) =>
+  NameAddr ->
+  NetworkAddrSet ->
+  HighLevel (Outbound chan) ->
+  Sem r (Connection chan)
+openR2ConnectedNode addr routerAddrSet routerOutboundChan = do
+  mConn <- storageLookupConn (singleAddrSet $ NetworkNameAddr addr)
+  case mConn of
+    Just conn -> pure conn
+    Nothing -> makeR2ConnectedNode addr routerAddrSet routerOutboundChan
 
 runOverlayLookupChan ::
   ( Member (Bus chan ByteString) r,
@@ -127,7 +140,7 @@ runOverlayLookupChan ::
   NetworkAddrSet ->
   InterpreterFor (LookupChan OverlayConnection (Inbound chan)) r
 runOverlayLookupChan routerAddrs = interpretLookupChanSem \(OverlayConnection addr) -> do
-  mStoredNode <- storageLookupNode (singleAddrSet addr)
+  mStoredNode <- storageLookupNode (singleAddrSet $ NetworkNameAddr addr)
   Inbound <$> case mStoredNode of
     Just node -> pure $ inboundChan $ nodeChan node
     Nothing -> do
@@ -148,7 +161,7 @@ handleR2Msg ::
   R2Message Base64Text ->
   Sem r ()
 handleR2Msg connAddrSet (MsgRouteTo msg) = do
-  bestRepresentative <- maybe (fail "route-to received from node without addr") pure $ bestAddrSetRepresentative connAddrSet
+  bestRepresentative <- maybe (fail "route-to received from node without addr") pure $ bestAddrSetName connAddrSet
   reinterpretLookupChan (fmap . fmap $ Outbound . outboundChan) $ routeTo bestRepresentative msg
 handleR2Msg _ (MsgRouteToErr msg) = reinterpretLookupChan (fmap . fmap $ Inbound . inboundChan) $ routeToError msg
 handleR2Msg connAddrSet (MsgRoutedFrom msg) = runOverlayLookupChan connAddrSet $ routedFrom msg

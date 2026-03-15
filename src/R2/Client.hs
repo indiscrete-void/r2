@@ -212,7 +212,7 @@ connectNode ::
   ProcessTransport ->
   Maybe NameAddr ->
   Sem r ()
-connectNode self transport (Just (NetworkNameAddr -> addr)) = do
+connectNode self transport (Just addr) = do
   tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addr
   ioToProc transport $ do
     routerAddr <- exchangeSelves self Nothing
@@ -280,7 +280,7 @@ serveTransport self mAddr transport = do
   let serviceAddr = NameTagAddr $ TagAddr "service" serviceName
   serviceChan <- makeBidirectionalChan
   _ <- superviseNode (singleAddrSet $ NetworkNameAddr $ serviceAddr) (Pipe transport) serviceChan
-  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport $ NetworkNameAddr $ serviceAddr
+  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport serviceAddr
   scoped @_ @(Storage _) serviceAddr $
     runOverlay serviceAddr do
       selfChan <- makeBidirectionalChan

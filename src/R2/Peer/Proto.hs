@@ -56,7 +56,7 @@ data R2Message msg where
 $(deriveJSON aesonOptions ''R2Message)
 
 data ClientToDaemonMessage where
-  ReqConnectNode :: ProcessTransport -> NetworkAddr -> ClientToDaemonMessage
+  ReqConnectNode :: ProcessTransport -> NameAddr -> ClientToDaemonMessage
   ReqTunnelProcess :: ClientToDaemonMessage
   ReqListNodes :: ClientToDaemonMessage
   deriving stock (Eq, Show, Generic)

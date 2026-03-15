@@ -25,11 +25,10 @@ where
 
 import Control.Exception qualified as IO
 import Control.Monad.Extra
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Functor ((<&>))
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe
 import Data.Set qualified as Set
 import Network.Socket (Family (..), Socket, socket)
@@ -289,6 +288,7 @@ makePeerNode chanOverlay self preAddrSet transport chan = do
       pure conn
 
 open ::
+  forall chan r.
   ( Member (Bus chan ByteString) r,
     Member (Peer chan) r,
     Member (EventConsumer (Event chan)) r,
@@ -304,12 +304,6 @@ open addrSet = do
     Nothing -> openNew addrSet
   where
     openNew ::
-      ( Member (Bus chan ByteString) r,
-        Member (Peer chan) r,
-        Member (EventConsumer (Event chan)) r,
-        Member Async r,
-        Member (Storage chan) r
-      ) =>
       NetworkAddrSet ->
       Sem r (Maybe (Connection chan))
     openNew addrSet = do
@@ -317,13 +311,20 @@ open addrSet = do
       let routableAddrs = mapMaybe (\case NetworkRoutedAddr routedAddr -> Just routedAddr; _ -> Nothing) addrList
       case routableAddrs of
         [] -> pure Nothing
-        (RoutedAddr router destination : _) -> do
-          let routerAddrSet = NetworkAddrSet $ Set.singleton router
-          mRouterConn <- open routerAddrSet
-          case mRouterConn of
+        (routedAddr : _) -> openRouted routedAddr
+
+    openRouted :: RoutedAddr NetworkAddr NetworkAddr -> Sem r (Maybe (Connection chan))
+    openRouted routedAddr =
+      let (firstHopAddr :| rest) = netAddrToList $ NetworkRoutedAddr routedAddr
+       in open (singleAddrSet $ NetworkNameAddr firstHopAddr) >>= \case
             Nothing -> pure Nothing
-            Just Connection {connAddrSet = routerConnAddr, connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} ->
-              Just <$> makeR2ConnectedNode destination routerConnAddr routerOutboundChan
+            Just firstHop -> go firstHop rest
+      where
+        go :: Connection chan -> [NameAddr] -> Sem r (Maybe (Connection chan))
+        go conn [] = pure $ Just conn
+        go Connection {connAddrSet = routerAddrSet, connHighLevelChan = fmap (Outbound . outboundChan) -> routerChan} (destination : rest) = do
+          nextConn <- openR2ConnectedNode destination routerAddrSet routerChan
+          go nextConn rest
 
 runOverlayWith ::
   forall chan r.

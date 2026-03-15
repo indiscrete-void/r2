@@ -34,7 +34,7 @@ connectNode ::
     Member (Peer chan) r
   ) =>
   Connection chan ->
-  NetworkAddr ->
+  NameAddr ->
   Sem r ()
 connectNode
   Connection

@@ -20,6 +20,9 @@ module R2
     singleAddrSet,
     addrSetsReferToSameNode,
     routedAddrSet,
+    netAddrEnd,
+    bestAddrSetName,
+    netAddrToList,
   )
 where
 
@@ -33,6 +36,7 @@ import Data.ByteString.Char8 qualified as BC
 import Data.DoubleWord
 import Data.List.Extra
 import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.String (IsString (..))
@@ -121,6 +125,10 @@ netAddrHead :: NetworkAddr -> NameAddr
 netAddrHead (NetworkNameAddr local) = local
 netAddrHead (NetworkRoutedAddr (RoutedAddr a _)) = netAddrHead a
 
+netAddrEnd :: NetworkAddr -> NameAddr
+netAddrEnd (NetworkNameAddr local) = local
+netAddrEnd (NetworkRoutedAddr (RoutedAddr _ b)) = netAddrEnd b
+
 instance Show NetworkAddr where
   show (NetworkNameAddr addr) = show addr
   show (NetworkRoutedAddr addr) = show addr
@@ -139,8 +147,14 @@ instance ToJSON NetworkAddr where
 instance FromJSON NetworkAddr where
   parseJSON = Aeson.withText "NetworkAddr" (maybe (fail "cannot decode network addr") pure . parseNetAddr . Text.unpack)
 
+infixr 9 />
+
 (/>) :: NetworkAddr -> NetworkAddr -> NetworkAddr
 addr1 /> addr2 = NetworkRoutedAddr $ RoutedAddr addr1 addr2
+
+netAddrToList :: NetworkAddr -> NonEmpty NameAddr
+netAddrToList (NetworkNameAddr name) = NonEmpty.singleton name
+netAddrToList (NetworkRoutedAddr (RoutedAddr a b)) = netAddrToList a <> netAddrToList b
 
 newtype NetworkAddrSet = NetworkAddrSet {unNetAddrSet :: Set NetworkAddr}
   deriving stock (Ord, Eq, Generic)
@@ -162,11 +176,14 @@ singleAddrSet = NetworkAddrSet . Set.singleton
 bestAddrSetRepresentative :: NetworkAddrSet -> Maybe NetworkAddr
 bestAddrSetRepresentative = Set.lookupMin . unNetAddrSet
 
+bestAddrSetName :: NetworkAddrSet -> Maybe NameAddr
+bestAddrSetName = fmap netAddrEnd . bestAddrSetRepresentative
+
 addrSetsReferToSameNode :: NetworkAddrSet -> NetworkAddrSet -> Bool
 addrSetsReferToSameNode (NetworkAddrSet a) (NetworkAddrSet b) = not $ Set.null $ Set.intersection a b
 
-routedAddrSet :: NetworkAddr -> NetworkAddrSet -> NetworkAddrSet
-routedAddrSet addr (NetworkAddrSet set) = NetworkAddrSet $ Set.map (/> addr) set
+routedAddrSet :: NameAddr -> NetworkAddrSet -> NetworkAddrSet
+routedAddrSet addr (NetworkAddrSet set) = NetworkAddrSet $ Set.map (/> NetworkNameAddr addr) set
 
 instance Uniform LabelAddr where
   uniformM g = LabelAddr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g
@@ -184,7 +201,7 @@ instance Uniform Word256 where
     pure $ Word256 l r
 
 data RouteTo msg = RouteTo
-  { routeToNode :: NetworkAddr,
+  { routeToNode :: NameAddr,
     routeToData :: msg
   }
   deriving stock (Show, Eq, Generic)
@@ -192,7 +209,7 @@ data RouteTo msg = RouteTo
 $(deriveJSON (aesonRemovePrefix "routeTo") ''RouteTo)
 
 data RoutedFrom msg = RoutedFrom
-  { routedFromNode :: NetworkAddr,
+  { routedFromNode :: NameAddr,
     routedFromData :: msg
   }
   deriving stock (Show, Eq, Generic)
@@ -200,12 +217,12 @@ data RoutedFrom msg = RoutedFrom
 $(deriveJSON (aesonRemovePrefix "routedFrom") ''RoutedFrom)
 
 data RouteToErr = RouteToErr
-  { routeToErrNode :: NetworkAddr,
+  { routeToErrNode :: NameAddr,
     routeToErrMessage :: String
   }
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON (aesonRemovePrefix "routeToErr") ''RouteToErr)
 
-r2 :: (NetworkAddr -> RoutedFrom msg -> a) -> (NetworkAddr -> RouteTo msg -> a)
+r2 :: (NameAddr -> RoutedFrom msg -> a) -> (NameAddr -> RouteTo msg -> a)
 r2 f node (RouteTo receiver maybeStr) = f receiver $ RoutedFrom node maybeStr
