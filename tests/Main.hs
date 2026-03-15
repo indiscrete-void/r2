@@ -2,7 +2,7 @@ import R2
 import Test.Tasty
 import Test.Tasty.HUnit
 
-data SendTo a = SendTo Address a deriving stock (Eq, Show)
+data SendTo a = SendTo NameAddr a deriving stock (Eq, Show)
 
 testR2 :: TestTree
 testR2 =
