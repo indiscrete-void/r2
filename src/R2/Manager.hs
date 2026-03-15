@@ -67,10 +67,6 @@ negativeCmdPattern = "-%"
 actionCmdPattern :: String
 actionCmdPattern = "%ACTION"
 
-connActionToAction :: ConnAction -> String -> Maybe LabelAddr -> Action
-connActionToAction ConnServe positiveCmd mAddr = Serve mAddr (Process positiveCmd)
-connActionToAction ConnAnnounce positiveCmd mAddr = Connect (Process positiveCmd) (NameLabelAddr <$> mAddr)
-
 resolveConnectionCmdAction :: String -> ConnAction -> String
 resolveConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
 
