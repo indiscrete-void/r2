@@ -48,8 +48,8 @@ data Node chan
 
 instance Eq (Node chan) where
   a == b =
-    let (NetworkAddrSet aAddrs) = nodeAddrSet a
-        (NetworkAddrSet bAddrs) = nodeAddrSet b
+    let (AddrSet aAddrs) = nodeAddrSet a
+        (AddrSet bAddrs) = nodeAddrSet b
      in aAddrs == bAddrs
 
 nodeAddrSet :: Node chan -> NetworkAddrSet

@@ -236,20 +236,20 @@ determinePeerAddr ::
   Node chan ->
   Sem r NetworkAddrSet
 determinePeerAddr self set node =
-  if Set.null (unNetAddrSet set)
+  if Set.null (unAddrSet set)
     then
       storageLockNode node $
         ioToNodeChanLogged
-          (NetworkAddrSet Set.empty)
+          emptyAddrSet
           (nodeChan node)
-          (NetworkAddrSet . Set.singleton . NetworkNameAddr <$> exchangeSelves self Nothing)
+          (singleAddrSet . NetworkNameAddr <$> exchangeSelves self Nothing)
     else pure set
 
 lookupChanToStorage :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r
 lookupChanToStorage =
   interpretLookupChanSem
     ( \(EstablishedConnection addr) -> do
-        storageLookupNode (NetworkAddrSet $ Set.singleton addr) <&> \case
+        storageLookupNode (AddrSet $ Set.singleton addr) <&> \case
           Just (ConnectedNode Connection {connHighLevelChan}) -> Just connHighLevelChan
           _ -> Nothing
     )
@@ -308,7 +308,7 @@ open addrSet = do
       NetworkAddrSet ->
       Sem r (Maybe (Connection chan))
     openNew addrSet = do
-      let addrList = Set.toList (unNetAddrSet addrSet)
+      let addrList = Set.toList (unAddrSet addrSet)
       let routableAddrs = mapMaybe (\case NetworkRoutedAddr routedAddr -> Just routedAddr; _ -> Nothing) addrList
       case routableAddrs of
         [] -> pure Nothing
