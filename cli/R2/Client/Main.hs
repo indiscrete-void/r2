@@ -1,4 +1,5 @@
 import Debug.Trace qualified as Debug
+import R2 (emptyAddrSet)
 import R2.Client
 import R2.Client.Options
 import R2.Peer
@@ -10,4 +11,4 @@ main = do
   (Options verbosity command maybeSocketPath) <- parse
   socketPath <- resolveSocketPath maybeSocketPath
   Debug.traceM (printf "comunicating over %s" socketPath)
-  r2cIO stderr verbosity Nothing socketPath command
+  r2cIO stderr verbosity emptyAddrSet socketPath command

@@ -1,6 +1,7 @@
 module R2.Peer.Routing (LookupChan (..), EstablishedConnection (..), OverlayConnection (..), interpretLookupChanSem, routeTo, routeToError, routedFrom, handleR2Msg, makeR2ConnectedNode, runOverlayLookupChan, openR2ConnectedNode) where
 
 import Control.Monad.Extra
+import Control.Monad.Trans.Accum (mapAccum)
 import Data.ByteString (ByteString)
 import Polysemy
 import Polysemy.Async
@@ -98,18 +99,20 @@ makeR2ConnectedNode ::
   ( Member (Bus chan ByteString) r,
     Member (Peer chan) r,
     Member Async r,
-    Member (EventConsumer (Event chan)) r
+    Member (EventConsumer (Event chan)) r,
+    Member Fail r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   NetworkAddrSet ->
   HighLevel (Outbound chan) ->
   Sem r (Connection chan)
-makeR2ConnectedNode addr routerAddrSet (HighLevel routerOutboundChan) = do
-  let routerDerivedAddrSet = routedAddrSet addr routerAddrSet
-  let connAddrSet = singleAddrSet (NetworkNameAddr addr) <> routerDerivedAddrSet
+makeR2ConnectedNode addrSet routerAddrSet (HighLevel routerOutboundChan) = do
+  let routerDerivedAddrSet = addrSetUnions $ mapAddrSet (`routedAddrSet` routerAddrSet) addrSet
+  let connAddrSet = mapAddrSet NetworkNameAddr addrSet <> routerDerivedAddrSet
+  bestName <- maybe (fail "Can't pick name for routed connection") pure $ bestAddrSetName connAddrSet
   chan@Bidirectional {inboundChan = clientInboundChan, outboundChan = Outbound -> clientOutboundChan} <- makeBidirectionalChan
   async_ $ clientInboundChan `closeOnDisconnect` routerAddrSet
-  async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan addr
+  async_ $ outboundChanToR2 routerOutboundChan clientOutboundChan bestName
   superviseNode connAddrSet Overlay chan
 
 openR2ConnectedNode ::
@@ -117,14 +120,15 @@ openR2ConnectedNode ::
     Member (Storage chan) r,
     Member (Peer chan) r,
     Member (EventConsumer (Event chan)) r,
-    Member Async r
+    Member Async r,
+    Member Fail r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   NetworkAddrSet ->
   HighLevel (Outbound chan) ->
   Sem r (Connection chan)
 openR2ConnectedNode addr routerAddrSet routerOutboundChan = do
-  mConn <- storageLookupConn (singleAddrSet $ NetworkNameAddr addr)
+  mConn <- storageLookupConn (mapAddrSet NetworkNameAddr addr)
   case mConn of
     Just conn -> pure conn
     Nothing -> makeR2ConnectedNode addr routerAddrSet routerOutboundChan
@@ -140,12 +144,13 @@ runOverlayLookupChan ::
   NetworkAddrSet ->
   InterpreterFor (LookupChan OverlayConnection (Inbound chan)) r
 runOverlayLookupChan routerAddrs = interpretLookupChanSem \(OverlayConnection addr) -> do
-  mStoredNode <- storageLookupNode (singleAddrSet $ NetworkNameAddr addr)
+  let addrSet = singleAddrSet addr
+  mStoredNode <- storageLookupNode (mapAddrSet NetworkNameAddr addrSet)
   Inbound <$> case mStoredNode of
     Just node -> pure $ inboundChan $ nodeChan node
     Nothing -> do
       Just (ConnectedNode Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan}) <- storageLookupNode routerAddrs
-      inboundChan . connChan <$> makeR2ConnectedNode addr routerAddrs routerOutboundChan
+      inboundChan . connChan <$> makeR2ConnectedNode addrSet routerAddrs routerOutboundChan
 
 handleR2Msg ::
   ( Member (Bus chan ByteString) r,

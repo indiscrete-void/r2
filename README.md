@@ -48,12 +48,11 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
     * `topic:chat` – a pub/sub topic
     * `net:home` - domain-specific network `home`
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ✅
+- **Sets**: Aliases like [`bogdan`, `theodor`, `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=`] ✅
 - **Logical addresses for rules and patterns**: ⏳
     * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
     * Alternation: `(alice|bob)/service:cat` matches either Alice's or Bob's cat service
     * Predicates: `?secure` to match nodes based on properties
-- **Sets**: Comma-separated lists like `bogdan, theodor, x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` ⏳
-- **Self reference**: self always refers to the local node ⏳
 
 Complex examples:  
 - `net:home/*` - anything from home network
@@ -91,7 +90,7 @@ Declare networks and daemons in a single config which is then implemented by `r2
 **Alice's configuration (`~/.config/r2/alice.toml`):**
 ```toml
 [self]
-addr = "alice"
+addr = ["alice", "alice_of_wonderland"]
 socket = "/home/user/.local/r2/alice.sock"
 cmd = "echo hello from alice"
 

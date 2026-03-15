@@ -47,9 +47,9 @@ import R2.Peer.Storage
 import R2.Random
 import System.Process.Extra
 
-type NetworkLink = (NameAddr, NameAddr)
+type NetworkLink = (AddrSet NameAddr, AddrSet NameAddr)
 
-type ServeList = [(NameAddr, Service)]
+type ServeList = [(AddrSet NameAddr, Service)]
 
 newtype Service = ServiceCommand String
 
@@ -101,15 +101,15 @@ bundleEvents =
 mkNodes ::
   ( Member (Bus chan ByteString) r,
     Member Sem.Async r,
-    Member (Scoped NameAddr (Output Peer.Log)) r,
+    Member (Scoped (AddrSet NameAddr) (Output Peer.Log)) r,
     Member Resource r,
     Member (Storages chan) r,
-    Member (Scoped NameAddr (Bundle (EventEffects (Event chan)))) r,
+    Member (Scoped (AddrSet NameAddr) (Bundle (EventEffects (Event chan)))) r,
     Member Fail r
   ) =>
   [NetworkLink] ->
-  Map (NameAddr, NameAddr) (Bidirectional chan) ->
-  Map NameAddr Service ->
+  Map (AddrSet NameAddr, AddrSet NameAddr) (Bidirectional chan) ->
+  Map (AddrSet NameAddr) Service ->
   Sem r [Async (Maybe ())]
 mkNodes link links serveMap = do
   let linkNodes = List.nub $ concat [[a, b] | ((a, b), _) <- Map.toList links]
@@ -124,7 +124,7 @@ mkNodes link links serveMap = do
                 let myLinks = map (\(a, b) -> if a == me then b else a) . filter (\(a, b) -> a == me || b == me) $ link
                 forM_ myLinks \them -> do
                   let chan = links ! (me, them)
-                  superviseNode (singleAddrSet $ NetworkNameAddr them) Socket chan
+                  superviseNode (mapAddrSet NetworkNameAddr them) Socket chan
                 processClients
 
 mkActor ::
@@ -136,12 +136,12 @@ mkActor ::
     Member Fail r,
     Member Resource r,
     Member (Storages chan) r,
-    Member (Scoped NameAddr (Output Peer.Log)) r,
-    Member (Scoped NameAddr (Output Client.Log)) r,
-    Member (Scoped NameAddr (Bundle (EventEffects (Event chan)))) r,
+    Member (Scoped (AddrSet NameAddr) (Output Peer.Log)) r,
+    Member (Scoped (AddrSet NameAddr) (Output Client.Log)) r,
+    Member (Scoped (AddrSet NameAddr) (Bundle (EventEffects (Event chan)))) r,
     Member Random r
   ) =>
-  Map NameAddr Service ->
+  Map (AddrSet NameAddr) Service ->
   NetworkAddr ->
   Action ->
   InterpretersFor ByteTransport r
@@ -150,38 +150,39 @@ mkActor serveMap target action m = do
   (msgLinkA, msgLinkB) <- makeLink
 
   randAddress <- childAddr "child"
+  let randNodeAddrSet = singleAddrSet randAddress
 
   let firstNodeId = netAddrHead target
-  scoped @_ @(Storage _) firstNodeId $
-    scoped @_ @(Output Peer.Log) firstNodeId $
-      (scoped @_ @(Bundle (EventEffects _)) firstNodeId . bundleEvents) $
-        runOverlay firstNodeId do
+  let firstNodeAddrSet = singleAddrSet firstNodeId
+  scoped @_ @(Storage _) firstNodeAddrSet $
+    scoped @_ @(Output Peer.Log) firstNodeAddrSet $
+      (scoped @_ @(Bundle (EventEffects _)) firstNodeAddrSet . bundleEvents) $
+        runOverlay firstNodeAddrSet do
           _ <- superviseNode (singleAddrSet $ NetworkNameAddr randAddress) Socket msgLinkA
           processClients
 
   let command = Command (TargetAddrNetwork target) action
   client <-
     async $
-      scoped @_ @(Output Client.Log) randAddress $
-        scoped @_ @(Output Peer.Log) randAddress $
-          (scoped @_ @(Bundle (EventEffects _)) randAddress . bundleEvents) $
-            scoped @_ @(Storage _) randAddress $
+      scoped @_ @(Output Client.Log) randNodeAddrSet $
+        scoped @_ @(Output Peer.Log) randNodeAddrSet $
+          (scoped @_ @(Bundle (EventEffects _)) randNodeAddrSet . bundleEvents) $
+            scoped @_ @(Storage _) randNodeAddrSet $
               streamToChan @'ProcStream stdioLinkA $
                 streamToChan @'ServerStream msgLinkB $
-                  r2c (Just randAddress) command
+                  r2c randNodeAddrSet command
 
   result <- ioToChan stdioLinkB m
   await_ client
   pure result
-mkActor _ path _ _ = fail $ "invalid path " <> show path
 
 type NetworkEffects =
   '[ Random,
      Scoped CreateProcess Sem.Process,
-     Scoped NameAddr (Bundle (EventEffects (Event (TBMQueue ByteString)))),
+     Scoped (AddrSet NameAddr) (Bundle (EventEffects (Event (TBMQueue ByteString)))),
      Bus (TBMQueue ByteString) ByteString,
-     Scoped NameAddr (Output Peer.Log),
-     Scoped NameAddr (Output Client.Log),
+     Scoped (AddrSet NameAddr) (Output Peer.Log),
+     Scoped (AddrSet NameAddr) (Output Client.Log),
      Storages (TBMQueue ByteString),
      Fail,
      Output String,

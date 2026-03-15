@@ -1,9 +1,10 @@
 module R2.Manager.Options (Options (..), parse) where
 
+import Control.Category ((<<<))
+import Data.Maybe
 import Data.Text qualified as Text
 import Options.Applicative
 import R2
-import R2.DSL
 import R2.Manager
 import R2.Options
 import R2.Peer
@@ -29,7 +30,7 @@ opts =
     <*> strOption (long "config" <> short 'f')
 
 data TOMLDaemonOptions = TOMLDaemonOptions
-  { tomlDaemonAddress :: LabelAddr,
+  { tomlDaemonAddress :: AddrSet LabelAddr,
     tomlDaemonSocketPath :: Maybe FilePath
   }
 
@@ -41,20 +42,32 @@ data TOMLDaemonDescription = TOMLDaemonDescription
 
 data TOMLDaemonConnection = TOMLDaemonConnection
   { tomlDaemonConnProcess :: String,
-    tomlDaemonConnAddress :: Maybe LabelAddr
+    tomlDaemonConnAddress :: AddrSet LabelAddr
   }
+
+_LabelAddr :: Toml.BiMap Toml.TomlBiMapError LabelAddr Toml.AnyValue
+_LabelAddr = Toml._String <<< Toml.iso labelAddr LabelAddr
+
+tomlSingleAddrSet :: Toml.Key -> TomlCodec (AddrSet LabelAddr)
+tomlSingleAddrSet key = Toml.dimap show (singleAddrSet . LabelAddr) $ Toml.string key
+
+tomlAddrSet :: Toml.Key -> TomlCodec (AddrSet LabelAddr)
+tomlAddrSet key = Toml.dimap unAddrSet AddrSet (Toml.arraySetOf _LabelAddr key) <|> tomlSingleAddrSet key
+
+tomlOptionalAddrSet :: Toml.Key -> TomlCodec (AddrSet LabelAddr)
+tomlOptionalAddrSet key = Toml.dimap Just (fromMaybe emptyAddrSet) $ Toml.dioptional (tomlAddrSet key)
 
 selfCodec :: TomlCodec TOMLDaemonOptions
 selfCodec =
   TOMLDaemonOptions
-    <$> Toml.diwrap (Toml.string "addr") .= tomlDaemonAddress
+    <$> tomlAddrSet "addr" .= tomlDaemonAddress
     <*> Toml.dioptional (Toml.string "socket") .= tomlDaemonSocketPath
 
 connCodec :: TomlCodec TOMLDaemonConnection
 connCodec =
   TOMLDaemonConnection
     <$> Toml.string "cmd" .= tomlDaemonConnProcess
-    <*> Toml.dioptional (Toml.diwrap $ Toml.string "addr") .= tomlDaemonConnAddress
+    <*> tomlOptionalAddrSet "addr" .= tomlDaemonConnAddress
 
 descriptionCodec :: TomlCodec TOMLDaemonDescription
 descriptionCodec =

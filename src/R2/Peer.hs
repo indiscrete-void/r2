@@ -110,15 +110,16 @@ exchangeSelves ::
     Member (OutputWithEOF ByteString) r,
     Member Fail r
   ) =>
-  NameAddr ->
-  Maybe NameAddr ->
-  Sem r NameAddr
-exchangeSelves self maybeKnownAddr = runEncoding do
+  AddrSet NameAddr ->
+  AddrSet NameAddr ->
+  Sem r (AddrSet NameAddr)
+exchangeSelves self knownAddrs = runEncoding do
   output $ Just (Self self)
-  (Self addr) <- inputOrFail
-  whenJust maybeKnownAddr \knownNodeAddr ->
-    when (knownNodeAddr /= addr) $ fail (printf "address mismatch")
-  pure addr
+  (Self addrSet) <- inputOrFail
+  unless (null knownAddrs) $
+    unless (addrSetsReferToSameNode knownAddrs addrSet) $
+      fail (printf "address mismatch")
+  pure addrSet
 
 interlayConnAddLogging ::
   (Member (Bus chan ByteString) r, Member (Output Log) r, Member Async r) =>
@@ -231,7 +232,7 @@ determinePeerAddr ::
     Member Resource r,
     Member (Output Log) r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   NetworkAddrSet ->
   Node chan ->
   Sem r NetworkAddrSet
@@ -242,7 +243,7 @@ determinePeerAddr self set node =
         ioToNodeChanLogged
           emptyAddrSet
           (nodeChan node)
-          (singleAddrSet . NetworkNameAddr <$> exchangeSelves self Nothing)
+          (mapAddrSet NetworkNameAddr <$> exchangeSelves self emptyAddrSet)
     else pure set
 
 lookupChanToStorage :: (Member (Storage chan) r) => InterpreterFor (LookupChan EstablishedConnection (HighLevel (Bidirectional chan))) r
@@ -267,7 +268,7 @@ makePeerNode ::
     Member (EventConsumer (Event chan)) r
   ) =>
   PeerChanOverlay chan r ->
-  NameAddr ->
+  AddrSet NameAddr ->
   NetworkAddrSet ->
   ConnTransport ->
   Bidirectional chan ->
@@ -294,7 +295,8 @@ open ::
     Member (Peer chan) r,
     Member (EventConsumer (Event chan)) r,
     Member Async r,
-    Member (Storage chan) r
+    Member (Storage chan) r,
+    Member Fail r
   ) =>
   NetworkAddrSet ->
   Sem r (Maybe (Connection chan))
@@ -324,7 +326,7 @@ open addrSet = do
         go :: Connection chan -> [NameAddr] -> Sem r (Maybe (Connection chan))
         go conn [] = pure $ Just conn
         go Connection {connAddrSet = routerAddrSet, connHighLevelChan = fmap (Outbound . outboundChan) -> routerChan} (destination : rest) = do
-          nextConn <- openR2ConnectedNode destination routerAddrSet routerChan
+          nextConn <- openR2ConnectedNode (singleAddrSet destination) routerAddrSet routerChan
           go nextConn rest
 
 runOverlayWith ::
@@ -339,10 +341,11 @@ runOverlayWith ::
     Member Fail r
   ) =>
   PeerChanOverlay chan r ->
-  NameAddr ->
+  AddrSet NameAddr ->
   InterpreterFor (Peer chan) r
-runOverlayWith chanOverlay self = interpret \case
-  SuperviseNode addrSet transport chan -> makePeerNode chanOverlay self addrSet transport chan
+runOverlayWith chanOverlay self m = do
+  when (null self) $ fail "at least one address must be supplied"
+  interpret (\case SuperviseNode addrSet transport chan -> makePeerNode chanOverlay self addrSet transport chan) m
 
 runOverlay ::
   forall chan r.
@@ -355,6 +358,6 @@ runOverlay ::
     Member Resource r,
     Member Fail r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   InterpreterFor (Peer chan) r
 runOverlay = runOverlayWith defaultChanOverlay

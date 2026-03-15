@@ -38,11 +38,11 @@ catnet :: NetworkDescription
 catnet =
   static
     { serve =
-        [ (spongebob, exec "cat")
+        [ (singleAddrSet spongebob, exec "cat")
         ],
       link =
-        [ (lain, carl),
-          (carl, spongebob)
+        [ (singleAddrSet lain, singleAddrSet carl),
+          (singleAddrSet carl, singleAddrSet spongebob)
         ]
     }
 

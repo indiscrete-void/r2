@@ -1,11 +1,12 @@
 module R2.Daemon.Options (Options (..), parse) where
 
+import Data.Set qualified as Set
 import Options.Applicative
 import R2
 import R2.Options
 import R2.Peer
 
-data Options = Options Verbosity (Maybe FilePath) LabelAddr
+data Options = Options Verbosity (Maybe FilePath) (AddrSet LabelAddr)
 
 parse :: IO Options
 parse = execParser parserInfo
@@ -24,4 +25,4 @@ opts =
   Options
     <$> verbosity
     <*> optional (strOption $ long "socket" <> short 's')
-    <*> argument labelAddrP (metavar "ADDRESS")
+    <*> (addrSetFromList <$> some (argument labelAddrP (metavar "ADDRESS")))

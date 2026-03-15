@@ -85,7 +85,7 @@ type DaemonEffects chan sock =
      Resource
    ]
 
-r2d :: (Members (DaemonEffects chan sock) r) => NameAddr -> Sem r ()
+r2d :: (Members (DaemonEffects chan sock) r) => AddrSet NameAddr -> Sem r ()
 r2d self = runOverlay self do
   async_ processClients
   acceptSockets

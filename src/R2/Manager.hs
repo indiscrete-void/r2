@@ -12,6 +12,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad
 import Data.List (isInfixOf)
 import Data.List.Extra (replace)
+import Data.Set qualified as Set
 import Data.Time.Units
 import Polysemy
 import Polysemy.Async
@@ -70,13 +71,13 @@ actionCmdPattern = "%ACTION"
 resolveConnectionCmdAction :: String -> ConnAction -> String
 resolveConnectionCmdAction cmd action = replace actionCmdPattern (connActionToCLI action) cmd
 
-mkConnectionCmdResolver :: Verbosity -> FilePath -> Maybe LabelAddr -> String -> DaemonConnectionCmdResolver
+mkConnectionCmdResolver :: Verbosity -> FilePath -> AddrSet LabelAddr -> String -> DaemonConnectionCmdResolver
 mkConnectionCmdResolver verbosity socketPath daemonConnAddress daemonConnProcess =
   let singleQuoteCmd = printf "'%s'"
       actionCmd transport = printf "r2 %s --socket %s %s %s %s" r2Opts socketPath actionCmdPattern actionOpts transportArg
         where
           r2Opts :: String = if verbosity > 0 then printf "-%s" (replicate verbosity 'v') else ""
-          actionOpts :: String = case daemonConnAddress of Just addr -> printf "-n %s" (show addr); Nothing -> ""
+          actionOpts :: String = unwords $ map (printf "-n %s" . show) (Set.toList $ unAddrSet daemonConnAddress)
           transportArg :: String = case transport of
             Stdio -> "-"
             Process cmd -> singleQuoteCmd cmd
@@ -88,11 +89,11 @@ mkConnectionCmdResolver verbosity socketPath daemonConnAddress daemonConnProcess
 
 data DaemonConnection = DaemonConnection
   { daemonConnProcess :: DaemonConnectionCmdResolver,
-    daemonConnAddress :: Maybe LabelAddr
+    daemonConnAddress :: AddrSet LabelAddr
   }
 
 data DaemonDescription = DaemonDescription
-  { daemonAddress :: LabelAddr,
+  { daemonAddress :: AddrSet LabelAddr,
     daemonSocketPath :: FilePath,
     daemonLinks :: [DaemonConnection],
     daemonServices :: [DaemonConnection],
@@ -117,6 +118,9 @@ runDaemonConn action DaemonConnection {daemonConnProcess = DaemonConnectionCmdRe
   let resolvedCmd = resolve action
    in callCommandNoCtrlC resolvedCmd
 
+displayConnAddr :: (Show addr) => AddrSet addr -> String
+displayConnAddr connAddrSet = if null connAddrSet then "" else printf " %s" (show connAddrSet)
+
 runManagedDaemonConn ::
   ( Member (Scoped CreateProcess Sem.Process) r,
     Member Trace r,
@@ -124,27 +128,25 @@ runManagedDaemonConn ::
   ) =>
   DaemonConnection ->
   Sem r ()
-runManagedDaemonConn conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) mConnAddr) = do
-  let displayConnAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
-  trace $ printf "starting conn %s%s" (resolveLinkCmd ConnAnnounce) displayConnAddr
+runManagedDaemonConn conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) connAddrSet) = do
+  trace $ printf "starting conn %s%s" (resolveLinkCmd ConnAnnounce) (displayConnAddr connAddrSet)
   result <- runFail $ runDaemonConn ConnAnnounce conn
   let displayDelay = show $ fromMicroseconds @Second connRestartDelay
   let displayCause :: String = case result of
         Right () -> "exited"
         Left err -> printf "exited unexpectedly: %s" (show err)
-  trace $ printf "conn %s%s %s. restarting in %s" (resolveLinkCmd ConnAnnounce) displayConnAddr displayCause displayDelay
+  trace $ printf "conn %s%s %s. restarting in %s" (resolveLinkCmd ConnAnnounce) (displayConnAddr connAddrSet) displayCause displayDelay
   delay $ fromInteger connRestartDelay
   runManagedDaemonConn conn
 
 runDaemonService :: (Members (ManagerEffects chan s) r) => DaemonConnection -> Sem r ()
-runDaemonService conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) mConnAddr) = do
-  let displayServiceAddr :: String = maybe "" (printf " (%s)" . show) mConnAddr
-  trace $ printf "starting service %s%s" (resolveLinkCmd ConnServe) displayServiceAddr
+runDaemonService conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLinkCmd) connAddrSet) = do
+  trace $ printf "starting service %s%s" (resolveLinkCmd ConnServe) (displayConnAddr connAddrSet)
   runDaemonConn ConnServe conn
 
 runManagedDaemon :: forall chan s r. (Members (ManagerEffects chan s) r) => DaemonDescription -> Sem r ()
 runManagedDaemon DaemonDescription {..} = do
-  daemon <- async $ r2d $ NameLabelAddr daemonAddress
+  daemon <- async $ r2d $ mapAddrSet NameLabelAddr daemonAddress
   forM_ daemonLinks (async . runManagedDaemonConn)
   forM_ daemonServices (async . runDaemonService)
   await_ daemon

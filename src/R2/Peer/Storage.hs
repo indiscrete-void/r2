@@ -66,7 +66,7 @@ storageToAtomicState =
 storageToIO :: forall chan r. (Member (Embed IO) r) => InterpreterFor (Storage chan) r
 storageToIO = fmap snd . atomicStateToIO ([] :: NodeState chan) . storageToAtomicState . raiseUnder
 
-type Storages chan = Scoped NameAddr (Storage chan)
+type Storages chan = Scoped (AddrSet NameAddr) (Storage chan)
 
 storagesToIO ::
   (Member (Embed IO) r, Member Lock r) =>

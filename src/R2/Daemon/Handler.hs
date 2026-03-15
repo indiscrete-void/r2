@@ -31,10 +31,11 @@ connectNode ::
   ( Member (Bus chan ByteString) r,
     Member (EventConsumer (Event chan)) r,
     Member Async r,
-    Member (Peer chan) r
+    Member (Peer chan) r,
+    Member Fail r
   ) =>
   Connection chan ->
-  NameAddr ->
+  AddrSet NameAddr ->
   Sem r ()
 connectNode
   Connection

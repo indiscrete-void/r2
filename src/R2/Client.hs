@@ -55,19 +55,20 @@ import Text.Printf
 import Toml qualified
 import Toml.Codec (TomlCodec, (.=))
 
-newtype LocalDaemon = LocalDaemon {unLocalDaemon :: NameAddr}
+newtype LocalDaemon = LocalDaemon {unLocalDaemon :: AddrSet NameAddr}
+  deriving stock (Show)
 
 data Log where
-  LogMe :: NameAddr -> Log
+  LogMe :: AddrSet NameAddr -> Log
   LogLocalDaemon :: LocalDaemon -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogOutput :: ProcessTransport -> (Maybe ByteString) -> Log
-  LogAction :: NetworkAddr -> Action -> Log
+  LogAction :: NetworkAddrSet -> Action -> Log
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
 logToTrace verbosity = runOutputSem \case
   (LogMe me) -> when (verbosity > 0) $ trace $ printf "me: %s" (show me)
-  (LogLocalDaemon (LocalDaemon them)) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
+  (LogLocalDaemon them) -> when (verbosity > 0) $ trace $ printf "communicating with %s" (show them)
   (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
   (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
   (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
@@ -87,9 +88,9 @@ outToLog f = intercept @(Output o) \case
 
 data Action
   = Ls
-  | Connect !ProcessTransport !(Maybe NameAddr)
+  | Connect !ProcessTransport !(AddrSet NameAddr)
   | Open !ProcessTransport
-  | Serve (Maybe LabelAddr) !ProcessTransport
+  | Serve (AddrSet LabelAddr) !ProcessTransport
   deriving stock (Show)
 
 data TargetAddr = TargetAddrServer | TargetAddrNetwork NetworkAddr
@@ -160,7 +161,7 @@ listNodes target = do
   (ResNodeList list) <- inputOrFail
   let nodeList =
         NodeList
-          { nodeListLocalDaemon = NodeListDaemon {nodeListDaemonAddr = show $ singleAddrSet $ NetworkNameAddr $ localDaemon},
+          { nodeListLocalDaemon = NodeListDaemon {nodeListDaemonAddr = show $ mapAddrSet NetworkNameAddr localDaemon},
             nodeListTarget = NodeListDaemon {nodeListDaemonAddr = show target},
             nodeListPeers = map daemonToNodeListPeer list
           }
@@ -208,20 +209,19 @@ connectNode ::
     Member Fail r,
     Member (Peer chan) r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   ProcessTransport ->
-  Maybe NameAddr ->
+  AddrSet NameAddr ->
   Sem r ()
-connectNode self transport (Just addr) = do
-  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addr
+connectNode self transport addrSet = do
+  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addrSet
   ioToProc transport $ do
-    routerAddr <- exchangeSelves self Nothing
+    routerAddr <- exchangeSelves self emptyAddrSet
     procConnChan <- makeBidirectionalChan
-    let nodeAddr = singleAddrSet $ NetworkNameAddr routerAddr
-    Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- superviseNode nodeAddr (Pipe transport) procConnChan
-    _ <- makeR2ConnectedNode addr nodeAddr routerOutboundChan
+    let nodeAddrSet = mapAddrSet NetworkNameAddr routerAddr
+    Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- superviseNode nodeAddrSet (Pipe transport) procConnChan
+    _ <- makeR2ConnectedNode addrSet nodeAddrSet routerOutboundChan
     lenDecodeInput $ lenPrefixOutput $ chanToIO procConnChan
-connectNode _ _ Nothing = fail "node without addr unsupported"
 
 connectTransport ::
   ( Members (Stream 'ProcStream) r,
@@ -267,24 +267,25 @@ serveTransport ::
     Member Resource r,
     Member Fail r
   ) =>
-  NameAddr ->
-  Maybe LabelAddr ->
+  AddrSet NameAddr ->
+  AddrSet LabelAddr ->
   ProcessTransport ->
   Sem r ()
-serveTransport self mAddr transport = do
-  let serviceName = case mAddr of
-        Just addr -> labelAddr addr
-        Nothing -> case transport of
-          Stdio -> "stdio"
-          Process cmd -> head $ words cmd
-  let serviceAddr = NameTagAddr $ TagAddr "service" serviceName
+serveTransport self nameSet transport = do
+  let serviceNames =
+        if null nameSet
+          then case transport of
+            Stdio -> singleAddrSet "stdio"
+            Process cmd -> singleAddrSet $ head $ words cmd
+          else mapAddrSet labelAddr nameSet
+  let serviceAddrs = mapAddrSet (NameTagAddr . TagAddr "service") serviceNames
   serviceChan <- makeBidirectionalChan
-  _ <- superviseNode (singleAddrSet $ NetworkNameAddr $ serviceAddr) (Pipe transport) serviceChan
-  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport serviceAddr
-  scoped @_ @(Storage _) serviceAddr $
-    runOverlay serviceAddr do
+  _ <- superviseNode (mapAddrSet NetworkNameAddr serviceAddrs) (Pipe transport) serviceChan
+  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport serviceAddrs
+  scoped @_ @(Storage _) serviceAddrs $
+    runOverlay serviceAddrs do
       selfChan <- makeBidirectionalChan
-      _ <- superviseNode (singleAddrSet $ NetworkNameAddr self) (Pipe transport) selfChan
+      _ <- superviseNode (mapAddrSet NetworkNameAddr self) (Pipe transport) selfChan
       async_ $ subscribeLoop $ \case
         ConnFullyInitialized Connection {connHighLevelChan = HighLevel highLevelChan} ->
           async_ $ ioToChan @_ @ByteString highLevelChan $ handle (serviceMsgHandler transport)
@@ -308,14 +309,14 @@ handleAction ::
     Member (Events (Event chan)) r,
     Member (Reader LocalDaemon) r
   ) =>
-  NameAddr ->
+  AddrSet NameAddr ->
   Connection chan ->
   Action ->
   Sem r ()
 handleAction _ targetConn Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage (listNodes $ connAddrSet targetConn)
-handleAction self _ (Connect transport maybeAddress) = connectNode self transport maybeAddress
+handleAction self _ (Connect transport addrSet) = connectNode self transport addrSet
 handleAction _ _ (Open transport) = connectTransport transport
-handleAction self _ (Serve mAddr transport) = serveTransport self mAddr transport
+handleAction self _ (Serve addrSet transport) = serveTransport self addrSet transport
 
 meetServerAssignSelf ::
   ( Members (Stream 'ServerStream) r,
@@ -323,13 +324,14 @@ meetServerAssignSelf ::
     Member Fail r,
     Member (Output Log) r
   ) =>
-  Maybe NameAddr ->
-  Sem r (NameAddr, LocalDaemon)
-meetServerAssignSelf mSelf = do
+  AddrSet NameAddr ->
+  Sem r (AddrSet NameAddr, LocalDaemon)
+meetServerAssignSelf selfAddrSet = do
   server <- LocalDaemon . unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
-  me <- case mSelf of
-    Just self -> pure self
-    Nothing -> childAddr "child"
+  me <-
+    if null selfAddrSet
+      then singleAddrSet <$> childAddr "child"
+      else pure selfAddrSet
   tag @'ServerStream @ByteOutputWithEOF $ output (Just $ encodeStrict $ Self me)
   output $ LogMe me
   output $ LogLocalDaemon server
@@ -351,19 +353,19 @@ r2c ::
     Member (EventConsumer (Event chan)) r,
     Member (Events (Event chan)) r
   ) =>
-  Maybe NameAddr ->
+  AddrSet NameAddr ->
   Command ->
   Sem r ()
-r2c mSelf (Command targetAddr action) = do
+r2c selfAddrs (Command targetAddr action) = do
   serverChan <- makeBidirectionalChan
   async_ $ tagStream @'ServerStream $ lenDecodeInput . lenPrefixOutput $ chanToIO serverChan
-  (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf mSelf
+  (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf selfAddrs
   let serverAddr = unLocalDaemon server
-  let targetNetworkAddr = targetToNetworkAddr serverAddr targetAddr
+  let targetNetworkAddrs = mapAddrSet (`targetToNetworkAddr` targetAddr) serverAddr
   scoped @_ @(Storage _) me $ runOverlay me $ do
-    output $ LogAction targetNetworkAddr action
-    _ <- superviseNode (singleAddrSet $ NetworkNameAddr serverAddr) Socket serverChan
-    mTargetConn <- open (singleAddrSet targetNetworkAddr)
+    output $ LogAction targetNetworkAddrs action
+    _ <- superviseNode (mapAddrSet NetworkNameAddr serverAddr) Socket serverChan
+    mTargetConn <- open targetNetworkAddrs
     case mTargetConn of
       Just targetConn@Connection {connHighLevelChan = unHighLevel -> targetChan} ->
         streamToChan @'ServerStream targetChan do
@@ -375,11 +377,11 @@ tagStream =
   tag @stream @ByteOutputWithEOF
     . tag @stream @ByteInputWithEOF
 
-r2cIO :: Handle -> Verbosity -> Maybe NameAddr -> FilePath -> Command -> IO ()
-r2cIO traceHandle verbosity mSelf socketPath command = do
+r2cIO :: Handle -> Verbosity -> AddrSet NameAddr -> FilePath -> Command -> IO ()
+r2cIO traceHandle verbosity selfAddrs socketPath command = do
   withR2Socket \s -> do
     IO.connect s (IO.SockAddrUnix socketPath)
-    run verbosity s $ r2c mSelf command
+    run verbosity s $ r2c selfAddrs command
   where
     outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
     outputToCLI = runOutputSem (embed . putStrLn)

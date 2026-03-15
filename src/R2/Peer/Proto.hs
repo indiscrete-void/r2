@@ -42,7 +42,7 @@ instance FromJSON Raw where
   parseJSON (Value.String txt) = return $ Raw $ BC.pack $ Text.unpack txt
   parseJSON _ = fail "Expected a string value"
 
-newtype Self = Self {unSelf :: NameAddr}
+newtype Self = Self {unSelf :: AddrSet NameAddr}
   deriving stock (Eq, Show, Generic)
 
 $(deriveJSON (aesonRemovePrefix "un") ''Self)
@@ -56,7 +56,7 @@ data R2Message msg where
 $(deriveJSON aesonOptions ''R2Message)
 
 data ClientToDaemonMessage where
-  ReqConnectNode :: ProcessTransport -> NameAddr -> ClientToDaemonMessage
+  ReqConnectNode :: ProcessTransport -> AddrSet NameAddr -> ClientToDaemonMessage
   ReqTunnelProcess :: ClientToDaemonMessage
   ReqListNodes :: ClientToDaemonMessage
   deriving stock (Eq, Show, Generic)

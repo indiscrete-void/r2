@@ -24,6 +24,9 @@ module R2
     netAddrEnd,
     bestAddrSetName,
     netAddrToList,
+    mapAddrSet,
+    addrSetUnions,
+    addrSetFromList,
   )
 where
 
@@ -159,14 +162,21 @@ netAddrToList (NetworkRoutedAddr (RoutedAddr a b)) = netAddrToList a <> netAddrT
 
 newtype AddrSet addr = AddrSet {unAddrSet :: Set addr}
   deriving stock (Ord, Eq, Generic)
+  deriving (Foldable) via Set
 
 type NetworkAddrSet = AddrSet NetworkAddr
 
-instance Show NetworkAddrSet where
-  show (AddrSet set) = printf "(%s)" $ unwords $ map show $ Set.toList set
-
-instance Semigroup NetworkAddrSet where
+instance (Ord addr) => Semigroup (AddrSet addr) where
   (AddrSet a) <> (AddrSet b) = AddrSet (a <> b)
+
+mapAddrSet :: (Ord b) => (a -> b) -> AddrSet a -> AddrSet b
+mapAddrSet f = AddrSet . Set.map f . unAddrSet
+
+addrSetFromList :: (Ord addr) => [addr] -> AddrSet addr
+addrSetFromList = AddrSet . Set.fromList
+
+instance (Show addr) => Show (AddrSet addr) where
+  show (AddrSet set) = printf "(%s)" $ unwords $ map show $ Set.toList set
 
 addrSetOptions :: Options
 addrSetOptions = aesonRemovePrefix "un"
@@ -190,11 +200,14 @@ bestAddrSetRepresentative = Set.lookupMin . unAddrSet
 bestAddrSetName :: NetworkAddrSet -> Maybe NameAddr
 bestAddrSetName = fmap netAddrEnd . bestAddrSetRepresentative
 
-addrSetsReferToSameNode :: NetworkAddrSet -> NetworkAddrSet -> Bool
+addrSetsReferToSameNode :: (Ord addr) => AddrSet addr -> AddrSet addr -> Bool
 addrSetsReferToSameNode (AddrSet a) (AddrSet b) = not $ Set.null $ Set.intersection a b
 
 routedAddrSet :: NameAddr -> NetworkAddrSet -> NetworkAddrSet
 routedAddrSet addr (AddrSet set) = AddrSet $ Set.map (/> NetworkNameAddr addr) set
+
+addrSetUnions :: (Ord addr) => AddrSet (AddrSet addr) -> AddrSet addr
+addrSetUnions = AddrSet . Set.unions . unAddrSet . mapAddrSet unAddrSet
 
 instance Uniform LabelAddr where
   uniformM g = LabelAddr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g

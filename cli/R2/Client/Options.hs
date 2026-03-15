@@ -2,6 +2,7 @@ module R2.Client.Options (Options (..), ProcessTransport (..), parse) where
 
 import Data.Maybe
 import Options.Applicative
+import R2
 import R2.Client
 import R2.Options
 import R2.Peer
@@ -47,10 +48,10 @@ lsOpts :: Parser Command
 lsOpts = Command <$> targetOpt <*> pure Ls
 
 connectOpts :: Parser Command
-connectOpts = Command <$> targetOpt <*> (Connect <$> argument processTransport (metavar "TRANSPORT") <*> optional (option nameAddrP $ long "node" <> short 'n'))
+connectOpts = Command <$> targetOpt <*> (Connect <$> argument processTransport (metavar "TRANSPORT") <*> (addrSetFromList <$> many (option nameAddrP $ long "node" <> short 'n')))
 
 openOpts :: Parser Command
 openOpts = Command <$> targetArg <*> (Open <$> argument processTransport (metavar "TRANSPORT"))
 
 serveOpts :: Parser Command
-serveOpts = Command <$> targetOpt <*> (Serve <$> optional (option labelAddrP $ long "name" <> short 'n') <*> argument processTransport (metavar "TRANSPORT"))
+serveOpts = Command <$> targetOpt <*> ((Serve . addrSetFromList <$> many (option labelAddrP $ long "name" <> short 'n')) <*> argument processTransport (metavar "TRANSPORT"))
