@@ -145,6 +145,7 @@ interlayConnAddCleanup addrSet Bidirectional {..} = do
         storageRmNode addrSet
         publish (ConnDestroyed addrSet)
         output (LogDisconnected addrSet)
+        busPutData outboundChan Nothing
   newChan <- makeBidirectionalChan
   async_
     $ ( (inputToBusChan inboundChan . runInputSem (input >>= \mi -> when (isNothing mi) cleanup >> pure mi))
