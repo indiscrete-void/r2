@@ -107,7 +107,13 @@ randomToIO m = do
     go stdGen = interpret \case
       UniformlyRandom -> embed $ uniformM stdGen
 
-childAddr :: (Member Random r) => String -> Sem r NameAddr
-childAddr tag = do
+data WorkerPurpose = LinkWorker | GeneralWorker
+
+workerPurposeToTag :: WorkerPurpose -> String
+workerPurposeToTag LinkWorker = "link"
+workerPurposeToTag GeneralWorker = "worker"
+
+workerAddr :: (Member Random r) => WorkerPurpose -> Sem r NameAddr
+workerAddr (workerPurposeToTag -> tag) = do
   addr <- labelAddr <$> uniformlyRandom
   pure $ NameTagAddr (TagAddr tag addr)

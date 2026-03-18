@@ -149,7 +149,7 @@ mkActor serveMap target action m = do
   (stdioLinkA, stdioLinkB) <- makeLink
   (msgLinkA, msgLinkB) <- makeLink
 
-  randAddress <- childAddr "child"
+  randAddress <- workerAddr GeneralWorker
   let randNodeAddrSet = singleAddrSet randAddress
 
   let firstNodeId = netAddrHead target

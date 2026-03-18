@@ -324,18 +324,23 @@ meetServerAssignSelf ::
     Member Fail r,
     Member (Output Log) r
   ) =>
+  WorkerPurpose ->
   AddrSet NameAddr ->
   Sem r (AddrSet NameAddr, LocalDaemon)
-meetServerAssignSelf selfAddrSet = do
+meetServerAssignSelf workerPurpose selfAddrSet = do
   server <- LocalDaemon . unSelf <$> (tag @'ServerStream @ByteInputWithEOF $ decodeInput inputOrFail)
   me <-
     if null selfAddrSet
-      then singleAddrSet <$> childAddr "child"
+      then singleAddrSet <$> workerAddr workerPurpose
       else pure selfAddrSet
   tag @'ServerStream @ByteOutputWithEOF $ output (Just $ encodeStrict $ Self me)
   output $ LogMe me
   output $ LogLocalDaemon server
   pure (me, server)
+
+actionToWorkerPurpose :: Action -> WorkerPurpose
+actionToWorkerPurpose (Connect {}) = LinkWorker
+actionToWorkerPurpose _ = GeneralWorker
 
 r2c ::
   ( Members (Stream 'ProcStream) r,
@@ -359,7 +364,7 @@ r2c ::
 r2c selfAddrs (Command targetAddr action) = do
   serverChan <- makeBidirectionalChan
   async_ $ tagStream @'ServerStream $ lenDecodeInput . lenPrefixOutput $ chanToIO serverChan
-  (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf selfAddrs
+  (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf (actionToWorkerPurpose action) selfAddrs
   let serverAddr = unLocalDaemon server
   let targetNetworkAddrs = mapAddrSet (`targetToNetworkAddr` targetAddr) serverAddr
   scoped @_ @(Storage _) me $ runOverlay me $ do
