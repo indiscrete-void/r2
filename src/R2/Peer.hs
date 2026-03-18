@@ -1,6 +1,7 @@
 module R2.Peer
   ( Event (..),
     resolveSocketPath,
+    r2SocketEnv,
     r2Socket,
     withR2Socket,
     bufferSize,
@@ -72,10 +73,13 @@ defaultUserR2SocketPath = go <$> getEffectiveUserID
 r2Socket :: IO Socket
 r2Socket = socket AF_UNIX Socket.Stream Socket.defaultProtocol
 
+r2SocketEnv :: String
+r2SocketEnv = "R2_SOCKET"
+
 resolveSocketPath :: Maybe FilePath -> IO FilePath
 resolveSocketPath customPath = do
   defaultPath <- defaultUserR2SocketPath
-  extraCustomPath <- lookupEnv "R2_SOCKET"
+  extraCustomPath <- lookupEnv r2SocketEnv
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
   pure path
 

@@ -8,6 +8,7 @@ import R2
 import R2.Manager
 import R2.Options
 import R2.Peer
+import System.Environment
 import Toml (TomlCodec)
 import Toml qualified
 import Toml.Codec ((.=))
@@ -37,12 +38,18 @@ data TOMLDaemonOptions = TOMLDaemonOptions
 data TOMLDaemonDescription = TOMLDaemonDescription
   { tomlDaemonSelf :: TOMLDaemonOptions,
     tomlDaemonLinks :: [TOMLDaemonConnection],
-    tomlDaemonServices :: [TOMLDaemonConnection]
+    tomlDaemonServices :: [TOMLDaemonConnection],
+    tomlDaemonTasks :: [TOMLDaemonTask]
   }
 
 data TOMLDaemonConnection = TOMLDaemonConnection
   { tomlDaemonConnProcess :: String,
     tomlDaemonConnAddress :: AddrSet LabelAddr
+  }
+
+data TOMLDaemonTask = TOMLDaemonTask
+  { tomlDaemonTaskTriggers :: AddrSet LabelAddr,
+    tomlDaemonTaskCmd :: String
   }
 
 _LabelAddr :: Toml.BiMap Toml.TomlBiMapError LabelAddr Toml.AnyValue
@@ -69,12 +76,19 @@ connCodec =
     <$> Toml.string "cmd" .= tomlDaemonConnProcess
     <*> tomlOptionalAddrSet "addr" .= tomlDaemonConnAddress
 
+taskCodec :: TomlCodec TOMLDaemonTask
+taskCodec =
+  TOMLDaemonTask
+    <$> tomlAddrSet "addr" .= tomlDaemonTaskTriggers
+    <*> Toml.string "cmd" .= tomlDaemonTaskCmd
+
 descriptionCodec :: TomlCodec TOMLDaemonDescription
 descriptionCodec =
   TOMLDaemonDescription
     <$> Toml.table selfCodec "self" .= tomlDaemonSelf
     <*> Toml.list connCodec "conn" .= tomlDaemonLinks
     <*> Toml.list connCodec "serve" .= tomlDaemonServices
+    <*> Toml.list taskCodec "task" .= tomlDaemonTasks
 
 resolveTOMLConnections :: Verbosity -> FilePath -> [TOMLDaemonConnection] -> [DaemonConnection]
 resolveTOMLConnections verbosity socketPath =
@@ -91,8 +105,20 @@ resolveTOMLConnections verbosity socketPath =
           }
     )
 
+resolveTOMLTasks :: DaemonTaskEnv -> [TOMLDaemonTask] -> [DaemonTask]
+resolveTOMLTasks env =
+  map
+    ( \TOMLDaemonTask {..} ->
+        DaemonTask
+          { daemonTaskTriggers = mapAddrSet NameLabelAddr tomlDaemonTaskTriggers,
+            daemonTaskProcess = mkTaskCmdResolver tomlDaemonTaskCmd,
+            daemonTaskEnv = env
+          }
+    )
+
 parse :: IO DaemonDescription
 parse = do
+  env <- getEnvironment
   Options verbosity configPath <- execParser parserInfo
   tomlRes <- Toml.decodeFileEither descriptionCodec configPath
   case tomlRes of
@@ -101,11 +127,13 @@ parse = do
       socketPath <- resolveSocketPath tomlDaemonSocketPath
       let links = resolveTOMLConnections verbosity socketPath tomlDaemonLinks
       let services = resolveTOMLConnections verbosity socketPath tomlDaemonServices
+      let tasks = resolveTOMLTasks env tomlDaemonTasks
       pure $
         DaemonDescription
           { daemonAddress = tomlDaemonAddress,
             daemonSocketPath = socketPath,
             daemonLinks = links,
             daemonServices = services,
+            daemonTasks = tasks,
             daemonVerbosity = verbosity
           }

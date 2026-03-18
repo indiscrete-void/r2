@@ -125,6 +125,13 @@ r2 -s ~/.local/r2/alice.sock -t bob ls
 
 ## Advanced Usage
 
+### Tasks
+```toml
+[[task]]
+addr = "someone"
+cmd = "r2 open %addr/service:info - > /tmp/info/%addr"
+```
+
 ### Multi-Transport Connectivity
 ```bash
 # Connect via UDP

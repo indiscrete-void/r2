@@ -2,20 +2,27 @@ module R2.Manager
   ( DaemonDescription (..),
     DaemonConnectionCmdResolver (..),
     DaemonConnection (..),
+    DaemonTaskEnv,
+    DaemonTaskCmdResolver (..),
+    DaemonTask (..),
     mkConnectionCmdResolver,
     runManagedDaemon,
     runManagedDaemonIO,
+    mkTaskCmdResolver,
   )
 where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad
+import Control.Monad.Extra (whenJust)
 import Data.List (isInfixOf)
 import Data.List.Extra (replace)
 import Data.Set qualified as Set
 import Data.Time.Units
 import Polysemy
 import Polysemy.Async
+import Polysemy.Conc.Effect.Events
+import Polysemy.Conc.Interpreter.Events
 import Polysemy.Extra.Async
 import Polysemy.Extra.Trace (traceToStderrBuffered)
 import Polysemy.Fail
@@ -28,7 +35,8 @@ import R2
 import R2.Client
 import R2.Daemon
 import R2.Options
-import R2.Peer (bufferSize)
+import R2.Peer (Event (..), Peer, bufferSize, r2SocketEnv, runOverlay)
+import R2.Peer.Conn
 import R2.Peer.Proto
 import R2.Random
 import System.Exit (ExitCode (..))
@@ -92,10 +100,38 @@ data DaemonConnection = DaemonConnection
     daemonConnAddress :: AddrSet LabelAddr
   }
 
+newtype DaemonTaskCmdResolver = DaemonTaskCmdResolver (NameAddr -> String)
+
+type DaemonTaskEnv = [(String, FilePath)]
+
+data DaemonTask = DaemonTask
+  { daemonTaskTriggers :: AddrSet NameAddr,
+    daemonTaskProcess :: DaemonTaskCmdResolver,
+    daemonTaskEnv :: DaemonTaskEnv
+  }
+
+findAddrMatch :: AddrSet NameAddr -> AddrSet NetworkAddr -> Maybe NameAddr
+findAddrMatch taskTriggers testSet = do
+  name <- bestAddrSetName testSet
+  if name `elem` taskTriggers
+    then Just name
+    else Nothing
+
+addrCmdPattern :: String
+addrCmdPattern = "%addr"
+
+-- mkTaskCmdResolver cmd creates a
+-- DaemonTaskCmdResolver :: name@NameAddr -> String
+-- which replaces "%addr" with name in cmd
+mkTaskCmdResolver :: String -> DaemonTaskCmdResolver
+mkTaskCmdResolver daemonTaskCmd = DaemonTaskCmdResolver \name ->
+  replace addrCmdPattern (show name) daemonTaskCmd
+
 data DaemonDescription = DaemonDescription
   { daemonAddress :: AddrSet LabelAddr,
     daemonSocketPath :: FilePath,
     daemonLinks :: [DaemonConnection],
+    daemonTasks :: [DaemonTask],
     daemonServices :: [DaemonConnection],
     daemonVerbosity :: Verbosity
   }
@@ -106,17 +142,17 @@ connRestartDelay = toMicroseconds (2718 :: Millisecond)
 stdoutShell :: String -> CreateProcess
 stdoutShell cmd = (shell cmd) {std_err = UseHandle stdout}
 
-callCommandNoCtrlC :: (Member (Scoped CreateProcess Sem.Process) r, Member Fail r) => String -> Sem r ()
-callCommandNoCtrlC cmd = execIO (stdoutShell cmd) do
+callCommandNoCtrlC :: (Member (Scoped CreateProcess Sem.Process) r, Member Fail r) => CreateProcess -> Sem r ()
+callCommandNoCtrlC processSpec = execIO processSpec do
   exitCode <- wait
   case exitCode of
     ExitSuccess -> return ()
-    ExitFailure r -> fail $ printf "%s: (exit %d)" cmd r
+    ExitFailure r -> fail $ printf "%s: (exit %d)" (show $ cmdspec processSpec) r
 
 runDaemonConn :: (Member (Scoped CreateProcess Sem.Process) r, Member Fail r) => ConnAction -> DaemonConnection -> Sem r ()
 runDaemonConn action DaemonConnection {daemonConnProcess = DaemonConnectionCmdResolver resolve} =
   let resolvedCmd = resolve action
-   in callCommandNoCtrlC resolvedCmd
+   in callCommandNoCtrlC (stdoutShell resolvedCmd)
 
 displayConnAddr :: (Show addr) => AddrSet addr -> String
 displayConnAddr connAddrSet = if null connAddrSet then "" else printf " %s" (show connAddrSet)
@@ -144,12 +180,44 @@ runDaemonService conn@(DaemonConnection (DaemonConnectionCmdResolver resolveLink
   trace $ printf "starting service %s%s" (resolveLinkCmd ConnServe) (displayConnAddr connAddrSet)
   runDaemonConn ConnServe conn
 
+runDaemonTask :: (Member (Scoped CreateProcess Sem.Process) r, Member Fail r) => DaemonTaskEnv -> FilePath -> String -> Sem r ()
+runDaemonTask taskEnv daemonSocketPath cmd =
+  let socketEnv = [(r2SocketEnv, daemonSocketPath)]
+      spec = (stdoutShell cmd) {env = Just $ socketEnv <> taskEnv}
+   in callCommandNoCtrlC spec
+
+whenConnects :: (Member (EventConsumer (Event chan)) r) => AddrSet NameAddr -> (NameAddr -> Sem r ()) -> Sem r a
+whenConnects triggers m =
+  subscribe $
+    forever $
+      consume >>= \case
+        ConnFullyInitialized (connAddrSet -> addrSet) -> do
+          whenJust (findAddrMatch triggers addrSet) (raise . m)
+        _ -> pure ()
+
+runManagedDaemonTask :: (Members (ManagerEffects chan s) r) => FilePath -> DaemonTask -> Sem r ()
+runManagedDaemonTask daemonSocketPath DaemonTask {daemonTaskTriggers, daemonTaskProcess = DaemonTaskCmdResolver resolveTask, daemonTaskEnv} =
+  whenConnects daemonTaskTriggers go
+  where
+    go triggerAddr = do
+      let resolvedCmd = resolveTask triggerAddr
+      trace $ printf "starting task `%s`" resolvedCmd
+      result <- runFail $ runDaemonTask daemonTaskEnv daemonSocketPath resolvedCmd
+      let displayCause :: String = case result of
+            Right () -> "exited"
+            Left err -> printf "exited unexpectedly: %s" (show err)
+      trace $ printf "task '%s' %s" resolvedCmd displayCause
+
 runManagedDaemon :: forall chan s r. (Members (ManagerEffects chan s) r) => DaemonDescription -> Sem r ()
 runManagedDaemon DaemonDescription {..} = do
-  daemon <- async $ r2d $ mapAddrSet NameLabelAddr daemonAddress
-  forM_ daemonLinks (async . runManagedDaemonConn)
-  forM_ daemonServices (async . runDaemonService)
-  await_ daemon
+  let self = mapAddrSet NameLabelAddr daemonAddress
+  runOverlay self do
+    tasks <-
+      forM r2dTasks async
+        <> forM daemonServices (async . runDaemonService)
+        <> forM daemonTasks (async . runManagedDaemonTask daemonSocketPath)
+        <> forM daemonLinks (async . runManagedDaemonConn)
+    forM_ tasks await
 
 runManagedDaemonIO :: DaemonDescription -> IO ()
 runManagedDaemonIO desc@DaemonDescription {daemonVerbosity, daemonSocketPath} = run $ runManagedDaemon desc

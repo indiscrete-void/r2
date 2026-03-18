@@ -1,6 +1,5 @@
-module R2.Daemon (DaemonEffects, processClients, logToTrace, r2d, r2dToIO) where
+module R2.Daemon (DaemonEffects, processClients, logToTrace, r2dTasks, r2d, r2dToIO) where
 
-import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar)
 import Control.Concurrent.STM.TBMQueue (TBMQueue)
 import Control.Exception (IOException, finally)
 import Control.Monad
@@ -85,10 +84,15 @@ type DaemonEffects chan sock =
      Resource
    ]
 
+r2dTasks ::
+  ( Members (DaemonEffects chan sock) r,
+    Member (Peer chan) r
+  ) =>
+  [Sem r ()]
+r2dTasks = [processClients, acceptSockets]
+
 r2d :: (Members (DaemonEffects chan sock) r) => AddrSet NameAddr -> Sem r ()
-r2d self = runOverlay self do
-  async_ processClients
-  acceptSockets
+r2d self = runOverlay self $ sequenceConcurrently_ r2dTasks
 
 type DaemonInterpreterEffects =
   Append
