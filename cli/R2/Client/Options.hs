@@ -1,5 +1,6 @@
 module R2.Client.Options (Options (..), ProcessTransport (..), parse) where
 
+import Control.Applicative (optional)
 import Data.Maybe
 import Options.Applicative
 import R2
@@ -35,6 +36,9 @@ targetOpt = option targetNetAddrP (long "target" <> short 't' <> value TargetAdd
 targetArg :: Parser TargetAddr
 targetArg = argument targetNetAddrP (metavar "TARGET")
 
+transportArg :: Parser ProcessTransport
+transportArg = fromMaybe Stdio <$> optional (argument processTransport (metavar "TRANSPORT"))
+
 commandOpts :: Parser Command
 commandOpts =
   hsubparser
@@ -48,10 +52,10 @@ lsOpts :: Parser Command
 lsOpts = Command <$> targetOpt <*> pure Ls
 
 connectOpts :: Parser Command
-connectOpts = Command <$> targetOpt <*> (Connect <$> argument processTransport (metavar "TRANSPORT") <*> (addrSetFromList <$> many (option nameAddrP $ long "node" <> short 'n')))
+connectOpts = Command <$> targetOpt <*> (Connect <$> transportArg <*> (addrSetFromList <$> many (option nameAddrP $ long "node" <> short 'n')))
 
 openOpts :: Parser Command
-openOpts = Command <$> targetArg <*> (Open <$> argument processTransport (metavar "TRANSPORT"))
+openOpts = Command <$> targetArg <*> (Open <$> transportArg)
 
 serveOpts :: Parser Command
-serveOpts = Command <$> targetOpt <*> ((Serve . addrSetFromList <$> many (option labelAddrP $ long "name" <> short 'n')) <*> argument processTransport (metavar "TRANSPORT"))
+serveOpts = Command <$> targetOpt <*> ((Serve . addrSetFromList <$> many (option labelAddrP $ long "name" <> short 'n')) <*> transportArg)
