@@ -214,13 +214,13 @@ connectNode ::
   AddrSet NameAddr ->
   Sem r ()
 connectNode self transport addrSet = do
-  tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addrSet
   ioToProc transport $ do
     routerAddr <- exchangeSelves self emptyAddrSet
     procConnChan <- makeBidirectionalChan
     let nodeAddrSet = mapAddrSet NetworkNameAddr routerAddr
     Connection {connHighLevelChan = fmap (Outbound . outboundChan) -> routerOutboundChan} <- superviseNode nodeAddrSet (Pipe transport) procConnChan
     _ <- makeR2ConnectedNode addrSet nodeAddrSet routerOutboundChan
+    tag @'ServerStream $ output $ Just $ encodeStrict $ ReqConnectNode transport addrSet
     lenDecodeInput $ lenPrefixOutput $ chanToIO procConnChan
 
 connectTransport ::
