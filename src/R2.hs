@@ -34,10 +34,6 @@ import Control.Applicative
 import Data.Aeson
 import Data.Aeson qualified as Aeson
 import Data.Aeson.TH
-import Data.ByteString.Base58
-import Data.ByteString.Base58.Internal
-import Data.ByteString.Char8 qualified as BC
-import Data.DoubleWord
 import Data.List.Extra
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -45,10 +41,8 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.String (IsString (..))
 import Data.Text qualified as Text
-import Data.Word
 import GHC.Generics
 import Serial.Aeson.Options
-import System.Random.Stateful
 import Text.Printf (printf)
 
 newtype LabelAddr = LabelAddr {labelAddr :: String}
@@ -208,21 +202,6 @@ routedAddrSet addr (AddrSet set) = AddrSet $ Set.map (/> NetworkNameAddr addr) s
 
 addrSetUnions :: (Ord addr) => AddrSet (AddrSet addr) -> AddrSet addr
 addrSetUnions = AddrSet . Set.unions . unAddrSet . mapAddrSet unAddrSet
-
-instance Uniform LabelAddr where
-  uniformM g = LabelAddr . BC.unpack . encodeBase58 bitcoinAlphabet . integerToBS . toInteger <$> uniformM @Word256 g
-
-instance Uniform Word128 where
-  uniformM g = do
-    l <- uniformM @Word64 g
-    r <- uniformM @Word64 g
-    pure $ Word128 l r
-
-instance Uniform Word256 where
-  uniformM g = do
-    l <- uniformM @Word128 g
-    r <- uniformM @Word128 g
-    pure $ Word256 l r
 
 data RouteTo msg = RouteTo
   { routeToNode :: NameAddr,

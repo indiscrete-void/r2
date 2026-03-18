@@ -1,5 +1,5 @@
 name: r2
-version: 0.8.1.0
+version: 0.9.0.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
 license: BSD3
@@ -74,8 +74,6 @@ dependencies:
   - monad-loops
   - aeson
   - base64-bytestring
-  - base58-bytestring
-  - data-dword
   - time-units
   - tomland
 
