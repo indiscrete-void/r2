@@ -1,7 +1,5 @@
 module R2.Peer
   ( Event (..),
-    resolveSocketPath,
-    r2SocketEnv,
     r2Socket,
     withR2Socket,
     bufferSize,
@@ -52,9 +50,6 @@ import R2.Peer.Proto
 import R2.Peer.Routing
 import R2.Peer.Storage
 import R2.Security qualified as Security
-import System.Environment
-import System.Posix.User
-import Text.Printf (printf)
 
 bufferSize :: Int
 bufferSize = 8192
@@ -62,27 +57,8 @@ bufferSize = 8192
 queueSize :: Int
 queueSize = 16
 
-defaultR2SocketPath :: FilePath
-defaultR2SocketPath = "/run/r2.sock"
-
-defaultUserR2SocketPath :: IO FilePath
-defaultUserR2SocketPath = go <$> getEffectiveUserID
-  where
-    go 0 = defaultR2SocketPath
-    go n = concat ["/run/user/", show n, "/r2.sock"]
-
 r2Socket :: IO Socket
 r2Socket = socket AF_UNIX Socket.Stream Socket.defaultProtocol
-
-r2SocketEnv :: String
-r2SocketEnv = "R2_SOCKET"
-
-resolveSocketPath :: Maybe FilePath -> IO FilePath
-resolveSocketPath customPath = do
-  defaultPath <- defaultUserR2SocketPath
-  extraCustomPath <- lookupEnv r2SocketEnv
-  let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
-  pure path
 
 withR2Socket :: (Socket -> IO a) -> IO a
 withR2Socket = IO.bracket r2Socket Socket.close

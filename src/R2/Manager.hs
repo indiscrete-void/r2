@@ -23,7 +23,6 @@ import Polysemy
 import Polysemy.Async
 import Polysemy.Conc.Effect.Events
 import Polysemy.Conc.Interpreter.Events
-import Polysemy.Extra.Async
 import Polysemy.Extra.Trace (traceToStderrBuffered)
 import Polysemy.Fail
 import Polysemy.Internal.Kind (Append)
@@ -32,11 +31,11 @@ import Polysemy.Process qualified as Sem
 import Polysemy.Scoped
 import Polysemy.Trace
 import R2
-import R2.Client
 import R2.Daemon
 import R2.Options
-import R2.Peer (Event (..), Peer, bufferSize, r2SocketEnv, runOverlay)
+import R2.Peer (bufferSize, runOverlay)
 import R2.Peer.Conn
+import R2.Peer.FilePaths
 import R2.Peer.Proto
 import R2.Random
 import System.Exit (ExitCode (..))

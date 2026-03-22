@@ -1,5 +1,5 @@
 name: r2
-version: 0.10.0.1
+version: 0.11.0.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
 license: BSD3
@@ -61,7 +61,7 @@ dependencies:
   - async
   - containers
   - optparse-applicative
-  - unix
+  - directory
   - network
   - polysemy
   - polysemy-plugin
@@ -87,6 +87,7 @@ library:
     - R2.Options
     - R2.Socket
     - R2.Peer
+    - R2.Peer.FilePaths
     - R2.Peer.Proto
     - R2.Peer.Log
     - R2.Peer.Conn

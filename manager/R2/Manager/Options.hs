@@ -7,7 +7,7 @@ import Options.Applicative
 import R2
 import R2.Manager
 import R2.Options
-import R2.Peer
+import R2.Peer.FilePaths
 import System.Environment
 import Toml (TomlCodec)
 import Toml qualified

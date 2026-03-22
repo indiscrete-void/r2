@@ -2,7 +2,7 @@ import Debug.Trace qualified as Debug
 import R2 (emptyAddrSet)
 import R2.Client
 import R2.Client.Options
-import R2.Peer
+import R2.Peer.FilePaths
 import System.IO
 import Text.Printf
 

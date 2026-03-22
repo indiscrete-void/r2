@@ -1,7 +1,7 @@
 import R2
 import R2.Daemon
 import R2.Daemon.Options
-import R2.Peer
+import R2.Peer.FilePaths
 import Text.Printf
 
 main :: IO ()
