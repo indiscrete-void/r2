@@ -51,6 +51,7 @@ import R2.Peer.Log
 import R2.Peer.Proto
 import R2.Peer.Routing
 import R2.Peer.Storage
+import R2.Security qualified as Security
 import System.Environment
 import System.Posix.User
 import Text.Printf (printf)
@@ -120,9 +121,7 @@ exchangeSelves ::
 exchangeSelves self knownAddrs = runEncoding do
   output $ Just (Self self)
   (Self addrSet) <- inputOrFail
-  unless (null knownAddrs) $
-    unless (addrSetsReferToSameNode knownAddrs addrSet) $
-      fail (printf "address mismatch")
+  Security.checkPeerIdentityMatch addrSet knownAddrs
   pure addrSet
 
 interlayConnAddLogging ::

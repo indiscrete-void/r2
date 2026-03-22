@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           r2
-version:        0.9.0.0
+version:        0.10.0.1
 author:         indiscrete_void
 maintainer:     indiscrete.void@gmail.com
 license:        BSD3
@@ -37,6 +37,7 @@ library
       R2.Encoding
       R2.Encoding.LengthPrefix
       R2.Peer.Routing
+      R2.Security
       Paths_r2
   hs-source-dirs:
       src
@@ -76,7 +77,6 @@ library
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
@@ -138,7 +138,6 @@ executable r2
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
@@ -200,7 +199,6 @@ executable r2-simple-example
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
@@ -263,7 +261,6 @@ executable r2d
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
@@ -326,7 +323,6 @@ executable r2dm
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
@@ -389,7 +385,6 @@ test-suite tests
     , binary
     , bytestring
     , containers
-    , data-dword
     , extra
     , monad-loops
     , network
