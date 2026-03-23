@@ -31,7 +31,6 @@ createDirectory700IfMissing path = do
 defaultUserR2SocketPath :: IO FilePath
 defaultUserR2SocketPath = do
   stateDir <- getXdgDirectory XdgState "r2"
-  createDirectory700IfMissing stateDir
   pure $ stateDir <> "/" <> "r2.sock"
 
 resolveSocketPath :: Maybe FilePath -> IO FilePath
@@ -39,4 +38,5 @@ resolveSocketPath customPath = do
   defaultPath <- defaultUserR2SocketPath
   extraCustomPath <- lookupEnv r2SocketEnv
   let path = fromMaybe defaultPath (customPath <|> extraCustomPath)
+  when (path == defaultPath) $ createDirectory700IfMissing defaultPath
   pure path
