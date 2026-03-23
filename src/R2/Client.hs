@@ -1,19 +1,24 @@
 module R2.Client
   ( Log (..),
     TargetAddr (..),
-    Command (..),
-    Action (..),
+    OfflineAction (..),
+    OfflineCommand (..),
+    OnlineCommand (..),
+    OnlineAction (..),
     listNodes,
     connectNode,
     r2c,
     logToTrace,
     r2cIO,
     targetNetAddrP,
+    r2cOfflineIO,
+    Command (..),
   )
 where
 
 import Control.Exception (IOException)
 import Control.Monad
+import Crypto.Noise.DH.Curve25519 (Curve25519)
 import Data.ByteString (ByteString)
 import Data.Text qualified as Text
 import Network.Socket qualified as IO
@@ -44,6 +49,7 @@ import R2.Encoding.LengthPrefix
 import R2.Options
 import R2.Peer
 import R2.Peer.Conn
+import R2.Peer.Crypto (GenKey, KeyStore, genKey, genKeyToIO, keyStoreToIO, showPublicKey, storeKeyPair)
 import R2.Peer.Log qualified as Peer
 import R2.Peer.Proto
 import R2.Peer.Routing
@@ -63,7 +69,8 @@ data Log where
   LogLocalDaemon :: LocalDaemon -> Log
   LogInput :: ProcessTransport -> (Maybe ByteString) -> Log
   LogOutput :: ProcessTransport -> (Maybe ByteString) -> Log
-  LogAction :: NetworkAddrSet -> Action -> Log
+  LogAction :: NetworkAddrSet -> OnlineAction -> Log
+  LogSecretPath :: FilePath -> Log
 
 logToTrace :: (Member Trace r) => Verbosity -> InterpreterFor (Output Log) r
 logToTrace verbosity = runOutputSem \case
@@ -72,6 +79,7 @@ logToTrace verbosity = runOutputSem \case
   (LogInput transport bs) -> when (verbosity > 1) $ trace $ printf "<-%s: %s" (show transport) (show bs)
   (LogOutput transport bs) -> when (verbosity > 1) $ trace $ printf "->%s: %s" (show transport) (show bs)
   (LogAction addr action) -> when (verbosity > 0) $ trace $ printf "running %s on %s" (show action) (show addr)
+  (LogSecretPath path) -> trace $ printf "storing secret key in %s" path
 
 inToLog :: forall i r a. (Member (Output Log) r, Member (Input i) r) => (i -> Log) -> Sem r a -> Sem r a
 inToLog f = intercept @(Input i) \case
@@ -86,11 +94,15 @@ outToLog f = intercept @(Output o) \case
     output (f o)
     output o
 
-data Action
+data OnlineAction
   = Ls
   | Connect !ProcessTransport !(AddrSet NameAddr)
   | Open !ProcessTransport
   | Serve (AddrSet LabelAddr) !ProcessTransport
+  deriving stock (Show)
+
+data OfflineAction
+  = ActionGenKey
   deriving stock (Show)
 
 data TargetAddr = TargetAddrServer | TargetAddrNetwork NetworkAddr
@@ -106,10 +118,13 @@ targetToNetworkAddr server (TargetAddrNetwork target) =
         then target
         else NetworkNameAddr server /> target
 
-data Command = Command
-  { commandTarget :: TargetAddr,
-    commandAction :: Action
-  }
+newtype OfflineCommand = OfflineCommand {commandOfflineAction :: OfflineAction}
+
+data OnlineCommand = OnlineCommand {commandTarget :: TargetAddr, commandAction :: OnlineAction}
+
+data Command
+  = SomeCommandOnline OnlineCommand
+  | SomeCommandOffline OfflineCommand
 
 newtype NodeListDaemon = NodeListDaemon
   { nodeListDaemonAddr :: String
@@ -311,7 +326,7 @@ handleAction ::
   ) =>
   AddrSet NameAddr ->
   Connection chan ->
-  Action ->
+  OnlineAction ->
   Sem r ()
 handleAction _ targetConn Ls = tagStream @'ServerStream $ runEncoding @DaemonToClientMessage @ClientToDaemonMessage (listNodes $ connAddrSet targetConn)
 handleAction self _ (Connect transport addrSet) = connectNode self transport addrSet
@@ -338,9 +353,19 @@ meetServerAssignSelf workerPurpose selfAddrSet = do
   output $ LogLocalDaemon server
   pure (me, server)
 
-actionToWorkerPurpose :: Action -> WorkerPurpose
+actionToWorkerPurpose :: OnlineAction -> WorkerPurpose
 actionToWorkerPurpose (Connect {}) = LinkWorker
 actionToWorkerPurpose _ = GeneralWorker
+
+handleOfflineAction :: (Member GenKey r, Member (Output String) r, Member KeyStore r, Member (Output Log) r) => OfflineAction -> Sem r ()
+handleOfflineAction ActionGenKey = do
+  kp@(_, public) <- genKey @_ @Curve25519
+  path <- storeKeyPair kp
+  output $ LogSecretPath path
+  output $ show $ TagAddr x25519Tag (showPublicKey public)
+
+r2cOffline :: (Member (Output String) r, Member (Output Log) r, Member GenKey r, Member KeyStore r) => OfflineCommand -> Sem r ()
+r2cOffline (OfflineCommand action) = handleOfflineAction action
 
 r2c ::
   ( Members (Stream 'ProcStream) r,
@@ -359,9 +384,9 @@ r2c ::
     Member (Events (Event chan)) r
   ) =>
   AddrSet NameAddr ->
-  Command ->
+  OnlineCommand ->
   Sem r ()
-r2c selfAddrs (Command targetAddr action) = do
+r2c selfAddrs (OnlineCommand targetAddr action) = do
   serverChan <- makeBidirectionalChan
   async_ $ tagStream @'ServerStream $ lenDecodeInput . lenPrefixOutput $ chanToIO serverChan
   (me, server) <- streamToChan @'ServerStream serverChan $ meetServerAssignSelf (actionToWorkerPurpose action) selfAddrs
@@ -382,15 +407,15 @@ tagStream =
   tag @stream @ByteOutputWithEOF
     . tag @stream @ByteInputWithEOF
 
-r2cIO :: Handle -> Verbosity -> AddrSet NameAddr -> FilePath -> Command -> IO ()
+outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
+outputToCLI = runOutputSem (embed . putStrLn)
+
+r2cIO :: Handle -> Verbosity -> AddrSet NameAddr -> FilePath -> OnlineCommand -> IO ()
 r2cIO traceHandle verbosity selfAddrs socketPath command = do
   withR2Socket \s -> do
     IO.connect s (IO.SockAddrUnix socketPath)
     run verbosity s $ r2c selfAddrs command
   where
-    outputToCLI :: (Member (Embed IO) r) => InterpreterFor (Output String) r
-    outputToCLI = runOutputSem (embed . putStrLn)
-
     run verbosity s =
       runFinal
         . asyncToIOFinal
@@ -416,3 +441,15 @@ r2cIO traceHandle verbosity selfAddrs socketPath command = do
         . interpretBusTBM @ByteString queueSize
         . interpretEventsChan
         . randomToIO
+
+r2cOfflineIO :: OfflineCommand -> IO ()
+r2cOfflineIO = run . r2cOffline
+  where
+    run =
+      runFinal
+        . embedToFinal
+        . traceToStderrBuffered
+        . logToTrace 0
+        . outputToCLI
+        . genKeyToIO
+        . keyStoreToIO

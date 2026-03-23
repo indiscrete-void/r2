@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           r2
-version:        0.11.0.0
+version:        0.11.1.0
 author:         indiscrete_void
 maintainer:     indiscrete.void@gmail.com
 license:        BSD3
@@ -26,6 +26,7 @@ library
       R2.Peer.Log
       R2.Peer.Conn
       R2.Peer.Storage
+      R2.Peer.Crypto
       R2.Client
       R2.Daemon
       R2.Daemon.Handler
@@ -74,12 +75,16 @@ library
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative
@@ -135,12 +140,16 @@ executable r2
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative
@@ -196,12 +205,16 @@ executable r2-simple-example
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative
@@ -258,12 +271,16 @@ executable r2d
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative
@@ -320,12 +337,16 @@ executable r2dm
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative
@@ -382,12 +403,16 @@ test-suite tests
       aeson
     , async
     , base >=4.17.2.1 && <5
+    , base58-bytestring
     , base64-bytestring
     , binary
     , bytestring
+    , cacophony
     , containers
+    , crypton
     , directory
     , extra
+    , memory
     , monad-loops
     , network
     , optparse-applicative

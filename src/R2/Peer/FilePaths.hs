@@ -1,6 +1,8 @@
 module R2.Peer.FilePaths
   ( r2SocketEnv,
     resolveSocketPath,
+    defaultR2KeyStorePath,
+    getUsableKeyPairDir,
   )
 where
 
@@ -28,11 +30,27 @@ createDirectory700IfMissing path = do
     createDirectory path
     setPermissions path permissions700
 
+xdgR2DirsName :: String
+xdgR2DirsName = "r2"
+
 defaultUserR2SocketPath :: IO FilePath
 defaultUserR2SocketPath = do
-  stateDir <- getXdgDirectory XdgState "r2"
+  stateDir <- getXdgDirectory XdgState xdgR2DirsName
   createDirectory700IfMissing stateDir
   pure $ stateDir <> "/" <> "r2.sock"
+
+defaultR2KeyStorePath :: IO FilePath
+defaultR2KeyStorePath = do
+  dataDir <- getXdgDirectory XdgData xdgR2DirsName
+  createDirectory700IfMissing dataDir
+  pure dataDir
+
+getUsableKeyPairDir :: FilePath -> IO FilePath
+getUsableKeyPairDir publicKeyPath = do
+  ksPath <- defaultR2KeyStorePath
+  let kpPath = ksPath <> "/" <> publicKeyPath
+  createDirectoryIfMissing False kpPath
+  pure kpPath
 
 resolveSocketPath :: Maybe FilePath -> IO FilePath
 resolveSocketPath customPath = do

@@ -46,16 +46,20 @@ commandOpts =
         <> command "connect" (info connectOpts $ progDesc "Introduce a new node to daemon")
         <> command "open" (info openOpts $ progDesc "Provide transport for application layer")
         <> command "serve" (info serveOpts $ progDesc "Serve application layer command")
+        <> command "genkey" (info genKeyOpts $ progDesc "Generate and store X25519 keypair")
     )
 
+genKeyOpts :: Parser Command
+genKeyOpts = pure (SomeCommandOffline $ OfflineCommand ActionGenKey)
+
 lsOpts :: Parser Command
-lsOpts = Command <$> targetOpt <*> pure Ls
+lsOpts = SomeCommandOnline <$> (OnlineCommand <$> targetOpt <*> pure Ls)
 
 connectOpts :: Parser Command
-connectOpts = Command <$> targetOpt <*> (Connect <$> transportArg <*> (addrSetFromList <$> many (option nameAddrP $ long "node" <> short 'n')))
+connectOpts = SomeCommandOnline <$> (OnlineCommand <$> targetOpt <*> (Connect <$> transportArg <*> (addrSetFromList <$> many (option nameAddrP $ long "node" <> short 'n'))))
 
 openOpts :: Parser Command
-openOpts = Command <$> targetArg <*> (Open <$> transportArg)
+openOpts = SomeCommandOnline <$> (OnlineCommand <$> targetArg <*> (Open <$> transportArg))
 
 serveOpts :: Parser Command
-serveOpts = Command <$> targetOpt <*> ((Serve . addrSetFromList <$> many (option labelAddrP $ long "name" <> short 'n')) <*> transportArg)
+serveOpts = SomeCommandOnline <$> (OnlineCommand <$> targetOpt <*> ((Serve . addrSetFromList <$> many (option labelAddrP $ long "name" <> short 'n')) <*> transportArg))

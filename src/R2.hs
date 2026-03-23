@@ -27,6 +27,7 @@ module R2
     mapAddrSet,
     addrSetUnions,
     addrSetFromList,
+    x25519Tag,
   )
 where
 
@@ -70,6 +71,9 @@ data TagAddr = TagAddr {taggedAddrKey :: String, taggedAddrValue :: String}
 
 instance Show TagAddr where
   show TagAddr {..} = printf "%s:%s" taggedAddrKey taggedAddrValue
+
+x25519Tag :: String
+x25519Tag = "x25519"
 
 parseTagAddr :: String -> Maybe TagAddr
 parseTagAddr strAddr =

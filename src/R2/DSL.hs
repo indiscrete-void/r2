@@ -42,6 +42,7 @@ import R2.Daemon
 import R2.Options
 import R2.Peer
 import R2.Peer.Conn
+import R2.Peer.Crypto
 import R2.Peer.Log qualified as Peer
 import R2.Peer.Storage
 import R2.Random
@@ -66,8 +67,8 @@ static = NetworkDescription {serve = [], link = []}
 
 data Network r = Network
   { join :: Sem r (),
-    conn :: NetworkAddr -> Action -> InterpretersFor ByteTransport r,
-    conn_ :: NetworkAddr -> Action -> Sem r ()
+    conn :: NetworkAddr -> OnlineAction -> InterpretersFor ByteTransport r,
+    conn_ :: NetworkAddr -> OnlineAction -> Sem r ()
   }
 
 makeLink :: forall chan d r. (Member (Bus chan d) r, Member Sem.Async r) => Sem r (Bidirectional chan, Bidirectional chan)
@@ -143,7 +144,7 @@ mkActor ::
   ) =>
   Map (AddrSet NameAddr) Service ->
   NetworkAddr ->
-  Action ->
+  OnlineAction ->
   InterpretersFor ByteTransport r
 mkActor serveMap target action m = do
   (stdioLinkA, stdioLinkB) <- makeLink
@@ -161,7 +162,7 @@ mkActor serveMap target action m = do
           _ <- superviseNode (singleAddrSet $ NetworkNameAddr randAddress) Socket msgLinkA
           processClients
 
-  let command = Command (TargetAddrNetwork target) action
+  let command = OnlineCommand (TargetAddrNetwork target) action
   client <-
     async $
       scoped @_ @(Output Client.Log) randNodeAddrSet $

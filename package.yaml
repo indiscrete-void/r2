@@ -1,5 +1,5 @@
 name: r2
-version: 0.11.0.0
+version: 0.11.1.0
 author: indiscrete_void
 maintainer: indiscrete.void@gmail.com
 license: BSD3
@@ -76,6 +76,10 @@ dependencies:
   - base64-bytestring
   - time-units
   - tomland
+  - base58-bytestring
+  - memory
+  - crypton
+  - cacophony
 
 library:
   source-dirs: src
@@ -92,6 +96,7 @@ library:
     - R2.Peer.Log
     - R2.Peer.Conn
     - R2.Peer.Storage
+    - R2.Peer.Crypto
     - R2.Client
     - R2.Daemon
     - R2.Daemon.Handler
