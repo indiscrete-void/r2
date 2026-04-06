@@ -28,7 +28,7 @@ main = do
             putStrLn $ url sock ++ " ws closed"
 
     let encodeRouterOutput : Router.Output String -> String
-        encodeRouterOutput (MkOutput a) = JSON.ToJSON.encode a
+        encodeRouterOutput (MkOutput a) = a
         encodeRouterOutput (MkControlOutput msg) = JSON.ToJSON.encode (encodeRouterOutput <$> msg)
 
     let sendToName : SendTo NameAddr (Router.Output String) -> IO SendResult
