@@ -5,6 +5,8 @@
 !.gitignore
 !LICENSE
 
+!aura
+
 !neor2.svg
 !r2.svg
 
