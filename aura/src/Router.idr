@@ -82,11 +82,11 @@ namespace Router
     unliftSendTo : SendTo NetworkAddr (Router.Output a) -> SendTo NameAddr (Router.Output a)
     unliftSendTo (MkSendTo addr a) = case netAddrToList addr of
         (nameAddr ::: []) => MkSendTo nameAddr a
-        (router ::: hops) => MkSendTo router (hopsToOutputLayers hops a)
+        (router ::: hops) => MkSendTo router (hopsToOutput hops a)
         where
-            hopsToOutputLayers : List NameAddr -> Router.Output a' -> Router.Output a'
-            hopsToOutputLayers (hop :: hops) a = MkControlOutput (MsgRouteTo $ MkRouteTo (MkNetworkNameAddr hop) $ hopsToOutputLayers hops a)
-            hopsToOutputLayers [] a = a
+            hopsToOutput : List NameAddr -> Router.Output a' -> Router.Output a'
+            hopsToOutput (hop :: hops) a = MkControlOutput (MsgRouteTo $ MkRouteTo (MkNetworkNameAddr hop) $ hopsToOutput hops a)
+            hopsToOutput [] a = a
 
     liftSendTo : HasIO io => (SendTo NameAddr (Router.Output a) -> io SendResult) -> SendTo NetworkAddr (Router.Output a) -> io SendResult
     liftSendTo ioSendTo req = ioSendTo $ unliftSendTo req
