@@ -9,7 +9,11 @@ import JSON.Derive
 public export
 data NameAddr = MkNameAddr String
 
-%runElab derive "NameAddr" [Show,Eq,ToJSON,FromJSON]
+export
+implementation Show NameAddr where
+    show (MkNameAddr str) = str
+
+%runElab derive "NameAddr" [Eq,ToJSON,FromJSON]
 
 export
 Eq NameAddr where
@@ -18,14 +22,24 @@ Eq NameAddr where
 public export
 data RoutedAddr addr = MkRoutedAddr addr addr
 
-%runElab derive "RoutedAddr" [Show,Eq,ToJSON,FromJSON]
+export
+implementation Show addr => Show (RoutedAddr addr) where
+    show (MkRoutedAddr a b) = show a ++ "/" ++ show b
+
+%runElab derive "RoutedAddr" [Eq,ToJSON,FromJSON]
 
 public export
 data NetworkAddr
     = MkNetworkNameAddr NameAddr
     | MkNetworkRoutedAddr (RoutedAddr NetworkAddr)
 
-%runElab derive "NetworkAddr" [Show,Eq,ToJSON,FromJSON]
+export
+covering
+implementation Show NetworkAddr where
+    show (MkNetworkNameAddr addr) = show addr
+    show (MkNetworkRoutedAddr addr) = show addr
+
+%runElab derive "NetworkAddr" [Eq,ToJSON,FromJSON]
 
 export
 netAddrToList : NetworkAddr -> List1 NameAddr
