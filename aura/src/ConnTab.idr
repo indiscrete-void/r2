@@ -1,3 +1,8 @@
+|||
+||| A device for mapping "physical" connections to named addresses
+||| i.e. Transport interface -> `Addr.NameAddr` conn
+||| The device is stateful but no protocol is involed
+|||
 module ConnTab
 
 import Addr
@@ -32,7 +37,7 @@ namespace ConnTab
     public export
     record ConnTab (m : Type -> Type) (a : Type) where
         constructor MkConnTab
-        antenna : Device.Device m (ConnTab.Event m a) (ConnTab.Cmd m a)
+        device : Device.Device m (ConnTab.Event m a) (ConnTab.Cmd m a)
         table : IORef (List (NameAddr, ConnTab.Lease m a))
 
     export
@@ -62,6 +67,6 @@ namespace ConnTab
         eventsRef <- newIORef emptyPubSub
         tabRef <- newIORef []
         pure $ MkConnTab
-                { antenna = MkDevice eventsRef (exec tabRef eventsRef)
+                { device = MkDevice eventsRef (exec tabRef eventsRef)
                 , table = tabRef
                 }

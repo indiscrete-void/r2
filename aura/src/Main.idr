@@ -15,8 +15,8 @@ main = do
     connTab <- ConnTab.new
     router <- Router.new
 
-    linkWSAndConnTab ws connTab.antenna
-    linkConnTabAndRouterJSON RouterMsgEncoding.json connTab.antenna router
+    linkWSAndConnTab ws connTab.device
+    linkConnTabAndRouterJSON RouterMsgEncoding.json connTab.device router
 
     Device.sub router $ \case
         Router.Recv addr msg => do

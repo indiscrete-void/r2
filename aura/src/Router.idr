@@ -1,3 +1,9 @@
+|||
+||| A device for delivering messages based on hierarchical addr
+||| Allows messaging network-wide peers just like neighbors by source-routing
+||| i.e. `Addr.NameAddr` conn -> `Addr.NetworkAddr` peer
+||| Protocol (see `Router.Router.Msg`) is stateless, but makes room for error handling
+|||
 module Router
 
 import Addr

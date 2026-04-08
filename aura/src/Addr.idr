@@ -1,3 +1,9 @@
+||| Hierarchical addresses definition
+|||
+||| Supports:
+||| - freely named addrs e.g. `alice`
+||| - source-routed addrs e.g. `bob/alice`
+|||
 module Addr
 
 import WebSocket
@@ -24,7 +30,7 @@ data RoutedAddr addr = MkRoutedAddr addr addr
 
 export
 implementation Show addr => Show (RoutedAddr addr) where
-    show (MkRoutedAddr a b) = show a ++ "/" ++ show b
+    show (MkRoutedAddr from to) = show from ++ "/" ++ show to
 
 %runElab derive "RoutedAddr" [Eq,ToJSON,FromJSON]
 

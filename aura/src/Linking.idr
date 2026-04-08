@@ -1,3 +1,6 @@
+|||
+||| Utilities for connecting devices together
+|||
 module Linking
 
 import ConnTab
