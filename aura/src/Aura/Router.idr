@@ -14,9 +14,9 @@
 ||| Example:
 ||| ```
 ||| router <- Router.new
-||| exec router $ AddRoute ("ws" /> "alice")
-||| exec router $ Send ("ws" /> "alice") "hello!" -- sent trough local websocket
-||| exec router $ Send ("ws" /> "alice" /> "bob") "hello!" -- source-routed through neighbor alice
+||| exec router $ AddRoute ("device:ws" /> "alice")
+||| exec router $ Send ("device:ws" /> "alice") "hello!" -- sent trough local websocket
+||| exec router $ Send ("device:ws" /> "alice" /> "bob") "hello!" -- source-routed through neighbor alice
 ||| ```
 |||
 ||| User is responsible for providing external connectivity
