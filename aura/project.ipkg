@@ -1,7 +1,17 @@
 package aura
 version = 0.0.1
+
 sourcedir = "src"
 executable = "main.js"
 opts = "--cg javascript"
-main = Main
+
 depends = json
+
+modules = Addr
+        , PubSub
+        , Device
+        , WebSocket
+        , ConnTab
+        , Router
+        , Linking
+main = Main
