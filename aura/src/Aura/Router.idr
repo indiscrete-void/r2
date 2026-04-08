@@ -143,10 +143,7 @@ namespace Router
     sendToAddr tableRef addr msg = do
         table <- readIORef tableRef
         case findRoute addr table of
-            Just route => do
-                putStrLn $ "using router: " ++ show route.nextHop
-                putStrLn $ "hops: " ++ show route.extraHops
-                sendToRoute route msg
+            Just route => sendToRoute route msg
             Nothing => pure $ MkSendError "unreachable"
 
     handleSrcRouting :
