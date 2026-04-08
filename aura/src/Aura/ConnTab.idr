@@ -3,11 +3,11 @@
 ||| i.e. Transport interface -> `Addr.NameAddr` conn
 ||| The device injects no protocol inside connections
 |||
-module ConnTab
+module Aura.ConnTab
 
-import Addr
-import Device
-import PubSub
+import Aura.Addr
+import Aura.Device
+import Aura.PubSub
 import Data.IORef
 import Data.List
 import Data.SortedMap as Map

@@ -1,15 +1,15 @@
 |||
 ||| Utilities for connecting devices together
 |||
-module Linking
+module Aura.Linking
 
-import ConnTab
-import Router
-import Device
-import WebSocket
-import Addr
+import Aura.ConnTab
+import Aura.Router
+import Aura.Device
+import Aura.WebSocket
+import Aura.Addr
+import Aura.PubSub
 import JSON
-import PubSub
 
 public export
 record RouterMsgEncoding a where

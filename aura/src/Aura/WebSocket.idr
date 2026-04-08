@@ -1,7 +1,7 @@
-module WebSocket
+module Aura.WebSocket
 
-import Device
-import PubSub
+import Aura.Device
+import Aura.PubSub
 import Data.IORef
 
 %foreign "javascript:lambda:(url) => new WebSocket(url)"

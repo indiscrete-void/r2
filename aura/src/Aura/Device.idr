@@ -1,6 +1,6 @@
-module Device
+module Aura.Device
 
-import PubSub
+import Aura.PubSub
 import Data.IORef
 
 public export

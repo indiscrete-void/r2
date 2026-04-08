@@ -1,13 +1,12 @@
-module Main
+module Aura.Main
 
-import PubSub
-import Device
-import WebSocket
-import ConnTab
-import Router
-import Addr
-import JSON
-import Linking
+import Aura.PubSub
+import Aura.Device
+import Aura.WebSocket
+import Aura.ConnTab
+import Aura.Router
+import Aura.Addr
+import Aura.Linking
 
 main : IO ()
 main = do

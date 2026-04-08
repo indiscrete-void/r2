@@ -4,11 +4,11 @@
 ||| i.e. `Addr.NameAddr` conn -> `Addr.NetworkAddr` peer
 ||| Protocol (see `Router.Router.Msg`) is stateless, but makes room for error handling
 |||
-module Router
+module Aura.Router
 
-import Addr
-import PubSub
-import Device
+import Aura.Addr
+import Aura.PubSub
+import Aura.Device
 import Data.SortedMap as SMap
 import Data.List1
 import Data.IORef

@@ -1,4 +1,4 @@
-module PubSub
+module Aura.PubSub
 
 import Data.IORef
 

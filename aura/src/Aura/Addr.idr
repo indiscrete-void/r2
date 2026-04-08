@@ -4,9 +4,9 @@
 ||| - freely named addrs e.g. `alice`
 ||| - source-routed addrs e.g. `bob/alice`
 |||
-module Addr
+module Aura.Addr
 
-import WebSocket
+import Aura.WebSocket
 import Data.List1
 import JSON.Derive
 

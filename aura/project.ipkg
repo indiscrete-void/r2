@@ -8,11 +8,11 @@ opts = "--cg javascript"
 
 depends = json
 
-modules = Addr
-        , PubSub
-        , Device
-        , WebSocket
-        , ConnTab
-        , Router
-        , Linking
-main = Main
+modules = Aura.Addr
+        , Aura.PubSub
+        , Aura.Device
+        , Aura.WebSocket
+        , Aura.ConnTab
+        , Aura.Router
+        , Aura.Linking
+main = Aura.Main
