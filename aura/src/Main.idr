@@ -27,12 +27,8 @@ main = do
         WS.Closed sock => do
             putStrLn $ url sock ++ " ws closed"
 
-    let encodeRouterOutput : Router.Output String -> String
-        encodeRouterOutput (MkOutput a) = a
-        encodeRouterOutput (MkControlOutput msg) = JSON.ToJSON.encode (encodeRouterOutput <$> msg)
-
-    let sendToLeaseEncoded : ConnTab.Lease IO String -> SendM IO (Router.Output String)
-        sendToLeaseEncoded lease out = MkSent <$ lease.send (encodeRouterOutput out)
+    let sendToLeaseEncoded : ConnTab.Lease IO String -> SendM IO (Router.Msg String)
+        sendToLeaseEncoded lease out = MkSent <$ lease.send (JSON.ToJSON.encode out)
 
     router : Router.Device IO String <- Router.new
     Device.sub router $ \case
@@ -47,12 +43,13 @@ main = do
         ConnTab.Opened addr lease => do
             putStrLn $ show addr ++ " conn opened"
             exec router $ AddRoute addr (sendToLeaseEncoded lease)
-        ConnTab.Recv addr msg => do
-            case decode {a = Router.Msg String} msg of
-                Left err => putStrLn $ show addr ++ " conn recv " ++ msg ++ " err " ++ show err
-                Right a => do
-                    putStrLn $ show addr ++ " conn recv " ++ show a
-                    exec router (Handle (MkNetworkNameAddr addr) a)
+        ConnTab.Recv addr str => do
+            putStrLn $ show addr ++ " conn recv " ++ show str
+            let netAddr = MkNetworkNameAddr addr
+            let msg = case decode {a = Router.Msg String} str of
+                    Left _ => MsgData str
+                    Right decodedMsg => decodedMsg
+            exec router $ Handle netAddr msg
         ConnTab.Closed addr => do
             putStrLn $ show addr ++ " conn closed"
             exec router $ RemoveRoute addr

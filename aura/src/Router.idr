@@ -55,26 +55,25 @@ SendM m a = a -> m SendResult
 
 namespace Router
     public export
-    data Msg a = MsgRouteTo (RouteTo a) | MsgRouteToErr RouteToErr | MsgRoutedFrom (RoutedFrom a)
+    data Msg a = MsgRouteTo (RouteTo (Router.Msg a))
+               | MsgRoutedFrom (RoutedFrom (Router.Msg a))
+               | MsgRouteToErr RouteToErr
+               | MsgData a
 
     %runElab derive "Router.Msg" [Show,Eq,ToJSON,FromJSON]
 
-    public export
-    data Output a = MkOutput a | MkControlOutput (Router.Msg (Router.Output a))
-
-    %runElab derive "Router.Output" [Show,Eq,ToJSON,FromJSON]
-
     export
     implementation Functor Msg where
-        map f (MsgRouteTo msg) = MsgRouteTo $ f <$> msg
-        map f (MsgRoutedFrom msg) = MsgRoutedFrom $ f <$> msg
+        map f (MsgRouteTo msg) = MsgRouteTo $ map f <$> msg
+        map f (MsgRoutedFrom msg) = MsgRoutedFrom $ map f <$> msg
         map _ (MsgRouteToErr msg) = MsgRouteToErr msg
+        map f (MsgData a) = MsgData $ f a
 
     public export
     data Cmd : (Type -> Type) -> Type -> Type where
         Send : NetworkAddr -> a -> Cmd m a
         Handle : NetworkAddr -> Router.Msg a -> Cmd m a
-        AddRoute : NameAddr -> SendM m (Router.Output a) -> Cmd m a
+        AddRoute : NameAddr -> SendM m (Router.Msg a) -> Cmd m a
         RemoveRoute : NameAddr -> Cmd m a
 
     public export
@@ -87,25 +86,25 @@ namespace Router
     Device m a = Device.Device m (Router.Event a) (Router.Cmd m a)
 
     Table : (m : Type -> Type) -> (a : Type) -> Type
-    Table m a = SortedMap NameAddr (SendM m (Router.Output a))
+    Table m a = SortedMap NameAddr (SendM m (Router.Msg a))
 
-    sendToName : HasIO io => IORef.IORef (Router.Table io a) -> SendTo NameAddr (Router.Output a) -> io SendResult
+    sendToName : HasIO io => IORef.IORef (Router.Table io a) -> SendTo NameAddr (Router.Msg a) -> io SendResult
     sendToName tableRef (MkSendTo name out) = do
         table <- readIORef tableRef
         case SMap.lookup name table of
             Just sendM => sendM out
             Nothing => pure $ MkSendError "unreachable"
 
-    mkSrcRoutedOut : SendTo NetworkAddr (Router.Output a) -> SendTo NameAddr (Router.Output a)
+    mkSrcRoutedOut : SendTo NetworkAddr (Router.Msg a) -> SendTo NameAddr (Router.Msg a)
     mkSrcRoutedOut (MkSendTo addr a) = case netAddrToList addr of
         (nameAddr ::: []) => MkSendTo nameAddr a
         (router ::: hops) => MkSendTo router (hopsToOutput hops a)
         where
-            hopsToOutput : List NameAddr -> Router.Output a' -> Router.Output a'
-            hopsToOutput (hop :: hops) a = MkControlOutput (MsgRouteTo $ MkRouteTo (MkNetworkNameAddr hop) $ hopsToOutput hops a)
+            hopsToOutput : List NameAddr -> Router.Msg a' -> Router.Msg a'
+            hopsToOutput (hop :: hops) a = MsgRouteTo $ MkRouteTo (MkNetworkNameAddr hop) $ hopsToOutput hops a
             hopsToOutput [] a = a
 
-    sendToNetSrcRouted :  HasIO io => IORef.IORef (Router.Table io a) -> SendTo NetworkAddr (Router.Output a) -> io SendResult
+    sendToNetSrcRouted :  HasIO io => IORef.IORef (Router.Table io a) -> SendTo NetworkAddr (Router.Msg a) -> io SendResult
     sendToNetSrcRouted tableRef = sendToName tableRef . mkSrcRoutedOut
 
     handleSrcRouting :
@@ -115,19 +114,21 @@ namespace Router
         NetworkAddr ->
         Router.Msg a ->
         io ()
-    handleSrcRouting tableRef _ rtr (MsgRouteTo (MkRouteTo dst a)) = do
-        let out = MkSendTo dst $ MkControlOutput $ MsgRoutedFrom $ MkRoutedFrom rtr $ MkOutput a
+    handleSrcRouting tableRef _ rtr (MsgRouteTo (MkRouteTo dst msg)) = do
+        let out = MkSendTo dst $ MsgRoutedFrom $ MkRoutedFrom rtr msg
         case !(sendToNetSrcRouted tableRef out) of
             MkSendError err => do
-                let errOut = MkSendTo rtr $ MkControlOutput $ MsgRouteToErr $ MkRouteToErr dst err
+                let errOut = MkSendTo rtr $ MsgRouteToErr $ MkRouteToErr dst err
                 ignore $ sendToNetSrcRouted tableRef errOut
             MkSent => pure ()
-    handleSrcRouting _ eventsRef rtr (MsgRoutedFrom (MkRoutedFrom src a)) = do
+    handleSrcRouting tableRef eventsRef rtr (MsgRoutedFrom (MkRoutedFrom src msg)) = do
         let srcNetAddr = MkNetworkRoutedAddr (MkRoutedAddr rtr src)
-        pubIORef eventsRef (Router.Recv srcNetAddr a)
+        handleSrcRouting tableRef eventsRef srcNetAddr msg
     handleSrcRouting _ eventsRef rtr (MsgRouteToErr (MkRouteToErr src err)) = do
         let srcNetAddr = MkNetworkRoutedAddr (MkRoutedAddr rtr src)
         pubIORef eventsRef (Router.Error srcNetAddr err)
+    handleSrcRouting _ eventsRef rtr (MsgData a) = do
+        pubIORef eventsRef (Router.Recv rtr a)
 
     export
     new : HasIO io => io (Router.Device io a)
@@ -135,7 +136,7 @@ namespace Router
         eventsRef <- newIORef emptyPubSub
         tableRef <- newIORef SMap.empty
         pure $ MkDevice eventsRef $ \case
-            Send addr a => ignore $ sendToNetSrcRouted tableRef $ MkSendTo addr (MkOutput a)
+            Send addr a => ignore $ sendToNetSrcRouted tableRef $ MkSendTo addr (MsgData a)
             Handle addr msg => Router.handleSrcRouting tableRef eventsRef addr msg
             AddRoute name route => modifyIORef tableRef (SMap.insert name route)
             RemoveRoute name => modifyIORef tableRef (SMap.delete name)
