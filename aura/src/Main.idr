@@ -31,12 +31,10 @@ main = do
         encodeRouterOutput (MkOutput a) = a
         encodeRouterOutput (MkControlOutput msg) = JSON.ToJSON.encode (encodeRouterOutput <$> msg)
 
-    let sendToName : SendTo NameAddr (Router.Output String) -> IO SendResult
-        sendToName (MkSendTo name out) = case !(ConnTab.lookup connTab.table name) of
-            Just lease => MkSent <$ lease.send (encodeRouterOutput out)
-            Nothing => pure $ MkSendError "unreachable"
+    let sendToLeaseEncoded : ConnTab.Lease IO String -> SendM IO (Router.Output String)
+        sendToLeaseEncoded lease out = MkSent <$ lease.send (encodeRouterOutput out)
 
-    router : Device IO (Router.Event String) (Router.Cmd String) <- Router.new sendToName
+    router : Router.Device IO String <- Router.new
     Device.sub router $ \case
         Router.Recv addr msg => do
             putStrLn $ show addr ++ " router recv " ++ msg
@@ -46,13 +44,17 @@ main = do
         Router.Error addr err => putStrLn $ show addr ++ " router err " ++ err
 
     Device.sub connTab.antenna $ \case
-        ConnTab.Opened addr => putStrLn $ show addr ++ " conn opened"
+        ConnTab.Opened addr lease => do
+            putStrLn $ show addr ++ " conn opened"
+            exec router $ AddRoute addr (sendToLeaseEncoded lease)
         ConnTab.Recv addr msg => do
             case decode {a = Router.Msg String} msg of
                 Left err => putStrLn $ show addr ++ " conn recv " ++ msg ++ " err " ++ show err
                 Right a => do
                     putStrLn $ show addr ++ " conn recv " ++ show a
                     exec router (Handle (MkNetworkNameAddr addr) a)
-        ConnTab.Closed addr => putStrLn $ show addr ++ " conn closed"
+        ConnTab.Closed addr => do
+            putStrLn $ show addr ++ " conn closed"
+            exec router $ RemoveRoute addr
 
     exec ws (Open "ws://localhost:1337")

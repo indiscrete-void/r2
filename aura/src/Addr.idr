@@ -13,7 +13,7 @@ export
 implementation Show NameAddr where
     show (MkNameAddr str) = str
 
-%runElab derive "NameAddr" [Eq,ToJSON,FromJSON]
+%runElab derive "NameAddr" [Eq,Ord,ToJSON,FromJSON]
 
 export
 Eq NameAddr where

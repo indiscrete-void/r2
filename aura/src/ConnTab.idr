@@ -20,19 +20,19 @@ namespace ConnTab
         Close : NameAddr -> Cmd m a
 
     public export
-    data Event : Type -> Type where
-        Opened : NameAddr -> Event a
-        Recv : NameAddr -> a -> Event a
-        Closed : NameAddr -> Event a
+    data Event : (Type -> Type) -> Type -> Type where
+        Opened : NameAddr -> ConnTab.Lease m a -> Event m a
+        Recv : NameAddr -> a -> Event m a
+        Closed : NameAddr -> Event m a
 
-    export
+    public export
     Device : (m : Type -> Type) -> (a : Type) -> Type
-    Device m a = (Device.Device m (ConnTab.Event a) (ConnTab.Cmd m a))
+    Device m a = (Device.Device m (ConnTab.Event m a) (ConnTab.Cmd m a))
 
     public export
     record ConnTab (m : Type -> Type) (a : Type) where
         constructor MkConnTab
-        antenna : Device.Device m (ConnTab.Event a) (ConnTab.Cmd m a)
+        antenna : Device.Device m (ConnTab.Event m a) (ConnTab.Cmd m a)
         table : IORef (List (NameAddr, ConnTab.Lease m a))
 
     export
@@ -43,12 +43,12 @@ namespace ConnTab
 
     exec : HasIO io =>
            IORef (List (NameAddr, ConnTab.Lease io a)) ->
-           IORef (PubSub io (ConnTab.Event a)) ->
+           IORef (PubSub io (ConnTab.Event io a)) ->
            ConnTab.Cmd io a ->
            io ()
     exec tabRef eventsRef (Open addr ctrl) = do
         modifyIORef tabRef ((addr, ctrl) ::)
-        pubIORef eventsRef $ ConnTab.Opened addr
+        pubIORef eventsRef $ ConnTab.Opened addr ctrl
     exec tabRef eventsRef (Send addr msg) = do
         mCtrl <- lookup tabRef addr
         whenJust mCtrl (\ctrl => send ctrl msg)
