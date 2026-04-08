@@ -33,7 +33,7 @@ export
 implementation Show addr => Show (RoutedAddr addr) where
     show (MkRoutedAddr from to) = show from ++ "/" ++ show to
 
-%runElab derive "RoutedAddr" [Eq,ToJSON,FromJSON]
+%runElab derive "RoutedAddr" [Eq,Ord,ToJSON,FromJSON]
 
 public export
 data NetworkAddr
@@ -46,7 +46,14 @@ implementation Show NetworkAddr where
     show (MkNetworkNameAddr addr) = show addr
     show (MkNetworkRoutedAddr addr) = show addr
 
-%runElab derive "NetworkAddr" [Eq,ToJSON,FromJSON]
+%runElab derive "NetworkAddr" [Eq,Ord,ToJSON,FromJSON]
+
+export
+listToNetAddr : List1 NameAddr -> NetworkAddr
+listToNetAddr (hop ::: rest) = loop (MkNetworkNameAddr hop) rest where
+    loop : NetworkAddr -> List NameAddr -> NetworkAddr
+    loop acc (hop :: rest) = loop (MkNetworkRoutedAddr $ MkRoutedAddr acc $ MkNetworkNameAddr hop) rest
+    loop acc [] = acc
 
 export
 netAddrToList : NetworkAddr -> List1 NameAddr

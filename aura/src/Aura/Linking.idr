@@ -34,7 +34,7 @@ linkConnTabAndRouterJSON encoding connTab router =
     Device.sub connTab $ \case
         ConnTab.Opened addr lease => do
             liftIO $ putStrLn $ show addr ++ " conn opened"
-            exec router $ AddRoute addr (\o => MkSent <$ lease.send (encoding.encode o))
+            exec router $ AddRoute (MkNetworkNameAddr addr) (\o => MkSent <$ lease.send (encoding.encode o))
         ConnTab.Recv addr str => do
             let netAddr = MkNetworkNameAddr addr
             let msg = encoding.decodeOrWrap str
@@ -42,7 +42,7 @@ linkConnTabAndRouterJSON encoding connTab router =
             exec router $ Handle netAddr msg
         ConnTab.Closed addr => do
             putStrLn $ show addr ++ " conn closed"
-            exec router $ RemoveRoute addr
+            exec router $ RemoveRoute (MkNetworkNameAddr addr)
 
 public export
 linkWSAndConnTab : HasIO io => WS.Device io -> ConnTab.Device io String -> io ()

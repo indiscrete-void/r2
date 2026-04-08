@@ -1,8 +1,26 @@
 |||
-||| A device for delivering messages based on hierarchical addr
-||| Allows messaging network-wide peers just like neighbors by source-routing
-||| i.e. `Addr.NameAddr` conn -> `Addr.NetworkAddr` peer
-||| Protocol (see `Router.Router.Msg`) is stateless, but makes room for error handling
+||| A device for network-wide datagram delivery
+|||
+||| Neighbor peers are reached by local resources
+||| while faraway endpoints are reached by source-routing
+|||
+||| Source-routing is done by error-aware r2 protocol
+||| Core: `r2 from (RouteTo to a) = SendTo to (RoutedFrom from a)`
+||| (see `Router.Router.Msg` for more details)
+|||
+||| Direct messaging is done by finding local path with
+||| longest matching prefix in a configurable table
+|||
+||| Example:
+||| ```
+||| router <- Router.new
+||| exec router $ AddRoute ("ws" /> "alice")
+||| exec router $ Send ("ws" /> "alice") "hello!" -- sent trough local websocket
+||| exec router $ Send ("ws" /> "alice" /> "bob") "hello!" -- source-routed through neighbor alice
+||| ```
+|||
+||| User is responsible for providing external connectivity
+||| as well as decoding messages to Router.Msg and back
 |||
 module Aura.Router
 
@@ -68,6 +86,13 @@ namespace Router
 
     %runElab derive "Router.Msg" [Show,Eq,ToJSON,FromJSON]
 
+    public export
+    record Route m a where
+        constructor MkRoute
+        nextHop : NetworkAddr
+        sendNextHop : SendM m (Router.Msg a)
+        extraHops : List NameAddr
+
     export
     implementation Functor Msg where
         map f (MsgRouteTo msg) = MsgRouteTo $ map f <$> msg
@@ -79,8 +104,8 @@ namespace Router
     data Cmd : (Type -> Type) -> Type -> Type where
         Send : NetworkAddr -> a -> Cmd m a
         Handle : NetworkAddr -> Router.Msg a -> Cmd m a
-        AddRoute : NameAddr -> SendM m (Router.Msg a) -> Cmd m a
-        RemoveRoute : NameAddr -> Cmd m a
+        AddRoute : NetworkAddr -> SendM m (Router.Msg a) -> Cmd m a
+        RemoveRoute : NetworkAddr -> Cmd m a
 
     public export
     data Event a = Recv NetworkAddr a | Error NetworkAddr String
@@ -92,26 +117,37 @@ namespace Router
     Device m a = Device.Device m (Router.Event a) (Router.Cmd m a)
 
     Table : (m : Type -> Type) -> (a : Type) -> Type
-    Table m a = SortedMap NameAddr (SendM m (Router.Msg a))
+    Table m a = SortedMap NetworkAddr (SendM m (Router.Msg a))
 
-    sendToName : HasIO io => IORef.IORef (Router.Table io a) -> SendTo NameAddr (Router.Msg a) -> io SendResult
-    sendToName tableRef (MkSendTo name out) = do
+    findRoute : Applicative m => NetworkAddr -> Router.Table m a -> Maybe (Route m a)
+    findRoute addr table = go [] addr where
+        go : List NameAddr -> NetworkAddr -> Maybe (Route m a)
+        go hopsAcc router =
+            case SMap.lookup router table of
+                Just sendM => pure $ MkRoute {nextHop=router, sendNextHop=sendM, extraHops=hopsAcc}
+                Nothing =>
+                    let nextPrefix = netAddrToList router
+                     in case List1.fromList (List1.init nextPrefix) of
+                            Just ini => go (List1.last nextPrefix :: hopsAcc) (listToNetAddr ini)
+                            Nothing => Nothing
+
+    sendToRoute : Route m a -> SendM m (Router.Msg a)
+    sendToRoute route msg = route.sendNextHop $ mkSourceRoutedMsg route.extraHops msg
+      where
+        mkSourceRoutedMsg : List NameAddr -> Router.Msg a' -> Router.Msg a'
+        mkSourceRoutedMsg hops msg = case listToNetAddr <$> List1.fromList hops of
+                                Just nextAddr => MsgRouteTo $ MkRouteTo nextAddr msg
+                                Nothing => msg
+
+    sendToAddr : HasIO io => IORef.IORef (Router.Table io a) -> NetworkAddr -> SendM io (Router.Msg a)
+    sendToAddr tableRef addr msg = do
         table <- readIORef tableRef
-        case SMap.lookup name table of
-            Just sendM => sendM out
+        case findRoute addr table of
+            Just route => do
+                putStrLn $ "using router: " ++ show route.nextHop
+                putStrLn $ "hops: " ++ show route.extraHops
+                sendToRoute route msg
             Nothing => pure $ MkSendError "unreachable"
-
-    mkSrcRoutedOut : SendTo NetworkAddr (Router.Msg a) -> SendTo NameAddr (Router.Msg a)
-    mkSrcRoutedOut (MkSendTo addr a) = case netAddrToList addr of
-        (nameAddr ::: []) => MkSendTo nameAddr a
-        (router ::: hops) => MkSendTo router (hopsToOutput hops a)
-        where
-            hopsToOutput : List NameAddr -> Router.Msg a' -> Router.Msg a'
-            hopsToOutput (hop :: hops) a = MsgRouteTo $ MkRouteTo (MkNetworkNameAddr hop) $ hopsToOutput hops a
-            hopsToOutput [] a = a
-
-    sendToNetSrcRouted :  HasIO io => IORef.IORef (Router.Table io a) -> SendTo NetworkAddr (Router.Msg a) -> io SendResult
-    sendToNetSrcRouted tableRef = sendToName tableRef . mkSrcRoutedOut
 
     handleSrcRouting :
         HasIO io =>
@@ -121,11 +157,11 @@ namespace Router
         Router.Msg a ->
         io ()
     handleSrcRouting tableRef _ rtr (MsgRouteTo (MkRouteTo dst msg)) = do
-        let out = MkSendTo dst $ MsgRoutedFrom $ MkRoutedFrom rtr msg
-        case !(sendToNetSrcRouted tableRef out) of
+        let out = MsgRoutedFrom $ MkRoutedFrom rtr msg
+        case !(sendToAddr tableRef dst out) of
             MkSendError err => do
-                let errOut = MkSendTo rtr $ MsgRouteToErr $ MkRouteToErr dst err
-                ignore $ sendToNetSrcRouted tableRef errOut
+                let errOut = MsgRouteToErr $ MkRouteToErr dst err
+                ignore $ sendToAddr tableRef rtr errOut
             MkSent => pure ()
     handleSrcRouting tableRef eventsRef rtr (MsgRoutedFrom (MkRoutedFrom src msg)) = do
         let srcNetAddr = MkNetworkRoutedAddr (MkRoutedAddr rtr src)
@@ -142,7 +178,7 @@ namespace Router
         eventsRef <- newIORef emptyPubSub
         tableRef <- newIORef SMap.empty
         pure $ MkDevice eventsRef $ \case
-            Send addr a => ignore $ sendToNetSrcRouted tableRef $ MkSendTo addr (MsgData a)
+            Send addr a => ignore $ sendToAddr tableRef addr (MsgData a)
             Handle addr msg => Router.handleSrcRouting tableRef eventsRef addr msg
             AddRoute name route => modifyIORef tableRef (SMap.insert name route)
             RemoveRoute name => modifyIORef tableRef (SMap.delete name)
