@@ -1,5 +1,6 @@
 package aura
 version = 0.0.1
+brief = "Network and IPC unified"
 
 sourcedir = "src"
 executable = "main.js"
