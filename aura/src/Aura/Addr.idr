@@ -1,9 +1,7 @@
 |||
-||| Hierarchical addresses definition
-|||
 ||| Supports:
 ||| - freely named addrs e.g. `alice`
-||| - source-routed addrs e.g. `bob/alice`
+||| - hierarchical addrs e.g. `bob/alice`
 |||
 module Aura.Addr
 
