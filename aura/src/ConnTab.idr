@@ -1,7 +1,7 @@
 |||
 ||| A device for mapping "physical" connections to named addresses
 ||| i.e. Transport interface -> `Addr.NameAddr` conn
-||| The device is stateful but no protocol is involed
+||| The device injects no protocol inside connections
 |||
 module ConnTab
 
