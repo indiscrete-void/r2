@@ -1,26 +1,30 @@
 |||
 ||| A device for network-wide datagram delivery
 |||
-||| Neighbor peers are reached by local resources
-||| while faraway endpoints are reached by source-routing
+||| # Role
+||| Provide messaging in the `NetworkAddr` address space
+||| Convert physical routes into logical addressing,
+||| building a message‑level overlay ✨
 |||
-||| Source-routing is done by error-aware r2 protocol
-||| Core: `r2 from (RouteTo to a) = SendTo to (RoutedFrom from a)`
-||| (see `Router.Router.Msg` for more details)
+||| # Overlay construction
+||| Each `AddRoute` binds a physical send function to a logical prefix
+||| `Send` then builds a `Router.Msg` that carries the remaining path as source‑route,
+||| or uses prefix routing to delegate hops. The router never touches wire formats —
+||| it only reshapes addresses. `Handle` feeds physical messages into the
+||| overlay, turning them into `Router.Event` values
 |||
-||| Direct messaging is done by finding local path with
-||| longest matching prefix in a configurable table
+||| # Interface
+||| - `AddRoute addr sendFn` – teach router how to reach `addr`
+||| - `Send addr payload`    – send payload to `addr`
+||| - `Handle fromAddr msg`  – feed incoming messages from a physical route
 |||
-||| Example:
+||| # Example
 ||| ```
 ||| router <- Router.new
-||| exec router $ AddRoute ("device:ws" /> "alice")
-||| exec router $ Send ("device:ws" /> "alice") "hello!" -- sent trough local websocket
-||| exec router $ Send ("device:ws" /> "alice" /> "bob") "hello!" -- source-routed through neighbor alice
+||| exec router $ AddRoute ("device:ws" /> "alice") sendOverWebSocket
+||| exec router $ Send ("device:ws" /> "alice") "hello!"
+||| exec router $ Send ("device:ws" /> "alice" /> "bob") "hello!"
 ||| ```
-|||
-||| User is responsible for providing external connectivity
-||| as well as decoding messages to Router.Msg and back
 |||
 module Aura.Router
 
@@ -108,7 +112,9 @@ namespace Router
         RemoveRoute : NetworkAddr -> Cmd m a
 
     public export
-    data Event a = Recv NetworkAddr a | Error NetworkAddr String
+    data Event : Type -> Type where
+        Recv : NetworkAddr -> a -> Event a
+        Error : NetworkAddr -> String -> Event a
 
     %runElab derive "Router.Event" [Show,Eq,ToJSON,FromJSON]
 
