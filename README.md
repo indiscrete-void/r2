@@ -127,10 +127,13 @@ Coming soon
 [self]
 addr = ["alice", "alice_of_wonderland"]
 socket = "/home/user/.local/r2/alice.sock"
+
+[[serve]]
+addr = "hello"
 cmd = "echo hello from alice"
 
 [[conn]]
-addr = "bob"
+addr = "info"
 cmd = "socat tcp-l:47210,fork,reuseaddr exec:-"
 ```
 
@@ -139,6 +142,9 @@ cmd = "socat tcp-l:47210,fork,reuseaddr exec:-"
 [self]
 addr = "bob"
 socket = "/home/user/.local/r2/bob.sock"
+
+[[serve]]
+addr = "info"
 cmd = "echo Hello, I'm bob"
 
 [[conn]]
