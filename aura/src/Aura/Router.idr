@@ -3,20 +3,20 @@
 |||
 ||| # Role
 ||| Provide messaging in the `NetworkAddr` address space
-||| Convert physical routes into logical addressing,
+||| Convert external routes into internal addressing,
 ||| building a message‑level overlay ✨
 |||
 ||| # Overlay construction
-||| Each `AddRoute` binds a physical send function to a logical prefix
+||| Each `AddRoute` binds an external send function to an internal prefix
 ||| `Send` then builds a `Router.Msg` that carries the remaining path as source‑route,
 ||| or uses prefix routing to delegate hops. The router never touches wire formats —
-||| it only reshapes addresses. `Handle` feeds physical messages into the
+||| it only reshapes addresses. `Handle` feeds external messages into the
 ||| overlay, turning them into `Router.Event` values
 |||
 ||| # Interface
 ||| - `AddRoute addr sendFn` – teach router how to reach `addr`
 ||| - `Send addr payload`    – send payload to `addr`
-||| - `Handle fromAddr msg`  – feed incoming messages from a physical route
+||| - `Handle fromAddr msg`  – feed incoming messages from a external route
 |||
 ||| # Example
 ||| ```
