@@ -79,7 +79,7 @@ dependencies:
   - base58-bytestring
   - memory
   - crypton
-  - cacophony
+  - cacophony ==0.10.1
 
 library:
   source-dirs: src

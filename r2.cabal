@@ -79,7 +79,7 @@ library
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
@@ -144,7 +144,7 @@ executable r2
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
@@ -209,7 +209,7 @@ executable r2-simple-example
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
@@ -275,7 +275,7 @@ executable r2d
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
@@ -341,7 +341,7 @@ executable r2dm
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
@@ -407,7 +407,7 @@ test-suite tests
     , base64-bytestring
     , binary
     , bytestring
-    , cacophony
+    , cacophony ==0.10.1
     , containers
     , crypton
     , directory
