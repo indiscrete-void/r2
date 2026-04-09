@@ -16,19 +16,20 @@
   └───────────────────────────────────────────────────┘                                          
 ```
 
-Weaves local resources and remote nodes into a seamless whole  
+Weaves local resources and remote nodes into a seamless whole ✨
 
-Composable like [socat](https://linux.die.net/man/1/socat)  
-Ready to use like [Wireguard](https://www.wireguard.com/) and [Yggdrasil](https://yggdrasil-network.github.io/)  
-Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)  
+The aim of this project is to provide a universal overlay serving both as network stack and local IPC, implementing both messaging and content sharing, all while adhering to declarative and type-driven approach  
 
-[=> Philosophy <=](https://gitlab.com/-/snippets/4929538)
+There is haskell version called r2 and idris2 version called Aura
+
+[=> Philosophy <=](https://gitlab.com/-/snippets/4929538) (warning: very arcane 🙃)
 
 ## Key Features
 - **Unified Networking**: Treat local and remote entities (nodes ✅, processes ✅, files ⏳) identically through a consistent interface
 - **Declarative Address Scheme**: Name entities freely ✅ or by cryptographic identity ⏳ use combinators ✅ and constraints ⏳ for operations 
 - **Scoped Networks**: Distinguish local ✅, domain-specific ⏳ and global resources ⏳ by address
 - **Advanced Application Layer**: Use built-in DHT ⏳ and communication models for service/client ✅, pub/sub ⏳ or full blown blockchain (consistent history) semantics ⏳
+- **Security**: Formally verified code, support for both authority and web of trust ⏳
 - **Service Discovery**: Automatic resource advertisement and discovery across the network ⏳
 - **Self-constructing**: Reach anyone with Kademlia and fault-tolerant spanning trees ⏳
 - **Multipathing**: Combine multiple underlying links into single connection ⏳
@@ -38,7 +39,8 @@ Universal like [ZeroMQ](https://zeromq.org/) and [libp2p](https://libp2p.io/)
 - **Multiplatform**: Linux/FreeBSD ✅, Windows ⏳, Mobile ⏳, Web ⏳, Microcontrollers ⏳
 
 ## Address Scheme
-r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns.
+r2 uses a flexible, declarative addressing system that can represent anything from simple process names to complex cryptographic identities and routing patterns
+
 - **Free identifiers**: Simple names like `iota` or `telegram-bot` ✅
 - **Tagged identifiers**: `tag:value` pairs for typed addresses, e.g.: ✅
     * `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=` – cryptographic identity from global network
@@ -49,17 +51,9 @@ r2 uses a flexible, declarative addressing system that can represent anything fr
     * `net:home` - domain-specific network `home`
 - **Hierarchical addresses**: Path-like notation `iota/alice/bob` meaning bob is reachable through alice via iota ✅
 - **Sets**: Aliases like [`bogdan`, `theodor`, `x25519:oJK8NJELY3IcgzMyG2F9PMrEspqAe7eeUMxmjHWwwXc=`] ✅
-- **Logical addresses for rules and patterns**: ⏳
-    * Patterns with wildcards: `*/service:cat` matches any node offering the cat service
-    * Alternation: `(alice|bob)/service:cat` matches either Alice's or Bob's cat service
-    * Predicates: `?secure` to match nodes based on properties
+- **Logical addresses for rules and patterns** ⏳
 
-Complex examples:  
-- `net:home/*` - anything from home network
-- `alice/*/service:cat` – any cat service reachable via Alice
-- `?encrypted */service:chat` – any chat service that is encrypted
-
-## The Route-to Protocol
+## Core Protocol
 
 At the heart is the Route-To protocol, defined by the simple operation:
 ```
@@ -71,6 +65,37 @@ This minimalist design supports:
 - **Multiplexing**: Virtual nodes for shared channel communication
 - **Services**: Raw data streams through virtual node occupation
 - **Ping**: Built-in connectivity testing (when n0 = n1)
+
+## Comparison With Other projects
+### [socat](https://linux.die.net/man/1/socat)
+While not a network, it provides piping capabilities and served as a direct inspiration for my low-level CLI design
+
+### [ZeroMQ](https://zeromq.org/)/[Nanomsg](https://nanomsg.org/)
+They provide transport-abstracted messaging, but without routing or crypto-identity
+
+### [Wireguard](https://wireguard.com)
+Also uses Noise Framework  
+
+Kudos for formal verification of it's IK pattern  
+
+### [Yggdrasil](https://yggdrasil-network.github.io/)
+Much more similar than `socat`, but doesn't go beyond IP protocol in terms of usage, while r2 replaces IP (still being compatible with it ⏳)  
+
+Also uses spanning trees for dynamic routing, implements auto-discovery
+
+### [libp2p](https://libp2p.io/) & [ipfs](https://ipfs.tech/)
+I link these two projects together because of their related history (libp2p was born in ipfs) and dependency  
+
+Like r2 they model message- and content- based approaches  
+
+### [NDN](https://named-data.net/)
+Uses plain-string identifiers too  
+
+While r2 tries to be a meta-model of all possible network models, NDN focuses on content-based networking. Unlike us doesn't specifically target local IPC 
+
+Both projects view themselves as the future internet :D  
+
+Btw, their [breakdown of network architecture](https://named-data.net/project/execsummary/) is very cool  
 
 ## Binaries
 
@@ -84,6 +109,16 @@ Command-line interface for interacting with local daemons: connecting to remote 
 Declare networks and daemons in a single config which is then implemented by `r2d` and `r2` composition
 
 ## Getting Started
+
+### Installation
+#### Manual
+Clone repository and run this to get binaries in `~/.local/bin`
+```
+cabal install --overwrite-policy=always
+```
+
+#### Nix
+Coming soon
 
 ### Basic Example
 
@@ -177,8 +212,7 @@ socat udp-l:47210 exec:"r2 connect -n <node-id> -"
 socat udp-l:47210,fork exec:"r2 connect -"
 ```
 
-## Installation & Usage
-
+## Use-cases
 ### As a Super-Server ✅
 Run r2dm as a system service to provide network connectivity to all local applications.
 
@@ -188,14 +222,10 @@ Embed r2 functionality directly into your applications.
 ### As Standalone Binaries ✅
 Use individual components (`r2`, `r2d`, `r2-connect`, etc.) as needed.
 
-### Via Adapters ⏳
+### As Medium ⏳
 Connect existing protocols and applications through r2 adapters:
 - Erlang  
 - Yggdrasil
 - Plan9
 - TCP/IP (tun/tap)  
-- Web  
-
----
-
-Where IPC meets networking through minimalist design. Connect everything, everywhere, with elegance.
+- Web
