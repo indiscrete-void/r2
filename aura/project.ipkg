@@ -11,6 +11,7 @@ depends = json
 modules = Aura.Addr
         , Aura.PubSub
         , Aura.Device
+        , Aura.Device.Stateful
         , Aura.WebSocket
         , Aura.Router
         , Aura.Linking
