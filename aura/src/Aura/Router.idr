@@ -114,6 +114,7 @@ namespace Router
     public export
     data Event : Type -> Type where
         Recv : NetworkAddr -> a -> Event a
+        Sent : NetworkAddr -> a -> Event a
         Error : NetworkAddr -> String -> Event a
 
     %runElab derive "Router.Event" [Show,Eq,ToJSON,FromJSON]
@@ -158,7 +159,7 @@ namespace Router
         NetworkAddr ->
         Router.Msg a ->
         m ()
-    handleSrcRouting table _ rtr (MsgRouteTo (MkRouteTo dst msg)) = do
+    handleSrcRouting table events rtr (MsgRouteTo (MkRouteTo dst msg)) = do
         let out = MsgRoutedFrom $ MkRoutedFrom rtr msg
         case !(sendToAddr table dst out) of
             MkSendError err => do
@@ -180,7 +181,9 @@ namespace Router
         pure $ MkDevice eventsRef $ \case
             Send addr a => do
                 table <- readIORef tableRef
+                events <- readIORef eventsRef
                 ignore $ sendToAddr table addr (MsgData a)
+                pub events (Sent addr a)
             Handle addr msg => do
                 table <- readIORef tableRef
                 events <- readIORef eventsRef
