@@ -1,5 +1,7 @@
 module Aura.WebSocket
 
+import Aura.Device.Stateful
+import Aura.Addr
 import Aura.Device
 import Aura.PubSub
 import Data.IORef
@@ -65,3 +67,13 @@ namespace WS
     new = do
         eventsRef <- newIORef emptyPubSub
         pure $ MkDevice eventsRef (WS.exec eventsRef)
+
+public export
+implementation Stateful.Device IO String WebSocket (WS.Device IO) where
+    sub dev f = Device.sub dev (f . evWSToST) where
+        evWSToST : WS.Event -> Stateful.Event WebSocket String
+        evWSToST (WS.Opened sock) = Stateful.Opened sock
+        evWSToST (WS.Recv sock str) = Stateful.Recv sock str
+        evWSToST (WS.Closed sock) = Stateful.Closed sock
+    send dev sock a = Device.exec dev $ WS.Send sock a
+    handleToAddr _ sock = fromString $ url sock

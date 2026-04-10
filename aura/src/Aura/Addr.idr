@@ -8,7 +8,6 @@
 |||
 module Aura.Addr
 
-import Aura.WebSocket
 import Data.List1
 import Language.Reflection
 import Derive.Prelude

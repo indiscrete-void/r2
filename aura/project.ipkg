@@ -12,7 +12,6 @@ modules = Aura.Addr
         , Aura.PubSub
         , Aura.Device
         , Aura.WebSocket
-        , Aura.ConnTab
         , Aura.Router
         , Aura.Linking
 main = Aura.Main
