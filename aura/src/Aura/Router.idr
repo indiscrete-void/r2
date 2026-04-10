@@ -166,11 +166,9 @@ namespace Router
                 ignore $ sendToAddr table rtr errOut
             MkSent => pure ()
     handleSrcRouting table events rtr (MsgRoutedFrom (MkRoutedFrom src msg)) = do
-        let srcNetAddr = MkNetworkRoutedAddr (MkRoutedAddr rtr src)
-        handleSrcRouting table events srcNetAddr msg
+        handleSrcRouting table events (rtr /> src) msg
     handleSrcRouting _ events rtr (MsgRouteToErr (MkRouteToErr src err)) = do
-        let srcNetAddr = MkNetworkRoutedAddr (MkRoutedAddr rtr src)
-        pub events (Router.Error srcNetAddr err)
+        pub events (Router.Error (rtr /> src) err)
     handleSrcRouting _ events rtr (MsgData a) = do
         pub events (Router.Recv rtr a)
 

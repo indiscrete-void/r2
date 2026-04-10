@@ -21,8 +21,8 @@ namespace RouterMsgEncoding
     public export
     json : RouterMsgEncoding String
     json = MkRouterMsgEncoding
-        { encode = JSON.ToJSON.encode,
-        decodeOrWrap = \str =>
+        { encode = JSON.ToJSON.encode
+        , decodeOrWrap = \str =>
             case decode {a = Router.Msg String} str of
                 Left _ => MsgData str
                 Right decodedMsg => decodedMsg
