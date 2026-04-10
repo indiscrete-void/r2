@@ -23,4 +23,4 @@ main = do
         Router.Sent addr msg => putStrLn $ show addr ++ " router send " ++ msg
         Router.Error addr err => putStrLn $ show addr ++ " router err " ++ err
 
-    exec ws (Open "ws://localhost:1337")
+    exec ws (Open $ MkURL {scheme = "ws", host = "localhost", port = Just 1337, path = []})

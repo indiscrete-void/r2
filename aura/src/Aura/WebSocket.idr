@@ -1,5 +1,6 @@
 module Aura.WebSocket
 
+import public Aura.URL
 import Aura.Device.Stateful
 import Aura.Addr
 import Aura.Device
@@ -24,11 +25,11 @@ prim__wsClose : AnyPtr -> PrimIO ()
 public export
 record WebSocket where
     constructor MkWebSocket
-    url : String
+    url : URL
     ptr : AnyPtr
 
-wsNew : HasIO io => String -> io WebSocket
-wsNew url = MkWebSocket url <$> primIO (prim__wsNew url)
+wsNew : HasIO io => URL -> io WebSocket
+wsNew url = MkWebSocket url <$> primIO (prim__wsNew $ show url)
 
 wsSubOpen : HasIO io => WebSocket -> IO () -> io ()
 wsSubOpen (MkWebSocket _ sock) callback =
@@ -46,7 +47,7 @@ wsClose (MkWebSocket _ sock) = primIO $ prim__wsClose sock
 
 namespace WS
     public export
-    data Cmd = Open String | Send WebSocket String | Close WebSocket
+    data Cmd = Open URL | Send WebSocket String | Close WebSocket
 
     public export
     data Event = Opened WebSocket | Recv WebSocket String | Closed WebSocket
@@ -76,4 +77,4 @@ implementation Stateful.Device IO String WebSocket (WS.Device IO) where
         evWSToST (WS.Recv sock str) = Stateful.Recv sock str
         evWSToST (WS.Closed sock) = Stateful.Closed sock
     send dev sock a = Device.exec dev $ WS.Send sock a
-    handleToAddr _ sock = fromString $ url sock
+    handleToAddr _ sock = urlToNetworkAddr $ url sock
